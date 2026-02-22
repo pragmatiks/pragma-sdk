@@ -18,10 +18,12 @@ class LifecycleState(StrEnum):
     """Lifecycle states for resources."""
 
     DRAFT = "draft"
+    WAITING = "waiting"
     PENDING = "pending"
     PROCESSING = "processing"
     READY = "ready"
     FAILED = "failed"
+    DELETING = "deleting"
 
 
 class LogEntry(BaseModel):
