@@ -1,3 +1,9 @@
+## v0.19.0 (2026-02-23)
+
+### Feat
+
+- add WAITING and DELETING lifecycle states (#5)
+
 ## v0.18.0 (2026-01-31)
 
 ### Feat
