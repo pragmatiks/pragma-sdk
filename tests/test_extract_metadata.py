@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
+import pytest
+
 from pragma_sdk.provider.extract_schemas import extract_metadata
+
+
+@pytest.fixture(autouse=True)
+def _change_cwd(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
 
 
 def _write_pyproject(tmp_path: Path, content: str) -> None:
@@ -27,7 +33,6 @@ icon = "postgres.svg"
 """,
     )
 
-    os.chdir(tmp_path)
     result = extract_metadata()
 
     assert result == {
@@ -51,7 +56,6 @@ description = "GCP infrastructure provider"
 """,
     )
 
-    os.chdir(tmp_path)
     result = extract_metadata()
 
     assert result == {
@@ -70,7 +74,6 @@ package = "gcp_provider"
 """,
     )
 
-    os.chdir(tmp_path)
     result = extract_metadata()
 
     assert result is None
@@ -86,14 +89,12 @@ version = "0.1.0"
 """,
     )
 
-    os.chdir(tmp_path)
     result = extract_metadata()
 
     assert result is None
 
 
 def test_returns_none_when_no_pyproject(tmp_path: Path) -> None:
-    os.chdir(tmp_path)
     result = extract_metadata()
 
     assert result is None
@@ -112,7 +113,6 @@ another_unknown = 42
 """,
     )
 
-    os.chdir(tmp_path)
     result = extract_metadata()
 
     assert result == {"display_name": "Test"}
@@ -130,7 +130,6 @@ tags = []
 """,
     )
 
-    os.chdir(tmp_path)
     result = extract_metadata()
 
     assert result == {"display_name": "Test", "tags": []}

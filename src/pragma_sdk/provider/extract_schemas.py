@@ -8,13 +8,23 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, cast
 
 from pragma_sdk.models import Config, Resource
 from pragma_sdk.provider.discovery import discover_resources
 
 
-METADATA_KEYS = ("display_name", "description", "author", "tags", "icon")
+class ProviderMetadata(TypedDict, total=False):
+    """Store metadata fields from a provider's pyproject.toml [tool.pragma] section."""
+
+    display_name: str
+    description: str
+    author: str
+    tags: list[str]
+    icon: str
+
+
+METADATA_KEYS: tuple[str, ...] = tuple(ProviderMetadata.__annotations__)
 
 
 def _load_pyproject() -> dict[str, Any] | None:
@@ -85,14 +95,14 @@ def detect_provider_package() -> str | None:
     return None
 
 
-def extract_metadata() -> dict[str, Any] | None:
+def extract_metadata() -> ProviderMetadata | None:
     """Extract provider store metadata from pyproject.toml [tool.pragma] section.
 
     Reads optional metadata keys (display_name, description, author, tags, icon)
     from the [tool.pragma] section. Only includes keys that are present.
 
     Returns:
-        Dictionary of metadata fields, or None if no metadata keys found.
+        Typed metadata dictionary, or None if no metadata keys found.
     """
     data = _load_pyproject()
 
@@ -106,7 +116,7 @@ def extract_metadata() -> dict[str, Any] | None:
     if not metadata:
         return None
 
-    return metadata
+    return cast(ProviderMetadata, metadata)
 
 
 def extract_schemas(package_name: str) -> list[dict[str, Any]]:
