@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
-from typing import Any, TypedDict, cast
+from typing import Any, TypedDict
 
 from pragma_sdk.models import Config, Resource
 from pragma_sdk.provider.discovery import discover_resources
@@ -95,6 +95,15 @@ def detect_provider_package() -> str | None:
     return None
 
 
+_EXPECTED_TYPES: dict[str, type] = {
+    "display_name": str,
+    "description": str,
+    "author": str,
+    "tags": list,
+    "icon": str,
+}
+
+
 def extract_metadata() -> ProviderMetadata | None:
     """Extract provider store metadata from pyproject.toml [tool.pragma] section.
 
@@ -103,6 +112,9 @@ def extract_metadata() -> ProviderMetadata | None:
 
     Returns:
         Typed metadata dictionary, or None if no metadata keys found.
+
+    Raises:
+        ValueError: If a metadata field has an unexpected type.
     """
     data = _load_pyproject()
 
@@ -111,12 +123,25 @@ def extract_metadata() -> ProviderMetadata | None:
 
     pragma_section = data.get("tool", {}).get("pragma", {})
 
-    metadata = {key: pragma_section[key] for key in METADATA_KEYS if key in pragma_section}
+    metadata: dict[str, Any] = {}
+
+    for key in METADATA_KEYS:
+        if key not in pragma_section:
+            continue
+
+        value = pragma_section[key]
+        expected = _EXPECTED_TYPES[key]
+
+        if not isinstance(value, expected):
+            raise ValueError(f"[tool.pragma] {key} must be {expected.__name__}, got {type(value).__name__}")
+
+        metadata[key] = value
 
     if not metadata:
         return None
 
-    return cast(ProviderMetadata, metadata)
+    result: ProviderMetadata = metadata  # type: ignore[assignment]
+    return result
 
 
 def extract_schemas(package_name: str) -> list[dict[str, Any]]:
