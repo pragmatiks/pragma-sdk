@@ -114,7 +114,7 @@ def extract_metadata() -> ProviderMetadata | None:
         Typed metadata dictionary, or None if no metadata keys found.
 
     Raises:
-        ValueError: If a metadata field has an unexpected type.
+        TypeError: If a metadata field has an unexpected type.
     """
     data = _load_pyproject()
 
@@ -133,7 +133,10 @@ def extract_metadata() -> ProviderMetadata | None:
         expected = _EXPECTED_TYPES[key]
 
         if not isinstance(value, expected):
-            raise ValueError(f"[tool.pragma] {key} must be {expected.__name__}, got {type(value).__name__}")
+            raise TypeError(f"[tool.pragma] {key} must be {expected.__name__}, got {type(value).__name__}")
+
+        if expected is list and not all(isinstance(item, str) for item in value):
+            raise TypeError(f"[tool.pragma] {key} must contain only strings")
 
         metadata[key] = value
 

@@ -130,7 +130,23 @@ tags = "not-a-list"
 """,
     )
 
-    with pytest.raises(ValueError, match=r"tags must be list, got str"):
+    with pytest.raises(TypeError, match=r"tags must be list, got str"):
+        extract_metadata()
+
+
+def test_tags_with_non_string_elements_raises(tmp_path: Path) -> None:
+    _write_pyproject(
+        tmp_path,
+        """\
+[tool.pragma]
+provider = "test"
+package = "test_provider"
+display_name = "Test"
+tags = ["valid", 42, true]
+""",
+    )
+
+    with pytest.raises(TypeError, match=r"tags must contain only strings"):
         extract_metadata()
 
 
