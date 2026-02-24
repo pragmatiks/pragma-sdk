@@ -1,3 +1,9 @@
+## v0.20.0 (2026-02-24)
+
+### Feat
+
+- add extract_metadata() for provider store metadata (PRA-193) (#6)
+
 ## v0.19.0 (2026-02-23)
 
 ### Feat
