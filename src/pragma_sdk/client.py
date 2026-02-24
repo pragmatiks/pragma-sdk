@@ -13,14 +13,38 @@ from pragma_sdk.config import get_token_for_context
 from pragma_sdk.models import (
     BuildInfo,
     DeploymentResult,
+    InstalledProvider,
+    InstalledProviderSummary,
+    PaginatedResponse,
     ProviderDeleteResult,
     ProviderInfo,
     ProviderStatus,
     PushResult,
     Resource,
+    ResourceTier,
+    StoreProviderDetail,
+    StoreProviderSummary,
+    StoreVersion,
+    StoreVersionDetail,
+    TrustTier,
+    UpgradePolicy,
     UserInfo,
     format_resource_id,
 )
+
+
+def _validate_name(name: str) -> str:
+    """Validate a name used in URL path segments.
+
+    Returns:
+        The validated name.
+
+    Raises:
+        ValueError: If name is empty or contains a slash.
+    """
+    if not name or "/" in name:
+        raise ValueError(f"Invalid name: {name!r}")
+    return name
 
 
 class BaseClient:
@@ -566,6 +590,215 @@ class PragmaClient(BaseClient):
             files={"file": (name, content, content_type)},
         )
 
+    def list_store_providers(
+        self,
+        q: str | None = None,
+        trust_tier: TrustTier | str | None = None,
+        tags: list[str] | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> PaginatedResponse[StoreProviderSummary]:
+        """List store providers with optional search and filtering.
+
+        Args:
+            q: Search query string.
+            trust_tier: Filter by trust tier.
+            tags: Filter by tags.
+            limit: Maximum number of results.
+            offset: Pagination offset.
+
+        Returns:
+            Paginated list of store provider summaries.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        params: dict = {"limit": limit, "offset": offset}
+
+        if q is not None:
+            params["q"] = q
+
+        if trust_tier is not None:
+            params["trust_tier"] = trust_tier
+
+        if tags is not None:
+            params["tags"] = tags
+
+        response = self._request("GET", "/store/providers", params=params)
+        return PaginatedResponse[StoreProviderSummary].model_validate(response)
+
+    def get_store_provider(self, name: str) -> StoreProviderDetail:
+        """Get detailed info for a store provider including versions.
+
+        Args:
+            name: Store provider name.
+
+        Returns:
+            Store provider detail with version history.
+
+        Raises:
+            httpx.HTTPStatusError: If provider not found or request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", f"/store/providers/{_validate_name(name)}")
+        return StoreProviderDetail.model_validate(response)
+
+    def get_store_version(self, name: str, version: str) -> StoreVersionDetail:
+        """Get detail for a specific provider version.
+
+        Args:
+            name: Store provider name.
+            version: Version string.
+
+        Returns:
+            Version detail.
+
+        Raises:
+            httpx.HTTPStatusError: If version not found or request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", f"/store/providers/{_validate_name(name)}/versions/{_validate_name(version)}")
+        return StoreVersionDetail.model_validate(response)
+
+    def install_store_provider(
+        self,
+        name: str,
+        version: str | None = None,
+        resource_tier: ResourceTier | str = ResourceTier.STANDARD,
+        upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
+    ) -> InstalledProvider:
+        """Install a provider from the store.
+
+        Args:
+            name: Store provider name.
+            version: Specific version to install (latest if None).
+            resource_tier: Resource tier for the installation.
+            upgrade_policy: Upgrade policy for the installation.
+
+        Returns:
+            Installed provider info.
+
+        Raises:
+            httpx.HTTPStatusError: If installation fails.
+        """  # noqa: DOC502
+        data: dict = {
+            "provider_name": name,
+            "resource_tier": resource_tier,
+            "upgrade_policy": upgrade_policy,
+        }
+
+        if version is not None:
+            data["version"] = version
+
+        response = self._request("POST", "/store/install", json_data=data)
+        return InstalledProvider.model_validate(response)
+
+    def uninstall_store_provider(self, name: str, *, cascade: bool = False) -> None:
+        """Uninstall a store provider.
+
+        Args:
+            name: Store provider name.
+            cascade: If True, delete all resources managed by this provider.
+
+        Raises:
+            httpx.HTTPStatusError: If uninstall fails.
+        """  # noqa: DOC502
+        params = {}
+
+        if cascade:
+            params["cascade"] = "true"
+
+        self._request("DELETE", f"/store/installed/{_validate_name(name)}", params=params)
+
+    def upgrade_store_provider(self, name: str, version: str | None = None) -> InstalledProvider:
+        """Upgrade an installed store provider.
+
+        Args:
+            name: Store provider name.
+            version: Target version (latest if None).
+
+        Returns:
+            Updated installed provider info.
+
+        Raises:
+            httpx.HTTPStatusError: If upgrade fails.
+        """  # noqa: DOC502
+        data: dict = {}
+
+        if version is not None:
+            data["version"] = version
+
+        response = self._request("POST", f"/store/installed/{_validate_name(name)}/upgrade", json_data=data)
+        return InstalledProvider.model_validate(response)
+
+    def list_installed_providers(self) -> list[InstalledProviderSummary]:
+        """List installed store providers for the current tenant.
+
+        Returns:
+            List of installed provider summaries.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", "/store/installed")
+        return [InstalledProviderSummary.model_validate(item) for item in response]
+
+    def publish_store_provider(
+        self,
+        name: str,
+        tarball: bytes,
+        version: str,
+        changelog: str | None = None,
+        *,
+        force: bool = False,
+    ) -> StoreVersion:
+        """Publish a new version of a store provider.
+
+        Args:
+            name: Store provider name.
+            tarball: Gzipped tarball containing provider source code.
+            version: Version string for this release.
+            changelog: Optional changelog text.
+            force: If True, allow overwriting an existing version.
+
+        Returns:
+            Published store version info.
+
+        Raises:
+            httpx.HTTPStatusError: If publishing fails.
+        """  # noqa: DOC502
+        data: dict[str, str] = {"version": version}
+
+        if changelog is not None:
+            data["changelog"] = changelog
+
+        if force:
+            data["force"] = "true"
+
+        response = self._request(
+            "POST",
+            f"/store/providers/{_validate_name(name)}/publish",
+            files={"code": ("source.tar.gz", tarball, "application/gzip")},
+            data=data,
+        )
+        return StoreVersion.model_validate(response)
+
+    def get_store_build_status(self, name: str, version: str) -> StoreVersion:
+        """Get build status for a store provider version.
+
+        Args:
+            name: Store provider name.
+            version: Version string.
+
+        Returns:
+            Store version with current build status.
+
+        Raises:
+            httpx.HTTPStatusError: If version not found or request fails.
+        """  # noqa: DOC502
+        response = self._request(
+            "GET", f"/store/providers/{_validate_name(name)}/versions/{_validate_name(version)}/status"
+        )
+        return StoreVersion.model_validate(response)
+
 
 class AsyncPragmaClient(BaseClient):
     """Asynchronous client for the Pragma API.
@@ -1055,3 +1288,214 @@ class AsyncPragmaClient(BaseClient):
             f"/files/{name}/upload",
             files={"file": (name, content, content_type)},
         )
+
+    async def list_store_providers(
+        self,
+        q: str | None = None,
+        trust_tier: TrustTier | str | None = None,
+        tags: list[str] | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> PaginatedResponse[StoreProviderSummary]:
+        """List store providers with optional search and filtering.
+
+        Args:
+            q: Search query string.
+            trust_tier: Filter by trust tier.
+            tags: Filter by tags.
+            limit: Maximum number of results.
+            offset: Pagination offset.
+
+        Returns:
+            Paginated list of store provider summaries.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        params: dict = {"limit": limit, "offset": offset}
+
+        if q is not None:
+            params["q"] = q
+
+        if trust_tier is not None:
+            params["trust_tier"] = trust_tier
+
+        if tags is not None:
+            params["tags"] = tags
+
+        response = await self._request("GET", "/store/providers", params=params)
+        return PaginatedResponse[StoreProviderSummary].model_validate(response)
+
+    async def get_store_provider(self, name: str) -> StoreProviderDetail:
+        """Get detailed info for a store provider including versions.
+
+        Args:
+            name: Store provider name.
+
+        Returns:
+            Store provider detail with version history.
+
+        Raises:
+            httpx.HTTPStatusError: If provider not found or request fails.
+        """  # noqa: DOC502
+        response = await self._request("GET", f"/store/providers/{_validate_name(name)}")
+        return StoreProviderDetail.model_validate(response)
+
+    async def get_store_version(self, name: str, version: str) -> StoreVersionDetail:
+        """Get detail for a specific provider version.
+
+        Args:
+            name: Store provider name.
+            version: Version string.
+
+        Returns:
+            Version detail.
+
+        Raises:
+            httpx.HTTPStatusError: If version not found or request fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "GET", f"/store/providers/{_validate_name(name)}/versions/{_validate_name(version)}"
+        )
+        return StoreVersionDetail.model_validate(response)
+
+    async def install_store_provider(
+        self,
+        name: str,
+        version: str | None = None,
+        resource_tier: ResourceTier | str = ResourceTier.STANDARD,
+        upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
+    ) -> InstalledProvider:
+        """Install a provider from the store.
+
+        Args:
+            name: Store provider name.
+            version: Specific version to install (latest if None).
+            resource_tier: Resource tier for the installation.
+            upgrade_policy: Upgrade policy for the installation.
+
+        Returns:
+            Installed provider info.
+
+        Raises:
+            httpx.HTTPStatusError: If installation fails.
+        """  # noqa: DOC502
+        data: dict = {
+            "provider_name": name,
+            "resource_tier": resource_tier,
+            "upgrade_policy": upgrade_policy,
+        }
+
+        if version is not None:
+            data["version"] = version
+
+        response = await self._request("POST", "/store/install", json_data=data)
+        return InstalledProvider.model_validate(response)
+
+    async def uninstall_store_provider(self, name: str, *, cascade: bool = False) -> None:
+        """Uninstall a store provider.
+
+        Args:
+            name: Store provider name.
+            cascade: If True, delete all resources managed by this provider.
+
+        Raises:
+            httpx.HTTPStatusError: If uninstall fails.
+        """  # noqa: DOC502
+        params = {}
+
+        if cascade:
+            params["cascade"] = "true"
+
+        await self._request("DELETE", f"/store/installed/{_validate_name(name)}", params=params)
+
+    async def upgrade_store_provider(self, name: str, version: str | None = None) -> InstalledProvider:
+        """Upgrade an installed store provider.
+
+        Args:
+            name: Store provider name.
+            version: Target version (latest if None).
+
+        Returns:
+            Updated installed provider info.
+
+        Raises:
+            httpx.HTTPStatusError: If upgrade fails.
+        """  # noqa: DOC502
+        data: dict = {}
+
+        if version is not None:
+            data["version"] = version
+
+        response = await self._request("POST", f"/store/installed/{_validate_name(name)}/upgrade", json_data=data)
+        return InstalledProvider.model_validate(response)
+
+    async def list_installed_providers(self) -> list[InstalledProviderSummary]:
+        """List installed store providers for the current tenant.
+
+        Returns:
+            List of installed provider summaries.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        response = await self._request("GET", "/store/installed")
+        return [InstalledProviderSummary.model_validate(item) for item in response]
+
+    async def publish_store_provider(
+        self,
+        name: str,
+        tarball: bytes,
+        version: str,
+        changelog: str | None = None,
+        *,
+        force: bool = False,
+    ) -> StoreVersion:
+        """Publish a new version of a store provider.
+
+        Args:
+            name: Store provider name.
+            tarball: Gzipped tarball containing provider source code.
+            version: Version string for this release.
+            changelog: Optional changelog text.
+            force: If True, allow overwriting an existing version.
+
+        Returns:
+            Published store version info.
+
+        Raises:
+            httpx.HTTPStatusError: If publishing fails.
+        """  # noqa: DOC502
+        data: dict[str, str] = {"version": version}
+
+        if changelog is not None:
+            data["changelog"] = changelog
+
+        if force:
+            data["force"] = "true"
+
+        response = await self._request(
+            "POST",
+            f"/store/providers/{_validate_name(name)}/publish",
+            files={"code": ("source.tar.gz", tarball, "application/gzip")},
+            data=data,
+        )
+        return StoreVersion.model_validate(response)
+
+    async def get_store_build_status(self, name: str, version: str) -> StoreVersion:
+        """Get build status for a store provider version.
+
+        Args:
+            name: Store provider name.
+            version: Version string.
+
+        Returns:
+            Store version with current build status.
+
+        Raises:
+            httpx.HTTPStatusError: If version not found or request fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "GET", f"/store/providers/{_validate_name(name)}/versions/{_validate_name(version)}/status"
+        )
+        return StoreVersion.model_validate(response)

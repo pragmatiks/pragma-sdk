@@ -36,3 +36,35 @@ class ResponseStatus(StrEnum):
 
     SUCCESS = "success"
     FAILURE = "failure"
+
+
+class TrustTier(StrEnum):
+    """Trust level for store providers."""
+
+    OFFICIAL = "official"
+    VERIFIED = "verified"
+    COMMUNITY = "community"
+
+
+class VersionStatus(StrEnum):
+    """Build/publish status for a store provider version."""
+
+    BUILDING = "building"
+    PUBLISHED = "published"
+    FAILED = "failed"
+    YANKED = "yanked"
+
+
+class UpgradePolicy(StrEnum):
+    """Upgrade policy for installed store providers."""
+
+    AUTO = "auto"
+    MANUAL = "manual"
+
+
+class ResourceTier(StrEnum):
+    """Resource tier for installed store providers."""
+
+    FREE = "free"
+    STANDARD = "standard"
+    PERFORMANCE = "performance"
