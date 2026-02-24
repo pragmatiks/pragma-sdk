@@ -1,3 +1,9 @@
+## v0.21.0 (2026-02-24)
+
+### Feat
+
+- add store SDK models and client methods (#7)
+
 ## v0.20.0 (2026-02-24)
 
 ### Feat
