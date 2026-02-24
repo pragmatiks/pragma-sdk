@@ -126,6 +126,7 @@ def test_list_store_providers_passes_query_params() -> None:
     assert request.url.params["trust_tier"] == "official"
     assert request.url.params["limit"] == "10"
     assert request.url.params["offset"] == "5"
+    assert "tags" in str(request.url)
 
 
 # --- Sync: get_store_provider ---
@@ -289,6 +290,8 @@ def test_publish_store_provider_returns_version() -> None:
     assert route.called
     assert isinstance(result, StoreVersion)
     assert result.status == VersionStatus.BUILDING
+    request = route.calls[0].request
+    assert "multipart/form-data" in request.headers.get("content-type", "")
 
 
 # --- Sync: get_store_build_status ---
@@ -353,6 +356,7 @@ async def test_async_list_store_providers_passes_query_params() -> None:
     assert request.url.params["trust_tier"] == "official"
     assert request.url.params["limit"] == "10"
     assert request.url.params["offset"] == "5"
+    assert "tags" in str(request.url)
 
 
 # --- Async: get_store_provider ---
@@ -510,6 +514,8 @@ async def test_async_publish_store_provider_returns_version() -> None:
     assert route.called
     assert isinstance(result, StoreVersion)
     assert result.status == VersionStatus.BUILDING
+    request = route.calls[0].request
+    assert "multipart/form-data" in request.headers.get("content-type", "")
 
 
 # --- Async: get_store_build_status ---

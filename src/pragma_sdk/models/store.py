@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -56,7 +57,7 @@ class StoreVersion(BaseModel):
     image_url: str | None = None
     source_hash: str | None = None
     cloud_build_id: str | None = None
-    schemas: list[dict] | None = None
+    schemas: list[dict[str, Any]] | None = None
     changelog: str | None = None
     status: VersionStatus
     published_at: datetime | None = None

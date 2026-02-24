@@ -21,13 +21,30 @@ from pragma_sdk.models import (
     ProviderStatus,
     PushResult,
     Resource,
+    ResourceTier,
     StoreProviderDetail,
     StoreProviderSummary,
     StoreVersion,
     StoreVersionDetail,
+    TrustTier,
+    UpgradePolicy,
     UserInfo,
     format_resource_id,
 )
+
+
+def _validate_name(name: str) -> str:
+    """Validate a name used in URL path segments.
+
+    Returns:
+        The validated name.
+
+    Raises:
+        ValueError: If name is empty or contains a slash.
+    """
+    if not name or "/" in name:
+        raise ValueError(f"Invalid name: {name!r}")
+    return name
 
 
 class BaseClient:
@@ -576,7 +593,7 @@ class PragmaClient(BaseClient):
     def list_store_providers(
         self,
         q: str | None = None,
-        trust_tier: str | None = None,
+        trust_tier: TrustTier | str | None = None,
         tags: list[str] | None = None,
         limit: int = 20,
         offset: int = 0,
@@ -622,7 +639,7 @@ class PragmaClient(BaseClient):
         Raises:
             httpx.HTTPStatusError: If provider not found or request fails.
         """  # noqa: DOC502
-        response = self._request("GET", f"/store/providers/{name}")
+        response = self._request("GET", f"/store/providers/{_validate_name(name)}")
         return StoreProviderDetail.model_validate(response)
 
     def get_store_version(self, name: str, version: str) -> StoreVersionDetail:
@@ -638,15 +655,15 @@ class PragmaClient(BaseClient):
         Raises:
             httpx.HTTPStatusError: If version not found or request fails.
         """  # noqa: DOC502
-        response = self._request("GET", f"/store/providers/{name}/versions/{version}")
+        response = self._request("GET", f"/store/providers/{_validate_name(name)}/versions/{_validate_name(version)}")
         return StoreVersionDetail.model_validate(response)
 
     def install_store_provider(
         self,
         name: str,
         version: str | None = None,
-        resource_tier: str = "standard",
-        upgrade_policy: str = "manual",
+        resource_tier: ResourceTier | str = ResourceTier.STANDARD,
+        upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
     ) -> InstalledProvider:
         """Install a provider from the store.
 
@@ -674,7 +691,7 @@ class PragmaClient(BaseClient):
         response = self._request("POST", "/store/install", json_data=data)
         return InstalledProvider.model_validate(response)
 
-    def uninstall_store_provider(self, name: str, cascade: bool = False) -> None:
+    def uninstall_store_provider(self, name: str, *, cascade: bool = False) -> None:
         """Uninstall a store provider.
 
         Args:
@@ -689,7 +706,7 @@ class PragmaClient(BaseClient):
         if cascade:
             params["cascade"] = "true"
 
-        self._request("DELETE", f"/store/installed/{name}", params=params)
+        self._request("DELETE", f"/store/installed/{_validate_name(name)}", params=params)
 
     def upgrade_store_provider(self, name: str, version: str | None = None) -> InstalledProvider:
         """Upgrade an installed store provider.
@@ -709,7 +726,7 @@ class PragmaClient(BaseClient):
         if version is not None:
             data["version"] = version
 
-        response = self._request("POST", f"/store/installed/{name}/upgrade", json_data=data)
+        response = self._request("POST", f"/store/installed/{_validate_name(name)}/upgrade", json_data=data)
         return InstalledProvider.model_validate(response)
 
     def list_installed_providers(self) -> list[InstalledProviderSummary]:
@@ -730,6 +747,7 @@ class PragmaClient(BaseClient):
         tarball: bytes,
         version: str,
         changelog: str | None = None,
+        *,
         force: bool = False,
     ) -> StoreVersion:
         """Publish a new version of a store provider.
@@ -757,7 +775,7 @@ class PragmaClient(BaseClient):
 
         response = self._request(
             "POST",
-            f"/store/providers/{name}/publish",
+            f"/store/providers/{_validate_name(name)}/publish",
             files={"code": ("source.tar.gz", tarball, "application/gzip")},
             data=data,
         )
@@ -776,7 +794,9 @@ class PragmaClient(BaseClient):
         Raises:
             httpx.HTTPStatusError: If version not found or request fails.
         """  # noqa: DOC502
-        response = self._request("GET", f"/store/providers/{name}/versions/{version}/status")
+        response = self._request(
+            "GET", f"/store/providers/{_validate_name(name)}/versions/{_validate_name(version)}/status"
+        )
         return StoreVersion.model_validate(response)
 
 
@@ -1272,7 +1292,7 @@ class AsyncPragmaClient(BaseClient):
     async def list_store_providers(
         self,
         q: str | None = None,
-        trust_tier: str | None = None,
+        trust_tier: TrustTier | str | None = None,
         tags: list[str] | None = None,
         limit: int = 20,
         offset: int = 0,
@@ -1318,7 +1338,7 @@ class AsyncPragmaClient(BaseClient):
         Raises:
             httpx.HTTPStatusError: If provider not found or request fails.
         """  # noqa: DOC502
-        response = await self._request("GET", f"/store/providers/{name}")
+        response = await self._request("GET", f"/store/providers/{_validate_name(name)}")
         return StoreProviderDetail.model_validate(response)
 
     async def get_store_version(self, name: str, version: str) -> StoreVersionDetail:
@@ -1334,15 +1354,17 @@ class AsyncPragmaClient(BaseClient):
         Raises:
             httpx.HTTPStatusError: If version not found or request fails.
         """  # noqa: DOC502
-        response = await self._request("GET", f"/store/providers/{name}/versions/{version}")
+        response = await self._request(
+            "GET", f"/store/providers/{_validate_name(name)}/versions/{_validate_name(version)}"
+        )
         return StoreVersionDetail.model_validate(response)
 
     async def install_store_provider(
         self,
         name: str,
         version: str | None = None,
-        resource_tier: str = "standard",
-        upgrade_policy: str = "manual",
+        resource_tier: ResourceTier | str = ResourceTier.STANDARD,
+        upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
     ) -> InstalledProvider:
         """Install a provider from the store.
 
@@ -1370,7 +1392,7 @@ class AsyncPragmaClient(BaseClient):
         response = await self._request("POST", "/store/install", json_data=data)
         return InstalledProvider.model_validate(response)
 
-    async def uninstall_store_provider(self, name: str, cascade: bool = False) -> None:
+    async def uninstall_store_provider(self, name: str, *, cascade: bool = False) -> None:
         """Uninstall a store provider.
 
         Args:
@@ -1385,7 +1407,7 @@ class AsyncPragmaClient(BaseClient):
         if cascade:
             params["cascade"] = "true"
 
-        await self._request("DELETE", f"/store/installed/{name}", params=params)
+        await self._request("DELETE", f"/store/installed/{_validate_name(name)}", params=params)
 
     async def upgrade_store_provider(self, name: str, version: str | None = None) -> InstalledProvider:
         """Upgrade an installed store provider.
@@ -1405,7 +1427,7 @@ class AsyncPragmaClient(BaseClient):
         if version is not None:
             data["version"] = version
 
-        response = await self._request("POST", f"/store/installed/{name}/upgrade", json_data=data)
+        response = await self._request("POST", f"/store/installed/{_validate_name(name)}/upgrade", json_data=data)
         return InstalledProvider.model_validate(response)
 
     async def list_installed_providers(self) -> list[InstalledProviderSummary]:
@@ -1426,6 +1448,7 @@ class AsyncPragmaClient(BaseClient):
         tarball: bytes,
         version: str,
         changelog: str | None = None,
+        *,
         force: bool = False,
     ) -> StoreVersion:
         """Publish a new version of a store provider.
@@ -1453,7 +1476,7 @@ class AsyncPragmaClient(BaseClient):
 
         response = await self._request(
             "POST",
-            f"/store/providers/{name}/publish",
+            f"/store/providers/{_validate_name(name)}/publish",
             files={"code": ("source.tar.gz", tarball, "application/gzip")},
             data=data,
         )
@@ -1472,5 +1495,7 @@ class AsyncPragmaClient(BaseClient):
         Raises:
             httpx.HTTPStatusError: If version not found or request fails.
         """  # noqa: DOC502
-        response = await self._request("GET", f"/store/providers/{name}/versions/{version}/status")
+        response = await self._request(
+            "GET", f"/store/providers/{_validate_name(name)}/versions/{_validate_name(version)}/status"
+        )
         return StoreVersion.model_validate(response)

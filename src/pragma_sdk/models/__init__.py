@@ -78,9 +78,9 @@ __all__ = [
     "StoreVersionDetail",
     "TrustTier",
     "UpgradePolicy",
+    "UserInfo",
     "VersionStatus",
     "format_resource_id",
     "is_dependency_marker",
     "is_field_ref_marker",
-    "UserInfo",
 ]
