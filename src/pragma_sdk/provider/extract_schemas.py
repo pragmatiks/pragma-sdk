@@ -1,7 +1,7 @@
-"""Utilities for extracting resource schemas from provider packages.
+"""Utilities for extracting resource schemas and metadata from provider packages.
 
-Used during the Docker build process to extract JSON schemas for all
-resources in a provider package.
+Used during the Docker build process to extract JSON schemas and store
+metadata for all resources in a provider package.
 """
 
 from __future__ import annotations
@@ -12,6 +12,24 @@ from typing import Any
 
 from pragma_sdk.models import Config, Resource
 from pragma_sdk.provider.discovery import discover_resources
+
+
+METADATA_KEYS = ("display_name", "description", "author", "tags", "icon")
+
+
+def _load_pyproject() -> dict[str, Any] | None:
+    """Load and parse pyproject.toml from the current directory.
+
+    Returns:
+        Parsed TOML data, or None if file doesn't exist.
+    """
+    pyproject = Path("pyproject.toml")
+
+    if not pyproject.exists():
+        return None
+
+    with open(pyproject, "rb") as f:
+        return tomllib.load(f)
 
 
 def get_config_class(resource_class: type[Resource]) -> type[Config]:
@@ -50,13 +68,10 @@ def detect_provider_package() -> str | None:
     Returns:
         Package name if found, None otherwise.
     """
-    pyproject = Path("pyproject.toml")
+    data = _load_pyproject()
 
-    if not pyproject.exists():
+    if data is None:
         return None
-
-    with open(pyproject, "rb") as f:
-        data = tomllib.load(f)
 
     pragma_package = data.get("tool", {}).get("pragma", {}).get("package")
 
@@ -68,6 +83,30 @@ def detect_provider_package() -> str | None:
         return name.replace("-", "_")
 
     return None
+
+
+def extract_metadata() -> dict[str, Any] | None:
+    """Extract provider store metadata from pyproject.toml [tool.pragma] section.
+
+    Reads optional metadata keys (display_name, description, author, tags, icon)
+    from the [tool.pragma] section. Only includes keys that are present.
+
+    Returns:
+        Dictionary of metadata fields, or None if no metadata keys found.
+    """
+    data = _load_pyproject()
+
+    if data is None:
+        return None
+
+    pragma_section = data.get("tool", {}).get("pragma", {})
+
+    metadata = {key: pragma_section[key] for key in METADATA_KEYS if key in pragma_section}
+
+    if not metadata:
+        return None
+
+    return metadata
 
 
 def extract_schemas(package_name: str) -> list[dict[str, Any]]:
