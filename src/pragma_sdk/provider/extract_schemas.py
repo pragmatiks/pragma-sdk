@@ -1,17 +1,45 @@
-"""Utilities for extracting resource schemas from provider packages.
+"""Utilities for extracting resource schemas and metadata from provider packages.
 
-Used during the Docker build process to extract JSON schemas for all
-resources in a provider package.
+Used during the Docker build process to extract JSON schemas and store
+metadata for all resources in a provider package.
 """
 
 from __future__ import annotations
 
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from pragma_sdk.models import Config, Resource
 from pragma_sdk.provider.discovery import discover_resources
+
+
+class ProviderMetadata(TypedDict, total=False):
+    """Store metadata fields from a provider's pyproject.toml [tool.pragma] section."""
+
+    display_name: str
+    description: str
+    author: str
+    tags: list[str]
+    icon: str
+
+
+METADATA_KEYS: tuple[str, ...] = tuple(ProviderMetadata.__annotations__)
+
+
+def _load_pyproject() -> dict[str, Any] | None:
+    """Load and parse pyproject.toml from the current directory.
+
+    Returns:
+        Parsed TOML data, or None if file doesn't exist.
+    """
+    pyproject = Path("pyproject.toml")
+
+    if not pyproject.exists():
+        return None
+
+    with open(pyproject, "rb") as f:
+        return tomllib.load(f)
 
 
 def get_config_class(resource_class: type[Resource]) -> type[Config]:
@@ -50,13 +78,10 @@ def detect_provider_package() -> str | None:
     Returns:
         Package name if found, None otherwise.
     """
-    pyproject = Path("pyproject.toml")
+    data = _load_pyproject()
 
-    if not pyproject.exists():
+    if data is None:
         return None
-
-    with open(pyproject, "rb") as f:
-        data = tomllib.load(f)
 
     pragma_package = data.get("tool", {}).get("pragma", {}).get("package")
 
@@ -68,6 +93,58 @@ def detect_provider_package() -> str | None:
         return name.replace("-", "_")
 
     return None
+
+
+_EXPECTED_TYPES: dict[str, type] = {
+    "display_name": str,
+    "description": str,
+    "author": str,
+    "tags": list,
+    "icon": str,
+}
+
+
+def extract_metadata() -> ProviderMetadata | None:
+    """Extract provider store metadata from pyproject.toml [tool.pragma] section.
+
+    Reads optional metadata keys (display_name, description, author, tags, icon)
+    from the [tool.pragma] section. Only includes keys that are present.
+
+    Returns:
+        Typed metadata dictionary, or None if no metadata keys found.
+
+    Raises:
+        TypeError: If a metadata field has an unexpected type.
+    """
+    data = _load_pyproject()
+
+    if data is None:
+        return None
+
+    pragma_section = data.get("tool", {}).get("pragma", {})
+
+    metadata: dict[str, Any] = {}
+
+    for key in METADATA_KEYS:
+        if key not in pragma_section:
+            continue
+
+        value = pragma_section[key]
+        expected = _EXPECTED_TYPES[key]
+
+        if not isinstance(value, expected):
+            raise TypeError(f"[tool.pragma] {key} must be {expected.__name__}, got {type(value).__name__}")
+
+        if expected is list and not all(isinstance(item, str) for item in value):
+            raise TypeError(f"[tool.pragma] {key} must contain only strings")
+
+        metadata[key] = value
+
+    if not metadata:
+        return None
+
+    result: ProviderMetadata = metadata  # type: ignore[assignment]
+    return result
 
 
 def extract_schemas(package_name: str) -> list[dict[str, Any]]:
