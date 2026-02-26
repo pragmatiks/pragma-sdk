@@ -1,4 +1,4 @@
-"""Tests for store SDK models and client methods."""
+"""Tests for unified provider store client methods."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import respx
 
 from pragma_sdk.client import AsyncPragmaClient, PragmaClient
 from pragma_sdk.models import (
+    DeploymentResult,
     InstalledProvider,
     InstalledProviderSummary,
     PaginatedResponse,
@@ -15,7 +16,6 @@ from pragma_sdk.models import (
     StoreProviderDetail,
     StoreProviderSummary,
     StoreVersion,
-    StoreVersionDetail,
     TrustTier,
     UpgradePolicy,
     VersionStatus,
@@ -47,7 +47,7 @@ STORE_VERSION = {
     "runtime_version": "0.5.0",
     "image_url": "gcr.io/pragmatiks/qdrant:1.2.0",
     "source_hash": "abc123",
-    "cloud_build_id": "build-456",
+    "build_id": "build-456",
     "schemas": [{"type": "object"}],
     "changelog": "Added new features",
     "status": "published",
@@ -78,12 +78,12 @@ INSTALLED_PROVIDER_SUMMARY = {
 }
 
 
-# --- Sync: list_store_providers ---
+# --- Sync: list_providers ---
 
 
 @respx.mock
-def test_list_store_providers_returns_paginated_response() -> None:
-    respx.get("http://localhost:8000/store/providers").mock(
+def test_list_providers_returns_paginated_response() -> None:
+    respx.get("http://localhost:8000/providers").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -96,7 +96,7 @@ def test_list_store_providers_returns_paginated_response() -> None:
     )
 
     with PragmaClient(auth_token=None) as client:
-        result = client.list_store_providers()
+        result = client.list_providers()
 
     assert isinstance(result, PaginatedResponse)
     assert result.total == 1
@@ -110,8 +110,8 @@ def test_list_store_providers_returns_paginated_response() -> None:
 
 
 @respx.mock
-def test_list_store_providers_passes_query_params() -> None:
-    route = respx.get("http://localhost:8000/store/providers").mock(
+def test_list_providers_passes_query_params() -> None:
+    route = respx.get("http://localhost:8000/providers").mock(
         return_value=httpx.Response(
             200,
             json={"items": [], "total": 0, "limit": 10, "offset": 5},
@@ -119,7 +119,7 @@ def test_list_store_providers_passes_query_params() -> None:
     )
 
     with PragmaClient(auth_token=None) as client:
-        client.list_store_providers(q="qdrant", trust_tier="official", tags=["vector"], limit=10, offset=5)
+        client.list_providers(query="qdrant", trust_tier="official", tags=["vector"], limit=10, offset=5)
 
     request = route.calls[0].request
     assert request.url.params["q"] == "qdrant"
@@ -129,12 +129,12 @@ def test_list_store_providers_passes_query_params() -> None:
     assert "tags" in str(request.url)
 
 
-# --- Sync: get_store_provider ---
+# --- Sync: get_provider ---
 
 
 @respx.mock
-def test_get_store_provider_returns_detail() -> None:
-    respx.get("http://localhost:8000/store/providers/qdrant").mock(
+def test_get_provider_returns_detail() -> None:
+    respx.get("http://localhost:8000/providers/pragma/qdrant").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -145,7 +145,7 @@ def test_get_store_provider_returns_detail() -> None:
     )
 
     with PragmaClient(auth_token=None) as client:
-        result = client.get_store_provider("qdrant")
+        result = client.get_provider("pragma/qdrant")
 
     assert isinstance(result, StoreProviderDetail)
     assert result.provider.name == "qdrant"
@@ -155,47 +155,35 @@ def test_get_store_provider_returns_detail() -> None:
 
 
 @respx.mock
-def test_get_store_provider_raises_on_not_found() -> None:
-    respx.get("http://localhost:8000/store/providers/nonexistent").mock(
+def test_get_provider_raises_on_not_found() -> None:
+    respx.get("http://localhost:8000/providers/pragma/nonexistent").mock(
         return_value=httpx.Response(404, json={"detail": "Not found"})
     )
 
     with PragmaClient(auth_token=None) as client:
         with pytest.raises(httpx.HTTPStatusError) as exc_info:
-            client.get_store_provider("nonexistent")
+            client.get_provider("pragma/nonexistent")
 
     assert exc_info.value.response.status_code == 404
 
 
-# --- Sync: get_store_version ---
+def test_get_provider_raises_on_unnamespaced_name() -> None:
+    with PragmaClient(auth_token=None) as client:
+        with pytest.raises(ValueError, match="org/name"):
+            client.get_provider("qdrant")
+
+
+# --- Sync: install_provider ---
 
 
 @respx.mock
-def test_get_store_version_returns_detail() -> None:
-    respx.get("http://localhost:8000/store/providers/qdrant/versions/1.2.0").mock(
-        return_value=httpx.Response(
-            200,
-            json={"version": STORE_VERSION},
-        )
+def test_install_provider_returns_installed() -> None:
+    respx.post("http://localhost:8000/providers/install").mock(
+        return_value=httpx.Response(201, json=INSTALLED_PROVIDER)
     )
 
     with PragmaClient(auth_token=None) as client:
-        result = client.get_store_version("qdrant", "1.2.0")
-
-    assert isinstance(result, StoreVersionDetail)
-    assert result.version.version == "1.2.0"
-    assert result.version.status == VersionStatus.PUBLISHED
-
-
-# --- Sync: install_store_provider ---
-
-
-@respx.mock
-def test_install_store_provider_returns_installed() -> None:
-    respx.post("http://localhost:8000/store/install").mock(return_value=httpx.Response(200, json=INSTALLED_PROVIDER))
-
-    with PragmaClient(auth_token=None) as client:
-        result = client.install_store_provider("qdrant", version="1.2.0")
+        result = client.install_provider("pragma/qdrant", version="1.2.0")
 
     assert isinstance(result, InstalledProvider)
     assert result.store_provider_name == "qdrant"
@@ -205,54 +193,63 @@ def test_install_store_provider_returns_installed() -> None:
 
 
 @respx.mock
-def test_install_store_provider_raises_on_conflict() -> None:
-    respx.post("http://localhost:8000/store/install").mock(
+def test_install_provider_raises_on_conflict() -> None:
+    respx.post("http://localhost:8000/providers/install").mock(
         return_value=httpx.Response(409, json={"detail": "Already installed"})
     )
 
     with PragmaClient(auth_token=None) as client:
         with pytest.raises(httpx.HTTPStatusError) as exc_info:
-            client.install_store_provider("qdrant")
+            client.install_provider("pragma/qdrant")
 
     assert exc_info.value.response.status_code == 409
 
 
-# --- Sync: uninstall_store_provider ---
+# --- Sync: uninstall_provider ---
 
 
 @respx.mock
-def test_uninstall_store_provider_succeeds() -> None:
-    respx.delete("http://localhost:8000/store/installed/qdrant").mock(return_value=httpx.Response(204))
+def test_uninstall_provider_succeeds() -> None:
+    respx.delete("http://localhost:8000/providers/installed/pragma/qdrant").mock(return_value=httpx.Response(204))
 
     with PragmaClient(auth_token=None) as client:
-        client.uninstall_store_provider("qdrant")
+        client.uninstall_provider("pragma/qdrant")
 
 
 @respx.mock
-def test_uninstall_store_provider_with_cascade() -> None:
-    route = respx.delete("http://localhost:8000/store/installed/qdrant").mock(return_value=httpx.Response(204))
+def test_uninstall_provider_with_cascade() -> None:
+    route = respx.delete("http://localhost:8000/providers/installed/pragma/qdrant").mock(
+        return_value=httpx.Response(204)
+    )
 
     with PragmaClient(auth_token=None) as client:
-        client.uninstall_store_provider("qdrant", cascade=True)
+        client.uninstall_provider("pragma/qdrant", cascade=True)
 
     assert route.calls[0].request.url.params["cascade"] == "true"
 
 
-# --- Sync: upgrade_store_provider ---
+# --- Sync: upgrade_provider ---
 
 
 @respx.mock
-def test_upgrade_store_provider_returns_installed() -> None:
+def test_upgrade_provider_returns_installed() -> None:
     upgraded = {**INSTALLED_PROVIDER, "installed_version": "1.3.0"}
-    respx.post("http://localhost:8000/store/installed/qdrant/upgrade").mock(
+    route = respx.post("http://localhost:8000/providers/installed/pragma/qdrant/upgrade").mock(
         return_value=httpx.Response(200, json=upgraded)
     )
 
     with PragmaClient(auth_token=None) as client:
-        result = client.upgrade_store_provider("qdrant", version="1.3.0")
+        result = client.upgrade_provider("pragma/qdrant", target_version="1.3.0")
 
     assert isinstance(result, InstalledProvider)
     assert result.installed_version == "1.3.0"
+
+    import json
+
+    body = json.loads(route.calls[0].request.content)
+    assert "version" in body
+    assert body["version"] == "1.3.0"
+    assert "target_version" not in body
 
 
 # --- Sync: list_installed_providers ---
@@ -260,7 +257,7 @@ def test_upgrade_store_provider_returns_installed() -> None:
 
 @respx.mock
 def test_list_installed_providers_returns_summaries() -> None:
-    respx.get("http://localhost:8000/store/installed").mock(
+    respx.get("http://localhost:8000/providers/installed").mock(
         return_value=httpx.Response(200, json=[INSTALLED_PROVIDER_SUMMARY])
     )
 
@@ -274,18 +271,18 @@ def test_list_installed_providers_returns_summaries() -> None:
     assert result[0].latest_version == "1.3.0"
 
 
-# --- Sync: publish_store_provider ---
+# --- Sync: publish_provider ---
 
 
 @respx.mock
-def test_publish_store_provider_returns_version() -> None:
+def test_publish_provider_returns_version() -> None:
     building_version = {**STORE_VERSION, "status": "building", "published_at": None}
-    route = respx.post("http://localhost:8000/store/providers/qdrant/publish").mock(
+    route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
         return_value=httpx.Response(202, json=building_version)
     )
 
     with PragmaClient(auth_token=None) as client:
-        result = client.publish_store_provider("qdrant", b"tarball-content", "1.2.0", changelog="New stuff")
+        result = client.publish_provider("pragma/qdrant", b"tarball-content", "1.2.0", changelog="New stuff")
 
     assert route.called
     assert isinstance(result, StoreVersion)
@@ -294,29 +291,88 @@ def test_publish_store_provider_returns_version() -> None:
     assert "multipart/form-data" in request.headers.get("content-type", "")
 
 
-# --- Sync: get_store_build_status ---
+# --- Sync: get_publish_status ---
 
 
 @respx.mock
-def test_get_store_build_status_returns_version() -> None:
-    respx.get("http://localhost:8000/store/providers/qdrant/versions/1.2.0/status").mock(
+def test_get_publish_status_returns_version() -> None:
+    respx.get("http://localhost:8000/providers/pragma/qdrant/versions/1.2.0/status").mock(
         return_value=httpx.Response(200, json=STORE_VERSION)
     )
 
     with PragmaClient(auth_token=None) as client:
-        result = client.get_store_build_status("qdrant", "1.2.0")
+        result = client.get_publish_status("pragma/qdrant", "1.2.0")
 
     assert isinstance(result, StoreVersion)
     assert result.status == VersionStatus.PUBLISHED
     assert result.provider_name == "qdrant"
 
 
-# --- Async: list_store_providers ---
+# --- Sync: deploy_provider ---
 
 
 @respx.mock
-async def test_async_list_store_providers_returns_paginated_response() -> None:
-    respx.get("http://localhost:8000/store/providers").mock(
+def test_deploy_provider_returns_result() -> None:
+    respx.post("http://localhost:8000/providers/installed/pragma/qdrant/deploy").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "deployment_name": "pragma-qdrant",
+                "status": "progressing",
+                "available_replicas": 0,
+                "ready_replicas": 0,
+                "version": "1.2.0",
+                "image": "gcr.io/pragmatiks/qdrant:1.2.0",
+                "updated_at": None,
+                "message": None,
+            },
+        )
+    )
+
+    with PragmaClient(auth_token=None) as client:
+        result = client.deploy_provider("pragma/qdrant", version="1.2.0")
+
+    assert isinstance(result, DeploymentResult)
+    assert result.deployment_name == "pragma-qdrant"
+    assert result.version == "1.2.0"
+    assert result.available_replicas == 0
+
+
+# --- Sync: get_deployment_status ---
+
+
+@respx.mock
+def test_get_deployment_status_returns_result() -> None:
+    respx.get("http://localhost:8000/providers/installed/pragma/qdrant/deployment").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "deployment_name": "pragma-qdrant",
+                "status": "available",
+                "available_replicas": 1,
+                "ready_replicas": 1,
+                "version": "1.2.0",
+                "image": "gcr.io/pragmatiks/qdrant:1.2.0",
+                "updated_at": "2026-02-21T09:00:00Z",
+                "message": None,
+            },
+        )
+    )
+
+    with PragmaClient(auth_token=None) as client:
+        result = client.get_deployment_status("pragma/qdrant")
+
+    assert isinstance(result, DeploymentResult)
+    assert result.deployment_name == "pragma-qdrant"
+    assert result.ready_replicas == 1
+
+
+# --- Async: list_providers ---
+
+
+@respx.mock
+async def test_async_list_providers_returns_paginated_response() -> None:
+    respx.get("http://localhost:8000/providers").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -329,7 +385,7 @@ async def test_async_list_store_providers_returns_paginated_response() -> None:
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        result = await client.list_store_providers()
+        result = await client.list_providers()
 
     assert isinstance(result, PaginatedResponse)
     assert result.total == 1
@@ -340,8 +396,8 @@ async def test_async_list_store_providers_returns_paginated_response() -> None:
 
 
 @respx.mock
-async def test_async_list_store_providers_passes_query_params() -> None:
-    route = respx.get("http://localhost:8000/store/providers").mock(
+async def test_async_list_providers_passes_query_params() -> None:
+    route = respx.get("http://localhost:8000/providers").mock(
         return_value=httpx.Response(
             200,
             json={"items": [], "total": 0, "limit": 10, "offset": 5},
@@ -349,7 +405,7 @@ async def test_async_list_store_providers_passes_query_params() -> None:
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        await client.list_store_providers(q="qdrant", trust_tier="official", tags=["vector"], limit=10, offset=5)
+        await client.list_providers(query="qdrant", trust_tier="official", tags=["vector"], limit=10, offset=5)
 
     request = route.calls[0].request
     assert request.url.params["q"] == "qdrant"
@@ -359,12 +415,12 @@ async def test_async_list_store_providers_passes_query_params() -> None:
     assert "tags" in str(request.url)
 
 
-# --- Async: get_store_provider ---
+# --- Async: get_provider ---
 
 
 @respx.mock
-async def test_async_get_store_provider_returns_detail() -> None:
-    respx.get("http://localhost:8000/store/providers/qdrant").mock(
+async def test_async_get_provider_returns_detail() -> None:
+    respx.get("http://localhost:8000/providers/pragma/qdrant").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -375,7 +431,7 @@ async def test_async_get_store_provider_returns_detail() -> None:
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        result = await client.get_store_provider("qdrant")
+        result = await client.get_provider("pragma/qdrant")
 
     assert isinstance(result, StoreProviderDetail)
     assert result.provider.name == "qdrant"
@@ -383,46 +439,29 @@ async def test_async_get_store_provider_returns_detail() -> None:
 
 
 @respx.mock
-async def test_async_get_store_provider_raises_on_not_found() -> None:
-    respx.get("http://localhost:8000/store/providers/nonexistent").mock(
+async def test_async_get_provider_raises_on_not_found() -> None:
+    respx.get("http://localhost:8000/providers/pragma/nonexistent").mock(
         return_value=httpx.Response(404, json={"detail": "Not found"})
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
         with pytest.raises(httpx.HTTPStatusError) as exc_info:
-            await client.get_store_provider("nonexistent")
+            await client.get_provider("pragma/nonexistent")
 
     assert exc_info.value.response.status_code == 404
 
 
-# --- Async: get_store_version ---
+# --- Async: install_provider ---
 
 
 @respx.mock
-async def test_async_get_store_version_returns_detail() -> None:
-    respx.get("http://localhost:8000/store/providers/qdrant/versions/1.2.0").mock(
-        return_value=httpx.Response(
-            200,
-            json={"version": STORE_VERSION},
-        )
+async def test_async_install_provider_returns_installed() -> None:
+    respx.post("http://localhost:8000/providers/install").mock(
+        return_value=httpx.Response(201, json=INSTALLED_PROVIDER)
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        result = await client.get_store_version("qdrant", "1.2.0")
-
-    assert isinstance(result, StoreVersionDetail)
-    assert result.version.version == "1.2.0"
-
-
-# --- Async: install_store_provider ---
-
-
-@respx.mock
-async def test_async_install_store_provider_returns_installed() -> None:
-    respx.post("http://localhost:8000/store/install").mock(return_value=httpx.Response(200, json=INSTALLED_PROVIDER))
-
-    async with AsyncPragmaClient(auth_token=None) as client:
-        result = await client.install_store_provider("qdrant", version="1.2.0")
+        result = await client.install_provider("pragma/qdrant", version="1.2.0")
 
     assert isinstance(result, InstalledProvider)
     assert result.store_provider_name == "qdrant"
@@ -430,54 +469,63 @@ async def test_async_install_store_provider_returns_installed() -> None:
 
 
 @respx.mock
-async def test_async_install_store_provider_raises_on_conflict() -> None:
-    respx.post("http://localhost:8000/store/install").mock(
+async def test_async_install_provider_raises_on_conflict() -> None:
+    respx.post("http://localhost:8000/providers/install").mock(
         return_value=httpx.Response(409, json={"detail": "Already installed"})
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
         with pytest.raises(httpx.HTTPStatusError) as exc_info:
-            await client.install_store_provider("qdrant")
+            await client.install_provider("pragma/qdrant")
 
     assert exc_info.value.response.status_code == 409
 
 
-# --- Async: uninstall_store_provider ---
+# --- Async: uninstall_provider ---
 
 
 @respx.mock
-async def test_async_uninstall_store_provider_succeeds() -> None:
-    respx.delete("http://localhost:8000/store/installed/qdrant").mock(return_value=httpx.Response(204))
+async def test_async_uninstall_provider_succeeds() -> None:
+    respx.delete("http://localhost:8000/providers/installed/pragma/qdrant").mock(return_value=httpx.Response(204))
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        await client.uninstall_store_provider("qdrant")
+        await client.uninstall_provider("pragma/qdrant")
 
 
 @respx.mock
-async def test_async_uninstall_store_provider_with_cascade() -> None:
-    route = respx.delete("http://localhost:8000/store/installed/qdrant").mock(return_value=httpx.Response(204))
+async def test_async_uninstall_provider_with_cascade() -> None:
+    route = respx.delete("http://localhost:8000/providers/installed/pragma/qdrant").mock(
+        return_value=httpx.Response(204)
+    )
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        await client.uninstall_store_provider("qdrant", cascade=True)
+        await client.uninstall_provider("pragma/qdrant", cascade=True)
 
     assert route.calls[0].request.url.params["cascade"] == "true"
 
 
-# --- Async: upgrade_store_provider ---
+# --- Async: upgrade_provider ---
 
 
 @respx.mock
-async def test_async_upgrade_store_provider_returns_installed() -> None:
+async def test_async_upgrade_provider_returns_installed() -> None:
     upgraded = {**INSTALLED_PROVIDER, "installed_version": "1.3.0"}
-    respx.post("http://localhost:8000/store/installed/qdrant/upgrade").mock(
+    route = respx.post("http://localhost:8000/providers/installed/pragma/qdrant/upgrade").mock(
         return_value=httpx.Response(200, json=upgraded)
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        result = await client.upgrade_store_provider("qdrant", version="1.3.0")
+        result = await client.upgrade_provider("pragma/qdrant", target_version="1.3.0")
 
     assert isinstance(result, InstalledProvider)
     assert result.installed_version == "1.3.0"
+
+    import json
+
+    body = json.loads(route.calls[0].request.content)
+    assert "version" in body
+    assert body["version"] == "1.3.0"
+    assert "target_version" not in body
 
 
 # --- Async: list_installed_providers ---
@@ -485,7 +533,7 @@ async def test_async_upgrade_store_provider_returns_installed() -> None:
 
 @respx.mock
 async def test_async_list_installed_providers_returns_summaries() -> None:
-    respx.get("http://localhost:8000/store/installed").mock(
+    respx.get("http://localhost:8000/providers/installed").mock(
         return_value=httpx.Response(200, json=[INSTALLED_PROVIDER_SUMMARY])
     )
 
@@ -498,18 +546,18 @@ async def test_async_list_installed_providers_returns_summaries() -> None:
     assert result[0].upgrade_available is True
 
 
-# --- Async: publish_store_provider ---
+# --- Async: publish_provider ---
 
 
 @respx.mock
-async def test_async_publish_store_provider_returns_version() -> None:
+async def test_async_publish_provider_returns_version() -> None:
     building_version = {**STORE_VERSION, "status": "building", "published_at": None}
-    route = respx.post("http://localhost:8000/store/providers/qdrant/publish").mock(
+    route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
         return_value=httpx.Response(202, json=building_version)
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        result = await client.publish_store_provider("qdrant", b"tarball-content", "1.2.0", changelog="New stuff")
+        result = await client.publish_provider("pragma/qdrant", b"tarball-content", "1.2.0", changelog="New stuff")
 
     assert route.called
     assert isinstance(result, StoreVersion)
@@ -518,18 +566,77 @@ async def test_async_publish_store_provider_returns_version() -> None:
     assert "multipart/form-data" in request.headers.get("content-type", "")
 
 
-# --- Async: get_store_build_status ---
+# --- Async: get_publish_status ---
 
 
 @respx.mock
-async def test_async_get_store_build_status_returns_version() -> None:
-    respx.get("http://localhost:8000/store/providers/qdrant/versions/1.2.0/status").mock(
+async def test_async_get_publish_status_returns_version() -> None:
+    respx.get("http://localhost:8000/providers/pragma/qdrant/versions/1.2.0/status").mock(
         return_value=httpx.Response(200, json=STORE_VERSION)
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        result = await client.get_store_build_status("qdrant", "1.2.0")
+        result = await client.get_publish_status("pragma/qdrant", "1.2.0")
 
     assert isinstance(result, StoreVersion)
     assert result.status == VersionStatus.PUBLISHED
     assert result.provider_name == "qdrant"
+
+
+# --- Async: deploy_provider ---
+
+
+@respx.mock
+async def test_async_deploy_provider_returns_result() -> None:
+    respx.post("http://localhost:8000/providers/installed/pragma/qdrant/deploy").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "deployment_name": "pragma-qdrant",
+                "status": "progressing",
+                "available_replicas": 0,
+                "ready_replicas": 0,
+                "version": "1.2.0",
+                "image": "gcr.io/pragmatiks/qdrant:1.2.0",
+                "updated_at": None,
+                "message": None,
+            },
+        )
+    )
+
+    async with AsyncPragmaClient(auth_token=None) as client:
+        result = await client.deploy_provider("pragma/qdrant", version="1.2.0")
+
+    assert isinstance(result, DeploymentResult)
+    assert result.deployment_name == "pragma-qdrant"
+    assert result.version == "1.2.0"
+    assert result.available_replicas == 0
+
+
+# --- Async: get_deployment_status ---
+
+
+@respx.mock
+async def test_async_get_deployment_status_returns_result() -> None:
+    respx.get("http://localhost:8000/providers/installed/pragma/qdrant/deployment").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "deployment_name": "pragma-qdrant",
+                "status": "available",
+                "available_replicas": 1,
+                "ready_replicas": 1,
+                "version": "1.2.0",
+                "image": "gcr.io/pragmatiks/qdrant:1.2.0",
+                "updated_at": "2026-02-21T09:00:00Z",
+                "message": None,
+            },
+        )
+    )
+
+    async with AsyncPragmaClient(auth_token=None) as client:
+        result = await client.get_deployment_status("pragma/qdrant")
+
+    assert isinstance(result, DeploymentResult)
+    assert result.deployment_name == "pragma-qdrant"
+    assert result.ready_replicas == 1

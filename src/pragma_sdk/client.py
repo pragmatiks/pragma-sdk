@@ -11,21 +11,16 @@ import httpx
 from pragma_sdk.auth import BearerAuth
 from pragma_sdk.config import get_token_for_context
 from pragma_sdk.models import (
-    BuildInfo,
     DeploymentResult,
     InstalledProvider,
     InstalledProviderSummary,
     PaginatedResponse,
-    ProviderDeleteResult,
-    ProviderInfo,
-    ProviderStatus,
-    PushResult,
+    ProviderScope,
     Resource,
     ResourceTier,
     StoreProviderDetail,
     StoreProviderSummary,
     StoreVersion,
-    StoreVersionDetail,
     TrustTier,
     UpgradePolicy,
     UserInfo,
@@ -33,18 +28,27 @@ from pragma_sdk.models import (
 )
 
 
-def _validate_name(name: str) -> str:
-    """Validate a name used in URL path segments.
+def _validate_provider_name(provider_name: str) -> str:
+    """Validate and return a namespaced provider name for URL construction.
+
+    Args:
+        provider_name: Provider name in 'org/name' format.
 
     Returns:
-        The validated name.
+        The validated provider name, already suitable for URL paths.
 
     Raises:
-        ValueError: If name is empty or contains a slash.
+        ValueError: If name is not in 'org/name' format.
     """
-    if not name or "/" in name:
-        raise ValueError(f"Invalid name: {name!r}")
-    return name
+    if "/" not in provider_name:
+        raise ValueError(f"Provider name must be namespaced as 'org/name', got: {provider_name!r}")
+
+    org, name = provider_name.split("/", 1)
+
+    if not org or not name or "/" in name:
+        raise ValueError(f"Provider name must be namespaced as 'org/name', got: {provider_name!r}")
+
+    return provider_name
 
 
 class BaseClient:
@@ -389,187 +393,6 @@ class PragmaClient(BaseClient):
         response = self._request("DELETE", "/ops/dead-letter", params=params)
         return response["deleted_count"]
 
-    def push_provider(self, provider_id: str, tarball: bytes) -> PushResult:
-        """Push provider code and trigger a build.
-
-        Uploads a tarball containing provider source code and starts a
-        BuildKit job to build a container image.
-
-        Args:
-            provider_id: Unique identifier for the provider.
-            tarball: Gzipped tarball (tar.gz) containing provider source code.
-
-        Returns:
-            PushResult with build ID and job name for tracking.
-
-        Raises:
-            httpx.HTTPStatusError: If the push fails.
-        """  # noqa: DOC502
-        response = self._request(
-            "POST",
-            f"/providers/{provider_id}/push",
-            files={"code": ("code.tar.gz", tarball, "application/gzip")},
-        )
-        return PushResult.model_validate(response)
-
-    def get_build_status(self, provider_id: str, version: str) -> BuildInfo:
-        """Get the status of a build by version.
-
-        Args:
-            provider_id: Provider identifier.
-            version: CalVer version string (YYYYMMDD.HHMMSS).
-
-        Returns:
-            BuildInfo with current build state.
-
-        Raises:
-            httpx.HTTPStatusError: If build not found or request fails.
-        """  # noqa: DOC502
-        response = self._request("GET", f"/providers/{provider_id}/builds/{version}")
-        return BuildInfo.model_validate(response)
-
-    def stream_build_logs(self, provider_id: str, version: str) -> AbstractContextManager[httpx.Response]:
-        """Stream logs from a build.
-
-        Returns a streaming response for real-time monitoring of build progress.
-        The caller is responsible for iterating over the response and closing it.
-
-        Args:
-            provider_id: Provider identifier.
-            version: CalVer version string (YYYYMMDD.HHMMSS).
-
-        Returns:
-            Context manager yielding httpx.Response with build logs (text/plain).
-
-        Raises:
-            httpx.HTTPStatusError: If build not found or request fails.
-
-        Example:
-            >>> with client.stream_build_logs("my-provider", "20250115.120000") as response:
-            ...     for line in response.iter_lines():
-            ...         print(line)
-        """  # noqa: DOC502
-        return self._client.stream("GET", f"/providers/{provider_id}/builds/{version}/logs")
-
-    def deploy_provider(self, provider_id: str, version: str | None = None) -> ProviderStatus:
-        """Deploy a provider to a specific version.
-
-        Creates or updates the Kubernetes Deployment for the provider.
-        If no version is specified, deploys the latest successful build.
-
-        Args:
-            provider_id: Unique identifier for the provider.
-            version: CalVer version string (YYYYMMDD.HHMMSS) to deploy.
-                If None, deploys the latest successful build.
-
-        Returns:
-            ProviderStatus with status, version, updated_at, and healthy flag.
-
-        Raises:
-            httpx.HTTPStatusError: 404 if version not found or no deployable build exists.
-        """  # noqa: DOC502
-        json_data = {"version": version} if version else {}
-        response = self._request(
-            "POST",
-            f"/providers/{provider_id}/deploy",
-            json_data=json_data,
-        )
-        return ProviderStatus.model_validate(response)
-
-    def list_builds(self, provider_id: str) -> list[BuildInfo]:
-        """List builds for a provider.
-
-        Returns the last 10 builds ordered by creation time (newest first).
-
-        Args:
-            provider_id: Unique identifier for the provider.
-
-        Returns:
-            List of BuildInfo for the provider's builds.
-
-        Raises:
-            httpx.HTTPStatusError: If the request fails.
-        """  # noqa: DOC502
-        response = self._request("GET", f"/providers/{provider_id}/builds")
-        return [BuildInfo.model_validate(build) for build in response]
-
-    def rollback_provider(self, provider_id: str, version: str) -> DeploymentResult:
-        """Rollback a provider to a previous build version.
-
-        Deploys the specified build version. The build must exist and
-        have status SUCCESS.
-
-        Args:
-            provider_id: Unique identifier for the provider.
-            version: CalVer version string (YYYYMMDD.HHMMSS) to rollback to.
-
-        Returns:
-            DeploymentResult with deployment state.
-
-        Raises:
-            httpx.HTTPStatusError: 404 if build not found, 400 if build not deployable.
-        """  # noqa: DOC502
-        response = self._request(
-            "POST",
-            f"/providers/{provider_id}/rollback",
-            json_data={"version": version},
-        )
-        return DeploymentResult.model_validate(response)
-
-    def get_deployment_status(self, provider_id: str) -> ProviderStatus:
-        """Get the deployment status for a provider.
-
-        Returns a minimal status without internal K8s details like replica
-        counts, deployment names, or container images.
-
-        Args:
-            provider_id: Unique identifier for the provider.
-
-        Returns:
-            ProviderStatus with status, version, updated_at, and healthy flag.
-
-        Raises:
-            httpx.HTTPStatusError: If deployment not found or request fails.
-        """  # noqa: DOC502
-        response = self._request("GET", f"/providers/{provider_id}/deployment")
-        return ProviderStatus.model_validate(response)
-
-    def delete_provider(self, provider_id: str, *, cascade: bool = False) -> ProviderDeleteResult:
-        """Delete a provider and all associated resources.
-
-        Removes the provider deployment, resource definitions, and pending events.
-        By default, fails if the provider has any resources. Use cascade=True to
-        delete all resources along with the provider.
-
-        Args:
-            provider_id: Unique identifier for the provider to delete.
-            cascade: If True, delete all resources. If False (default), fail if resources exist.
-
-        Returns:
-            ProviderDeleteResult with cleanup summary.
-
-        Raises:
-            httpx.HTTPStatusError: If provider has resources (409) or deletion fails.
-        """  # noqa: DOC502
-        params = {"cascade": "true"} if cascade else {}
-        response = self._request("DELETE", f"/providers/{provider_id}", params=params)
-        return ProviderDeleteResult.model_validate(response)
-
-    def list_providers(self) -> list[ProviderInfo]:
-        """List all providers for the current tenant.
-
-        Returns providers with their deployment status. Providers that have
-        been pushed but not deployed will have deployment_status=None.
-
-        Returns:
-            List of ProviderInfo with provider metadata and deployment status.
-
-        Raises:
-            httpx.HTTPStatusError: If the request fails.
-        """  # noqa: DOC502
-        response = self._request("GET", "/providers/")
-        return [ProviderInfo.model_validate(item) for item in response]
-
     def upload_file(self, name: str, content: bytes, content_type: str) -> dict[str, Any]:
         """Upload a file to the Pragma file storage.
 
@@ -590,33 +413,38 @@ class PragmaClient(BaseClient):
             files={"file": (name, content, content_type)},
         )
 
-    def list_store_providers(
+    def list_providers(
         self,
-        q: str | None = None,
+        query: str | None = None,
+        scope: ProviderScope | str | None = None,
         trust_tier: TrustTier | str | None = None,
         tags: list[str] | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> PaginatedResponse[StoreProviderSummary]:
-        """List store providers with optional search and filtering.
+        """Browse and search the provider store.
 
         Args:
-            q: Search query string.
+            query: Search query string.
+            scope: Filter by provider scope (e.g. 'public', 'tenant').
             trust_tier: Filter by trust tier.
             tags: Filter by tags.
             limit: Maximum number of results.
             offset: Pagination offset.
 
         Returns:
-            Paginated list of store provider summaries.
+            Paginated list of provider summaries.
 
         Raises:
             httpx.HTTPStatusError: If the request fails.
         """  # noqa: DOC502
         params: dict = {"limit": limit, "offset": offset}
 
-        if q is not None:
-            params["q"] = q
+        if query is not None:
+            params["q"] = query
+
+        if scope is not None:
+            params["scope"] = scope
 
         if trust_tier is not None:
             params["trust_tier"] = trust_tier
@@ -624,147 +452,79 @@ class PragmaClient(BaseClient):
         if tags is not None:
             params["tags"] = tags
 
-        response = self._request("GET", "/store/providers", params=params)
+        response = self._request("GET", "/providers", params=params)
         return PaginatedResponse[StoreProviderSummary].model_validate(response)
 
-    def get_store_provider(self, name: str) -> StoreProviderDetail:
-        """Get detailed info for a store provider including versions.
+    def get_provider(self, provider_name: str) -> StoreProviderDetail:
+        """Get detailed info for a provider including versions.
 
         Args:
-            name: Store provider name.
+            provider_name: Namespaced provider name ('org/name').
 
         Returns:
-            Store provider detail with version history.
+            Provider detail with version history.
 
         Raises:
             httpx.HTTPStatusError: If provider not found or request fails.
         """  # noqa: DOC502
-        response = self._request("GET", f"/store/providers/{_validate_name(name)}")
+        path = _validate_provider_name(provider_name)
+        response = self._request("GET", f"/providers/{path}")
         return StoreProviderDetail.model_validate(response)
 
-    def get_store_version(self, name: str, version: str) -> StoreVersionDetail:
-        """Get detail for a specific provider version.
+    def update_provider(self, provider_name: str, metadata: dict[str, Any]) -> StoreProviderDetail:
+        """Update provider metadata.
 
         Args:
-            name: Store provider name.
-            version: Version string.
+            provider_name: Namespaced provider name ('org/name').
+            metadata: Fields to update (e.g. display_name, description, tags).
 
         Returns:
-            Version detail.
+            Updated provider detail.
 
         Raises:
-            httpx.HTTPStatusError: If version not found or request fails.
+            httpx.HTTPStatusError: If provider not found or update fails.
         """  # noqa: DOC502
-        response = self._request("GET", f"/store/providers/{_validate_name(name)}/versions/{_validate_name(version)}")
-        return StoreVersionDetail.model_validate(response)
+        path = _validate_provider_name(provider_name)
+        response = self._request("PATCH", f"/providers/{path}", json_data=metadata)
+        return StoreProviderDetail.model_validate(response)
 
-    def install_store_provider(
+    def delete_provider(self, provider_name: str) -> None:
+        """Delete a provider from the store.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+
+        Raises:
+            httpx.HTTPStatusError: If provider not found or deletion fails.
+        """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
+        self._request("DELETE", f"/providers/{path}")
+
+    def publish_provider(
         self,
-        name: str,
-        version: str | None = None,
-        resource_tier: ResourceTier | str = ResourceTier.STANDARD,
-        upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
-    ) -> InstalledProvider:
-        """Install a provider from the store.
-
-        Args:
-            name: Store provider name.
-            version: Specific version to install (latest if None).
-            resource_tier: Resource tier for the installation.
-            upgrade_policy: Upgrade policy for the installation.
-
-        Returns:
-            Installed provider info.
-
-        Raises:
-            httpx.HTTPStatusError: If installation fails.
-        """  # noqa: DOC502
-        data: dict = {
-            "provider_name": name,
-            "resource_tier": resource_tier,
-            "upgrade_policy": upgrade_policy,
-        }
-
-        if version is not None:
-            data["version"] = version
-
-        response = self._request("POST", "/store/install", json_data=data)
-        return InstalledProvider.model_validate(response)
-
-    def uninstall_store_provider(self, name: str, *, cascade: bool = False) -> None:
-        """Uninstall a store provider.
-
-        Args:
-            name: Store provider name.
-            cascade: If True, delete all resources managed by this provider.
-
-        Raises:
-            httpx.HTTPStatusError: If uninstall fails.
-        """  # noqa: DOC502
-        params = {}
-
-        if cascade:
-            params["cascade"] = "true"
-
-        self._request("DELETE", f"/store/installed/{_validate_name(name)}", params=params)
-
-    def upgrade_store_provider(self, name: str, version: str | None = None) -> InstalledProvider:
-        """Upgrade an installed store provider.
-
-        Args:
-            name: Store provider name.
-            version: Target version (latest if None).
-
-        Returns:
-            Updated installed provider info.
-
-        Raises:
-            httpx.HTTPStatusError: If upgrade fails.
-        """  # noqa: DOC502
-        data: dict = {}
-
-        if version is not None:
-            data["version"] = version
-
-        response = self._request("POST", f"/store/installed/{_validate_name(name)}/upgrade", json_data=data)
-        return InstalledProvider.model_validate(response)
-
-    def list_installed_providers(self) -> list[InstalledProviderSummary]:
-        """List installed store providers for the current tenant.
-
-        Returns:
-            List of installed provider summaries.
-
-        Raises:
-            httpx.HTTPStatusError: If the request fails.
-        """  # noqa: DOC502
-        response = self._request("GET", "/store/installed")
-        return [InstalledProviderSummary.model_validate(item) for item in response]
-
-    def publish_store_provider(
-        self,
-        name: str,
+        provider_name: str,
         tarball: bytes,
         version: str,
         changelog: str | None = None,
         *,
         force: bool = False,
     ) -> StoreVersion:
-        """Publish a new version of a store provider.
+        """Publish a new version of a provider.
 
         Args:
-            name: Store provider name.
+            provider_name: Namespaced provider name ('org/name').
             tarball: Gzipped tarball containing provider source code.
             version: Version string for this release.
             changelog: Optional changelog text.
             force: If True, allow overwriting an existing version.
 
         Returns:
-            Published store version info.
+            Published version info.
 
         Raises:
             httpx.HTTPStatusError: If publishing fails.
         """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
         data: dict[str, str] = {"version": version}
 
         if changelog is not None:
@@ -775,29 +535,173 @@ class PragmaClient(BaseClient):
 
         response = self._request(
             "POST",
-            f"/store/providers/{_validate_name(name)}/publish",
+            f"/providers/{path}/publish",
             files={"code": ("source.tar.gz", tarball, "application/gzip")},
             data=data,
         )
         return StoreVersion.model_validate(response)
 
-    def get_store_build_status(self, name: str, version: str) -> StoreVersion:
-        """Get build status for a store provider version.
+    def get_publish_status(self, provider_name: str, version: str) -> StoreVersion:
+        """Check build/publish status for a provider version.
 
         Args:
-            name: Store provider name.
+            provider_name: Namespaced provider name ('org/name').
             version: Version string.
 
         Returns:
-            Store version with current build status.
+            Version with current build status.
 
         Raises:
             httpx.HTTPStatusError: If version not found or request fails.
         """  # noqa: DOC502
-        response = self._request(
-            "GET", f"/store/providers/{_validate_name(name)}/versions/{_validate_name(version)}/status"
-        )
+        path = _validate_provider_name(provider_name)
+        response = self._request("GET", f"/providers/{path}/versions/{version}/status")
         return StoreVersion.model_validate(response)
+
+    def stream_publish_logs(self, provider_name: str, version: str) -> AbstractContextManager[httpx.Response]:
+        """Stream build logs for a provider version.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+            version: Version string.
+
+        Returns:
+            Context manager yielding httpx.Response with build logs (text/plain).
+
+        Raises:
+            httpx.HTTPStatusError: If version not found or request fails.
+
+        Example:
+            >>> with client.stream_publish_logs("pragma/qdrant", "1.2.0") as response:
+            ...     for line in response.iter_lines():
+            ...         print(line)
+        """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
+        return self._client.stream("GET", f"/providers/{path}/versions/{version}/logs")
+
+    def install_provider(
+        self,
+        provider_name: str,
+        version: str | None = None,
+        resource_tier: ResourceTier | str = ResourceTier.STANDARD,
+        upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
+    ) -> InstalledProvider:
+        """Install a provider from the store.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+            version: Specific version to install (latest if None).
+            resource_tier: Resource tier for the installation.
+            upgrade_policy: Upgrade policy for the installation.
+
+        Returns:
+            Installed provider info.
+
+        Raises:
+            httpx.HTTPStatusError: If installation fails.
+        """  # noqa: DOC502
+        _validate_provider_name(provider_name)
+        data: dict = {
+            "provider_name": provider_name,
+            "resource_tier": resource_tier,
+            "upgrade_policy": upgrade_policy,
+        }
+
+        if version is not None:
+            data["version"] = version
+
+        response = self._request("POST", "/providers/install", json_data=data)
+        return InstalledProvider.model_validate(response)
+
+    def list_installed_providers(self) -> list[InstalledProviderSummary]:
+        """List installed providers for the current tenant.
+
+        Returns:
+            List of installed provider summaries.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", "/providers/installed")
+        return [InstalledProviderSummary.model_validate(item) for item in response]
+
+    def uninstall_provider(self, provider_name: str, *, cascade: bool = False) -> None:
+        """Uninstall an installed provider.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+            cascade: If True, delete all resources managed by this provider.
+
+        Raises:
+            httpx.HTTPStatusError: If uninstall fails.
+        """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
+        params = {}
+
+        if cascade:
+            params["cascade"] = "true"
+
+        self._request("DELETE", f"/providers/installed/{path}", params=params)
+
+    def upgrade_provider(self, provider_name: str, target_version: str | None = None) -> InstalledProvider:
+        """Upgrade an installed provider.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+            target_version: Target version (latest if None).
+
+        Returns:
+            Updated installed provider info.
+
+        Raises:
+            httpx.HTTPStatusError: If upgrade fails.
+        """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
+        data: dict = {}
+
+        if target_version is not None:
+            data["version"] = target_version
+
+        response = self._request("POST", f"/providers/installed/{path}/upgrade", json_data=data)
+        return InstalledProvider.model_validate(response)
+
+    def deploy_provider(self, provider_name: str, version: str | None = None) -> DeploymentResult:
+        """Deploy or redeploy an installed provider.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+            version: Version to deploy. If None, uses the installed version.
+
+        Returns:
+            DeploymentResult with deployment state and replica info.
+
+        Raises:
+            httpx.HTTPStatusError: If deploy fails.
+        """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
+        data: dict = {}
+
+        if version is not None:
+            data["version"] = version
+
+        response = self._request("POST", f"/providers/installed/{path}/deploy", json_data=data)
+        return DeploymentResult.model_validate(response)
+
+    def get_deployment_status(self, provider_name: str) -> DeploymentResult:
+        """Get deployment status for an installed provider.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+
+        Returns:
+            DeploymentResult with status, version, replicas, and update timestamp.
+
+        Raises:
+            httpx.HTTPStatusError: If deployment not found or request fails.
+        """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
+        response = self._request("GET", f"/providers/installed/{path}/deployment")
+        return DeploymentResult.model_validate(response)
 
 
 class AsyncPragmaClient(BaseClient):
@@ -1088,187 +992,6 @@ class AsyncPragmaClient(BaseClient):
         response = await self._request("DELETE", "/ops/dead-letter", params=params)
         return response["deleted_count"]
 
-    async def push_provider(self, provider_id: str, tarball: bytes) -> PushResult:
-        """Push provider code and trigger a build.
-
-        Uploads a tarball containing provider source code and starts a
-        BuildKit job to build a container image.
-
-        Args:
-            provider_id: Unique identifier for the provider.
-            tarball: Gzipped tarball (tar.gz) containing provider source code.
-
-        Returns:
-            PushResult with build ID and job name for tracking.
-
-        Raises:
-            httpx.HTTPStatusError: If the push fails.
-        """  # noqa: DOC502
-        response = await self._request(
-            "POST",
-            f"/providers/{provider_id}/push",
-            files={"code": ("code.tar.gz", tarball, "application/gzip")},
-        )
-        return PushResult.model_validate(response)
-
-    async def get_build_status(self, provider_id: str, version: str) -> BuildInfo:
-        """Get the status of a build by version.
-
-        Args:
-            provider_id: Provider identifier.
-            version: CalVer version string (YYYYMMDD.HHMMSS).
-
-        Returns:
-            BuildInfo with current build state.
-
-        Raises:
-            httpx.HTTPStatusError: If build not found or request fails.
-        """  # noqa: DOC502
-        response = await self._request("GET", f"/providers/{provider_id}/builds/{version}")
-        return BuildInfo.model_validate(response)
-
-    def stream_build_logs(self, provider_id: str, version: str) -> AbstractAsyncContextManager[httpx.Response]:
-        """Stream logs from a build.
-
-        Returns a streaming response for real-time monitoring of build progress.
-        The caller is responsible for iterating over the response and closing it.
-
-        Args:
-            provider_id: Provider identifier.
-            version: CalVer version string (YYYYMMDD.HHMMSS).
-
-        Returns:
-            Async context manager yielding httpx.Response with build logs (text/plain).
-
-        Raises:
-            httpx.HTTPStatusError: If build not found or request fails.
-
-        Example:
-            >>> async with client.stream_build_logs("my-provider", "20250115.120000") as response:
-            ...     async for line in response.aiter_lines():
-            ...         print(line)
-        """  # noqa: DOC502
-        return self._client.stream("GET", f"/providers/{provider_id}/builds/{version}/logs")
-
-    async def deploy_provider(self, provider_id: str, version: str | None = None) -> ProviderStatus:
-        """Deploy a provider to a specific version.
-
-        Creates or updates the Kubernetes Deployment for the provider.
-        If no version is specified, deploys the latest successful build.
-
-        Args:
-            provider_id: Unique identifier for the provider.
-            version: CalVer version string (YYYYMMDD.HHMMSS) to deploy.
-                If None, deploys the latest successful build.
-
-        Returns:
-            ProviderStatus with status, version, updated_at, and healthy flag.
-
-        Raises:
-            httpx.HTTPStatusError: 404 if version not found or no deployable build exists.
-        """  # noqa: DOC502
-        json_data = {"version": version} if version else {}
-        response = await self._request(
-            "POST",
-            f"/providers/{provider_id}/deploy",
-            json_data=json_data,
-        )
-        return ProviderStatus.model_validate(response)
-
-    async def list_builds(self, provider_id: str) -> list[BuildInfo]:
-        """List builds for a provider.
-
-        Returns the last 10 builds ordered by creation time (newest first).
-
-        Args:
-            provider_id: Unique identifier for the provider.
-
-        Returns:
-            List of BuildInfo for the provider's builds.
-
-        Raises:
-            httpx.HTTPStatusError: If the request fails.
-        """  # noqa: DOC502
-        response = await self._request("GET", f"/providers/{provider_id}/builds")
-        return [BuildInfo.model_validate(build) for build in response]
-
-    async def rollback_provider(self, provider_id: str, version: str) -> DeploymentResult:
-        """Rollback a provider to a previous build version.
-
-        Deploys the specified build version. The build must exist and
-        have status SUCCESS.
-
-        Args:
-            provider_id: Unique identifier for the provider.
-            version: CalVer version string (YYYYMMDD.HHMMSS) to rollback to.
-
-        Returns:
-            DeploymentResult with deployment state.
-
-        Raises:
-            httpx.HTTPStatusError: 404 if build not found, 400 if build not deployable.
-        """  # noqa: DOC502
-        response = await self._request(
-            "POST",
-            f"/providers/{provider_id}/rollback",
-            json_data={"version": version},
-        )
-        return DeploymentResult.model_validate(response)
-
-    async def get_deployment_status(self, provider_id: str) -> ProviderStatus:
-        """Get the deployment status for a provider.
-
-        Returns a minimal status without internal K8s details like replica
-        counts, deployment names, or container images.
-
-        Args:
-            provider_id: Unique identifier for the provider.
-
-        Returns:
-            ProviderStatus with status, version, updated_at, and healthy flag.
-
-        Raises:
-            httpx.HTTPStatusError: If deployment not found or request fails.
-        """  # noqa: DOC502
-        response = await self._request("GET", f"/providers/{provider_id}/deployment")
-        return ProviderStatus.model_validate(response)
-
-    async def delete_provider(self, provider_id: str, *, cascade: bool = False) -> ProviderDeleteResult:
-        """Delete a provider and all associated resources.
-
-        Removes the provider deployment, resource definitions, and pending events.
-        By default, fails if the provider has any resources. Use cascade=True to
-        delete all resources along with the provider.
-
-        Args:
-            provider_id: Unique identifier for the provider to delete.
-            cascade: If True, delete all resources. If False (default), fail if resources exist.
-
-        Returns:
-            ProviderDeleteResult with cleanup summary.
-
-        Raises:
-            httpx.HTTPStatusError: If provider has resources (409) or deletion fails.
-        """  # noqa: DOC502
-        params = {"cascade": "true"} if cascade else {}
-        response = await self._request("DELETE", f"/providers/{provider_id}", params=params)
-        return ProviderDeleteResult.model_validate(response)
-
-    async def list_providers(self) -> list[ProviderInfo]:
-        """List all providers for the current tenant.
-
-        Returns providers with their deployment status. Providers that have
-        been pushed but not deployed will have deployment_status=None.
-
-        Returns:
-            List of ProviderInfo with provider metadata and deployment status.
-
-        Raises:
-            httpx.HTTPStatusError: If the request fails.
-        """  # noqa: DOC502
-        response = await self._request("GET", "/providers/")
-        return [ProviderInfo.model_validate(item) for item in response]
-
     async def upload_file(self, name: str, content: bytes, content_type: str) -> dict[str, Any]:
         """Upload a file to the Pragma file storage.
 
@@ -1289,33 +1012,38 @@ class AsyncPragmaClient(BaseClient):
             files={"file": (name, content, content_type)},
         )
 
-    async def list_store_providers(
+    async def list_providers(
         self,
-        q: str | None = None,
+        query: str | None = None,
+        scope: ProviderScope | str | None = None,
         trust_tier: TrustTier | str | None = None,
         tags: list[str] | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> PaginatedResponse[StoreProviderSummary]:
-        """List store providers with optional search and filtering.
+        """Browse and search the provider store.
 
         Args:
-            q: Search query string.
+            query: Search query string.
+            scope: Filter by provider scope (e.g. 'public', 'tenant').
             trust_tier: Filter by trust tier.
             tags: Filter by tags.
             limit: Maximum number of results.
             offset: Pagination offset.
 
         Returns:
-            Paginated list of store provider summaries.
+            Paginated list of provider summaries.
 
         Raises:
             httpx.HTTPStatusError: If the request fails.
         """  # noqa: DOC502
         params: dict = {"limit": limit, "offset": offset}
 
-        if q is not None:
-            params["q"] = q
+        if query is not None:
+            params["q"] = query
+
+        if scope is not None:
+            params["scope"] = scope
 
         if trust_tier is not None:
             params["trust_tier"] = trust_tier
@@ -1323,149 +1051,79 @@ class AsyncPragmaClient(BaseClient):
         if tags is not None:
             params["tags"] = tags
 
-        response = await self._request("GET", "/store/providers", params=params)
+        response = await self._request("GET", "/providers", params=params)
         return PaginatedResponse[StoreProviderSummary].model_validate(response)
 
-    async def get_store_provider(self, name: str) -> StoreProviderDetail:
-        """Get detailed info for a store provider including versions.
+    async def get_provider(self, provider_name: str) -> StoreProviderDetail:
+        """Get detailed info for a provider including versions.
 
         Args:
-            name: Store provider name.
+            provider_name: Namespaced provider name ('org/name').
 
         Returns:
-            Store provider detail with version history.
+            Provider detail with version history.
 
         Raises:
             httpx.HTTPStatusError: If provider not found or request fails.
         """  # noqa: DOC502
-        response = await self._request("GET", f"/store/providers/{_validate_name(name)}")
+        path = _validate_provider_name(provider_name)
+        response = await self._request("GET", f"/providers/{path}")
         return StoreProviderDetail.model_validate(response)
 
-    async def get_store_version(self, name: str, version: str) -> StoreVersionDetail:
-        """Get detail for a specific provider version.
+    async def update_provider(self, provider_name: str, metadata: dict[str, Any]) -> StoreProviderDetail:
+        """Update provider metadata.
 
         Args:
-            name: Store provider name.
-            version: Version string.
+            provider_name: Namespaced provider name ('org/name').
+            metadata: Fields to update (e.g. display_name, description, tags).
 
         Returns:
-            Version detail.
+            Updated provider detail.
 
         Raises:
-            httpx.HTTPStatusError: If version not found or request fails.
+            httpx.HTTPStatusError: If provider not found or update fails.
         """  # noqa: DOC502
-        response = await self._request(
-            "GET", f"/store/providers/{_validate_name(name)}/versions/{_validate_name(version)}"
-        )
-        return StoreVersionDetail.model_validate(response)
+        path = _validate_provider_name(provider_name)
+        response = await self._request("PATCH", f"/providers/{path}", json_data=metadata)
+        return StoreProviderDetail.model_validate(response)
 
-    async def install_store_provider(
+    async def delete_provider(self, provider_name: str) -> None:
+        """Delete a provider from the store.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+
+        Raises:
+            httpx.HTTPStatusError: If provider not found or deletion fails.
+        """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
+        await self._request("DELETE", f"/providers/{path}")
+
+    async def publish_provider(
         self,
-        name: str,
-        version: str | None = None,
-        resource_tier: ResourceTier | str = ResourceTier.STANDARD,
-        upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
-    ) -> InstalledProvider:
-        """Install a provider from the store.
-
-        Args:
-            name: Store provider name.
-            version: Specific version to install (latest if None).
-            resource_tier: Resource tier for the installation.
-            upgrade_policy: Upgrade policy for the installation.
-
-        Returns:
-            Installed provider info.
-
-        Raises:
-            httpx.HTTPStatusError: If installation fails.
-        """  # noqa: DOC502
-        data: dict = {
-            "provider_name": name,
-            "resource_tier": resource_tier,
-            "upgrade_policy": upgrade_policy,
-        }
-
-        if version is not None:
-            data["version"] = version
-
-        response = await self._request("POST", "/store/install", json_data=data)
-        return InstalledProvider.model_validate(response)
-
-    async def uninstall_store_provider(self, name: str, *, cascade: bool = False) -> None:
-        """Uninstall a store provider.
-
-        Args:
-            name: Store provider name.
-            cascade: If True, delete all resources managed by this provider.
-
-        Raises:
-            httpx.HTTPStatusError: If uninstall fails.
-        """  # noqa: DOC502
-        params = {}
-
-        if cascade:
-            params["cascade"] = "true"
-
-        await self._request("DELETE", f"/store/installed/{_validate_name(name)}", params=params)
-
-    async def upgrade_store_provider(self, name: str, version: str | None = None) -> InstalledProvider:
-        """Upgrade an installed store provider.
-
-        Args:
-            name: Store provider name.
-            version: Target version (latest if None).
-
-        Returns:
-            Updated installed provider info.
-
-        Raises:
-            httpx.HTTPStatusError: If upgrade fails.
-        """  # noqa: DOC502
-        data: dict = {}
-
-        if version is not None:
-            data["version"] = version
-
-        response = await self._request("POST", f"/store/installed/{_validate_name(name)}/upgrade", json_data=data)
-        return InstalledProvider.model_validate(response)
-
-    async def list_installed_providers(self) -> list[InstalledProviderSummary]:
-        """List installed store providers for the current tenant.
-
-        Returns:
-            List of installed provider summaries.
-
-        Raises:
-            httpx.HTTPStatusError: If the request fails.
-        """  # noqa: DOC502
-        response = await self._request("GET", "/store/installed")
-        return [InstalledProviderSummary.model_validate(item) for item in response]
-
-    async def publish_store_provider(
-        self,
-        name: str,
+        provider_name: str,
         tarball: bytes,
         version: str,
         changelog: str | None = None,
         *,
         force: bool = False,
     ) -> StoreVersion:
-        """Publish a new version of a store provider.
+        """Publish a new version of a provider.
 
         Args:
-            name: Store provider name.
+            provider_name: Namespaced provider name ('org/name').
             tarball: Gzipped tarball containing provider source code.
             version: Version string for this release.
             changelog: Optional changelog text.
             force: If True, allow overwriting an existing version.
 
         Returns:
-            Published store version info.
+            Published version info.
 
         Raises:
             httpx.HTTPStatusError: If publishing fails.
         """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
         data: dict[str, str] = {"version": version}
 
         if changelog is not None:
@@ -1476,26 +1134,170 @@ class AsyncPragmaClient(BaseClient):
 
         response = await self._request(
             "POST",
-            f"/store/providers/{_validate_name(name)}/publish",
+            f"/providers/{path}/publish",
             files={"code": ("source.tar.gz", tarball, "application/gzip")},
             data=data,
         )
         return StoreVersion.model_validate(response)
 
-    async def get_store_build_status(self, name: str, version: str) -> StoreVersion:
-        """Get build status for a store provider version.
+    async def get_publish_status(self, provider_name: str, version: str) -> StoreVersion:
+        """Check build/publish status for a provider version.
 
         Args:
-            name: Store provider name.
+            provider_name: Namespaced provider name ('org/name').
             version: Version string.
 
         Returns:
-            Store version with current build status.
+            Version with current build status.
 
         Raises:
             httpx.HTTPStatusError: If version not found or request fails.
         """  # noqa: DOC502
-        response = await self._request(
-            "GET", f"/store/providers/{_validate_name(name)}/versions/{_validate_name(version)}/status"
-        )
+        path = _validate_provider_name(provider_name)
+        response = await self._request("GET", f"/providers/{path}/versions/{version}/status")
         return StoreVersion.model_validate(response)
+
+    def stream_publish_logs(self, provider_name: str, version: str) -> AbstractAsyncContextManager[httpx.Response]:
+        """Stream build logs for a provider version.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+            version: Version string.
+
+        Returns:
+            Async context manager yielding httpx.Response with build logs (text/plain).
+
+        Raises:
+            httpx.HTTPStatusError: If version not found or request fails.
+
+        Example:
+            >>> async with client.stream_publish_logs("pragma/qdrant", "1.2.0") as response:
+            ...     async for line in response.aiter_lines():
+            ...         print(line)
+        """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
+        return self._client.stream("GET", f"/providers/{path}/versions/{version}/logs")
+
+    async def install_provider(
+        self,
+        provider_name: str,
+        version: str | None = None,
+        resource_tier: ResourceTier | str = ResourceTier.STANDARD,
+        upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
+    ) -> InstalledProvider:
+        """Install a provider from the store.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+            version: Specific version to install (latest if None).
+            resource_tier: Resource tier for the installation.
+            upgrade_policy: Upgrade policy for the installation.
+
+        Returns:
+            Installed provider info.
+
+        Raises:
+            httpx.HTTPStatusError: If installation fails.
+        """  # noqa: DOC502
+        _validate_provider_name(provider_name)
+        data: dict = {
+            "provider_name": provider_name,
+            "resource_tier": resource_tier,
+            "upgrade_policy": upgrade_policy,
+        }
+
+        if version is not None:
+            data["version"] = version
+
+        response = await self._request("POST", "/providers/install", json_data=data)
+        return InstalledProvider.model_validate(response)
+
+    async def list_installed_providers(self) -> list[InstalledProviderSummary]:
+        """List installed providers for the current tenant.
+
+        Returns:
+            List of installed provider summaries.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        response = await self._request("GET", "/providers/installed")
+        return [InstalledProviderSummary.model_validate(item) for item in response]
+
+    async def uninstall_provider(self, provider_name: str, *, cascade: bool = False) -> None:
+        """Uninstall an installed provider.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+            cascade: If True, delete all resources managed by this provider.
+
+        Raises:
+            httpx.HTTPStatusError: If uninstall fails.
+        """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
+        params = {}
+
+        if cascade:
+            params["cascade"] = "true"
+
+        await self._request("DELETE", f"/providers/installed/{path}", params=params)
+
+    async def upgrade_provider(self, provider_name: str, target_version: str | None = None) -> InstalledProvider:
+        """Upgrade an installed provider.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+            target_version: Target version (latest if None).
+
+        Returns:
+            Updated installed provider info.
+
+        Raises:
+            httpx.HTTPStatusError: If upgrade fails.
+        """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
+        data: dict = {}
+
+        if target_version is not None:
+            data["version"] = target_version
+
+        response = await self._request("POST", f"/providers/installed/{path}/upgrade", json_data=data)
+        return InstalledProvider.model_validate(response)
+
+    async def deploy_provider(self, provider_name: str, version: str | None = None) -> DeploymentResult:
+        """Deploy or redeploy an installed provider.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+            version: Version to deploy. If None, uses the installed version.
+
+        Returns:
+            DeploymentResult with deployment state and replica info.
+
+        Raises:
+            httpx.HTTPStatusError: If deploy fails.
+        """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
+        data: dict = {}
+
+        if version is not None:
+            data["version"] = version
+
+        response = await self._request("POST", f"/providers/installed/{path}/deploy", json_data=data)
+        return DeploymentResult.model_validate(response)
+
+    async def get_deployment_status(self, provider_name: str) -> DeploymentResult:
+        """Get deployment status for an installed provider.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+
+        Returns:
+            DeploymentResult with status, version, replicas, and update timestamp.
+
+        Raises:
+            httpx.HTTPStatusError: If deployment not found or request fails.
+        """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
+        response = await self._request("GET", f"/providers/installed/{path}/deployment")
+        return DeploymentResult.model_validate(response)

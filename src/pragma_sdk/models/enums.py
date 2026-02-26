@@ -62,6 +62,13 @@ class UpgradePolicy(StrEnum):
     MANUAL = "manual"
 
 
+class ProviderScope(StrEnum):
+    """Scope of a provider in the unified store."""
+
+    PUBLIC = "public"
+    TENANT = "tenant"
+
+
 class ResourceTier(StrEnum):
     """Resource tier for installed store providers."""
 
