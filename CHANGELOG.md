@@ -1,3 +1,9 @@
+## v0.21.1 (2026-02-26)
+
+### Refactor
+
+- unify provider API surface with org/name namespacing (#8)
+
 ## v0.21.0 (2026-02-24)
 
 ### Feat
