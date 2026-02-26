@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from pragma_sdk.models.enums import ResourceTier, TrustTier, UpgradePolicy, VersionStatus
+from pragma_sdk.models.enums import ProviderScope, ResourceTier, TrustTier, UpgradePolicy, VersionStatus
 
 
 class StoreAuthor(BaseModel):
@@ -25,6 +25,7 @@ class StoreProviderSummary(BaseModel):
     description: str
     author: StoreAuthor
     trust_tier: TrustTier
+    scope: ProviderScope = ProviderScope.PUBLIC
     icon_url: str | None = None
     tags: list[str]
     latest_version: str | None = None
@@ -39,6 +40,7 @@ class StoreProvider(BaseModel):
     description: str
     author: StoreAuthor
     trust_tier: TrustTier
+    scope: ProviderScope = ProviderScope.PUBLIC
     icon_url: str | None = None
     readme: str | None = None
     tags: list[str]
@@ -56,7 +58,7 @@ class StoreVersion(BaseModel):
     runtime_version: str
     image_url: str | None = None
     source_hash: str | None = None
-    cloud_build_id: str | None = None
+    build_id: str | None = None
     schemas: list[dict[str, Any]] | None = None
     changelog: str | None = None
     status: VersionStatus
