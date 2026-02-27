@@ -508,6 +508,9 @@ class PragmaClient(BaseClient):
         changelog: str | None = None,
         *,
         force: bool = False,
+        display_name: str | None = None,
+        description: str | None = None,
+        tags: str | None = None,
     ) -> StoreVersion:
         """Publish a new version of a provider.
 
@@ -517,6 +520,9 @@ class PragmaClient(BaseClient):
             version: Version string for this release.
             changelog: Optional changelog text.
             force: If True, allow overwriting an existing version.
+            display_name: Human-friendly provider name for the store listing.
+            description: Provider description for the store listing.
+            tags: JSON-encoded list of tags for the store listing.
 
         Returns:
             Published version info.
@@ -532,6 +538,15 @@ class PragmaClient(BaseClient):
 
         if force:
             data["force"] = "true"
+
+        if display_name is not None:
+            data["display_name"] = display_name
+
+        if description is not None:
+            data["description"] = description
+
+        if tags is not None:
+            data["tags"] = tags
 
         response = self._request(
             "POST",
@@ -1107,6 +1122,9 @@ class AsyncPragmaClient(BaseClient):
         changelog: str | None = None,
         *,
         force: bool = False,
+        display_name: str | None = None,
+        description: str | None = None,
+        tags: str | None = None,
     ) -> StoreVersion:
         """Publish a new version of a provider.
 
@@ -1116,6 +1134,9 @@ class AsyncPragmaClient(BaseClient):
             version: Version string for this release.
             changelog: Optional changelog text.
             force: If True, allow overwriting an existing version.
+            display_name: Human-friendly provider name for the store listing.
+            description: Provider description for the store listing.
+            tags: JSON-encoded list of tags for the store listing.
 
         Returns:
             Published version info.
@@ -1131,6 +1152,15 @@ class AsyncPragmaClient(BaseClient):
 
         if force:
             data["force"] = "true"
+
+        if display_name is not None:
+            data["display_name"] = display_name
+
+        if description is not None:
+            data["description"] = description
+
+        if tags is not None:
+            data["tags"] = tags
 
         response = await self._request(
             "POST",
