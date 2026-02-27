@@ -310,7 +310,7 @@ def test_publish_provider_includes_metadata_fields() -> None:
 
     assert route.called
     request = route.calls[0].request
-    body = request.content.decode()
+    body = request.content.decode("utf-8", errors="replace")
     assert "display_name" in body
     assert "Qdrant Vector DB" in body
     assert "description" in body
@@ -331,7 +331,7 @@ def test_publish_provider_omits_none_metadata_fields() -> None:
 
     assert route.called
     request = route.calls[0].request
-    body = request.content.decode()
+    body = request.content.decode("utf-8", errors="replace")
     assert "display_name" not in body
     assert "description" not in body
     assert "tags" not in body
@@ -631,7 +631,7 @@ async def test_async_publish_provider_includes_metadata_fields() -> None:
 
     assert route.called
     request = route.calls[0].request
-    body = request.content.decode()
+    body = request.content.decode("utf-8", errors="replace")
     assert "display_name" in body
     assert "Qdrant Vector DB" in body
     assert "description" in body
@@ -652,7 +652,7 @@ async def test_async_publish_provider_omits_none_metadata_fields() -> None:
 
     assert route.called
     request = route.calls[0].request
-    body = request.content.decode()
+    body = request.content.decode("utf-8", errors="replace")
     assert "display_name" not in body
     assert "description" not in body
     assert "tags" not in body
