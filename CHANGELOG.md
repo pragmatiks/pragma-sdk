@@ -1,3 +1,9 @@
+## v0.22.0 (2026-02-27)
+
+### Feat
+
+- add metadata fields to publish_provider() for store auto-create (#9)
+
 ## v0.21.1 (2026-02-26)
 
 ### Refactor
