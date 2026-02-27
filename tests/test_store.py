@@ -291,6 +291,52 @@ def test_publish_provider_returns_version() -> None:
     assert "multipart/form-data" in request.headers.get("content-type", "")
 
 
+@respx.mock
+def test_publish_provider_includes_metadata_fields() -> None:
+    building_version = {**STORE_VERSION, "status": "building", "published_at": None}
+    route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
+        return_value=httpx.Response(202, json=building_version)
+    )
+
+    with PragmaClient(auth_token=None) as client:
+        client.publish_provider(
+            "pragma/qdrant",
+            b"tarball-content",
+            "1.2.0",
+            display_name="Qdrant Vector DB",
+            description="A vector database provider",
+            tags=["database", "vector"],
+        )
+
+    assert route.called
+    request = route.calls[0].request
+    body = request.content.decode("utf-8", errors="replace")
+    assert "display_name" in body
+    assert "Qdrant Vector DB" in body
+    assert "description" in body
+    assert "A vector database provider" in body
+    assert "tags" in body
+    assert '["database", "vector"]' in body
+
+
+@respx.mock
+def test_publish_provider_omits_none_metadata_fields() -> None:
+    building_version = {**STORE_VERSION, "status": "building", "published_at": None}
+    route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
+        return_value=httpx.Response(202, json=building_version)
+    )
+
+    with PragmaClient(auth_token=None) as client:
+        client.publish_provider("pragma/qdrant", b"tarball-content", "1.2.0")
+
+    assert route.called
+    request = route.calls[0].request
+    body = request.content.decode("utf-8", errors="replace")
+    assert "display_name" not in body
+    assert "description" not in body
+    assert "tags" not in body
+
+
 # --- Sync: get_publish_status ---
 
 
@@ -564,6 +610,52 @@ async def test_async_publish_provider_returns_version() -> None:
     assert result.status == VersionStatus.BUILDING
     request = route.calls[0].request
     assert "multipart/form-data" in request.headers.get("content-type", "")
+
+
+@respx.mock
+async def test_async_publish_provider_includes_metadata_fields() -> None:
+    building_version = {**STORE_VERSION, "status": "building", "published_at": None}
+    route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
+        return_value=httpx.Response(202, json=building_version)
+    )
+
+    async with AsyncPragmaClient(auth_token=None) as client:
+        await client.publish_provider(
+            "pragma/qdrant",
+            b"tarball-content",
+            "1.2.0",
+            display_name="Qdrant Vector DB",
+            description="A vector database provider",
+            tags=["database", "vector"],
+        )
+
+    assert route.called
+    request = route.calls[0].request
+    body = request.content.decode("utf-8", errors="replace")
+    assert "display_name" in body
+    assert "Qdrant Vector DB" in body
+    assert "description" in body
+    assert "A vector database provider" in body
+    assert "tags" in body
+    assert '["database", "vector"]' in body
+
+
+@respx.mock
+async def test_async_publish_provider_omits_none_metadata_fields() -> None:
+    building_version = {**STORE_VERSION, "status": "building", "published_at": None}
+    route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
+        return_value=httpx.Response(202, json=building_version)
+    )
+
+    async with AsyncPragmaClient(auth_token=None) as client:
+        await client.publish_provider("pragma/qdrant", b"tarball-content", "1.2.0")
+
+    assert route.called
+    request = route.calls[0].request
+    body = request.content.decode("utf-8", errors="replace")
+    assert "display_name" not in body
+    assert "description" not in body
+    assert "tags" not in body
 
 
 # --- Async: get_publish_status ---
