@@ -305,7 +305,7 @@ def test_publish_provider_includes_metadata_fields() -> None:
             "1.2.0",
             display_name="Qdrant Vector DB",
             description="A vector database provider",
-            tags='["database", "vector"]',
+            tags=["database", "vector"],
         )
 
     assert route.called
@@ -626,7 +626,7 @@ async def test_async_publish_provider_includes_metadata_fields() -> None:
             "1.2.0",
             display_name="Qdrant Vector DB",
             description="A vector database provider",
-            tags='["database", "vector"]',
+            tags=["database", "vector"],
         )
 
     assert route.called

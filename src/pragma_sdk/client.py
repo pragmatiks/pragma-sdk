@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from typing import Any
@@ -510,7 +511,7 @@ class PragmaClient(BaseClient):
         force: bool = False,
         display_name: str | None = None,
         description: str | None = None,
-        tags: str | None = None,
+        tags: list[str] | None = None,
     ) -> StoreVersion:
         """Publish a new version of a provider.
 
@@ -522,7 +523,7 @@ class PragmaClient(BaseClient):
             force: If True, allow overwriting an existing version.
             display_name: Human-friendly provider name for the store listing.
             description: Provider description for the store listing.
-            tags: JSON-encoded list of tags for the store listing.
+            tags: Tags for the store listing.
 
         Returns:
             Published version info.
@@ -546,7 +547,7 @@ class PragmaClient(BaseClient):
             data["description"] = description
 
         if tags is not None:
-            data["tags"] = tags
+            data["tags"] = json.dumps(tags)
 
         response = self._request(
             "POST",
@@ -1124,7 +1125,7 @@ class AsyncPragmaClient(BaseClient):
         force: bool = False,
         display_name: str | None = None,
         description: str | None = None,
-        tags: str | None = None,
+        tags: list[str] | None = None,
     ) -> StoreVersion:
         """Publish a new version of a provider.
 
@@ -1136,7 +1137,7 @@ class AsyncPragmaClient(BaseClient):
             force: If True, allow overwriting an existing version.
             display_name: Human-friendly provider name for the store listing.
             description: Provider description for the store listing.
-            tags: JSON-encoded list of tags for the store listing.
+            tags: Tags for the store listing.
 
         Returns:
             Published version info.
@@ -1160,7 +1161,7 @@ class AsyncPragmaClient(BaseClient):
             data["description"] = description
 
         if tags is not None:
-            data["tags"] = tags
+            data["tags"] = json.dumps(tags)
 
         response = await self._request(
             "POST",
