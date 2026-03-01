@@ -1,3 +1,9 @@
+## v0.23.0 (2026-03-01)
+
+### Feat
+
+- add ImmutableField and ImmutableDependency type annotations (PRA-225) (#10)
+
 ## v0.22.0 (2026-02-27)
 
 ### Feat
