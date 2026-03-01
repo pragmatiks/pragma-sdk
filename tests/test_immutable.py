@@ -356,3 +356,23 @@ def test_immutable_field_accepts_direct_value() -> None:
 
     config = MyConfig(region="us-central1")
     assert config.region == "us-central1"
+
+
+# --- Python 3.13 compat: types.UnionType vs typing.Union ---
+
+
+def test_is_union_origin_handles_types_union_type() -> None:
+    """_is_union_origin recognizes both typing.Union and types.UnionType.
+
+    On Python 3.13, PEP 604 syntax (X | Y) creates types.UnionType which is
+    distinct from typing.Union. Both must be accepted.
+    """
+    import types
+    import typing
+
+    from pragma_sdk.models.base import _is_union_origin
+
+    assert _is_union_origin(typing.Union) is True
+    assert _is_union_origin(types.UnionType) is True
+    assert _is_union_origin(None) is False
+    assert _is_union_origin(list) is False

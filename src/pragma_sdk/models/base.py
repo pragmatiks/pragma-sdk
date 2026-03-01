@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import types
 import typing
 from collections.abc import AsyncIterator
 from datetime import datetime
@@ -21,6 +22,24 @@ from pragma_sdk.models.references import (
     format_resource_id,
 )
 from pragma_sdk.types import HealthStatus, LifecycleState, LogEntry
+
+
+def _is_union_origin(origin: Any) -> bool:
+    """Check if a type origin represents a Union.
+
+    On Python 3.13, ``typing.Union`` and ``types.UnionType`` are distinct.
+    PEP 604 syntax (``X | Y``) produces ``types.UnionType``, while
+    ``typing.Union[X, Y]`` produces ``typing.Union``. Both must be handled.
+
+    On Python 3.14+, they are the same object so this is a no-op safety net.
+
+    Args:
+        origin: The result of ``typing.get_origin(some_annotation)``.
+
+    Returns:
+        True if the origin is either ``typing.Union`` or ``types.UnionType``.
+    """
+    return origin is Union or origin is types.UnionType
 
 
 def _has_immutable_marker(alias: typing.TypeAliasType) -> bool:
@@ -61,7 +80,7 @@ def _is_valid_config_field(annotation: Any) -> bool:
         if typing.get_origin(val) is Annotated:
             val = typing.get_args(val)[0]
 
-        if typing.get_origin(val) is Union:
+        if _is_union_origin(typing.get_origin(val)):
             if FieldReference in typing.get_args(val):
                 return True
 
@@ -92,7 +111,7 @@ def _is_valid_config_field(annotation: Any) -> bool:
 
         return False
 
-    if origin is Union:
+    if _is_union_origin(origin):
         non_none_args = [a for a in typing.get_args(annotation) if a is not type(None)]
 
         if len(non_none_args) == 1:
@@ -424,7 +443,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         if origin is type(None):
             return None
 
-        if origin is typing.Union:
+        if _is_union_origin(origin):
             args = typing.get_args(annotation)
             for arg in args:
                 if arg is not type(None) and isinstance(arg, type) and issubclass(arg, Outputs):
