@@ -2,23 +2,265 @@
 
 from __future__ import annotations
 
+import types
 import typing
 from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import ClassVar
+from typing import Annotated, Any, ClassVar, Literal, Union
 
 from pydantic import BaseModel
 from pydantic import Field as PydanticField
+from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode
 
 from pragma_sdk.context import apply_resource, get_current_resource_owner, wait_for_resource_state
-from pragma_sdk.models.references import OwnerReference, ResourceReference, format_resource_id
+from pragma_sdk.models.references import (
+    Dependency,
+    FieldReference,
+    Immutable,
+    OwnerReference,
+    ResourceReference,
+    format_resource_id,
+)
 from pragma_sdk.types import HealthStatus, LifecycleState, LogEntry
+
+
+def _is_union_origin(origin: Any) -> bool:
+    """Check if a type origin represents a Union.
+
+    On Python 3.13, ``typing.Union`` and ``types.UnionType`` are distinct.
+    PEP 604 syntax (``X | Y``) produces ``types.UnionType``, while
+    ``typing.Union[X, Y]`` produces ``typing.Union``. Both must be handled.
+
+    On Python 3.14+, they are the same object so this is a no-op safety net.
+
+    Args:
+        origin: The result of ``typing.get_origin(some_annotation)``.
+
+    Returns:
+        True if the origin is either ``typing.Union`` or ``types.UnionType``.
+    """
+    return origin is Union or origin is types.UnionType
+
+
+def _has_immutable_marker(alias: typing.TypeAliasType) -> bool:
+    """Check if a TypeAliasType's underlying value carries the Immutable marker.
+
+    Args:
+        alias: A PEP 695 type alias to inspect.
+
+    Returns:
+        True if the alias wraps an Annotated type containing an Immutable instance.
+    """
+    val = alias.__value__
+
+    if typing.get_origin(val) is not Annotated:
+        return False
+
+    return any(isinstance(arg, Immutable) for arg in typing.get_args(val)[1:])
+
+
+def _is_valid_config_field(annotation: Any) -> bool:
+    """Check if a type annotation uses a valid Config field type.
+
+    Valid types are Field[T], ImmutableField[T], Dependency[T],
+    ImmutableDependency[T], and their Optional/list variants.
+    Bare types like str, int, bool are invalid.
+
+    Args:
+        annotation: The type annotation to validate.
+
+    Returns:
+        True if the annotation is a valid Config field type.
+    """
+    origin = typing.get_origin(annotation)
+
+    if isinstance(origin, typing.TypeAliasType):
+        val = origin.__value__
+
+        if typing.get_origin(val) is Annotated:
+            val = typing.get_args(val)[0]
+
+        if _is_union_origin(typing.get_origin(val)):
+            if FieldReference in typing.get_args(val):
+                return True
+
+        if isinstance(val, type) and issubclass(val, FieldReference):
+            return True
+
+        dep_origin = typing.get_origin(val)
+
+        if dep_origin is not None and isinstance(dep_origin, type) and issubclass(dep_origin, Dependency):
+            return True
+
+        if isinstance(val, type) and issubclass(val, Dependency):
+            return True
+
+        return False
+
+    if isinstance(origin, type) and issubclass(origin, Dependency):
+        return True
+
+    if isinstance(annotation, type) and issubclass(annotation, Dependency):
+        return True
+
+    if origin is list:
+        args = typing.get_args(annotation)
+
+        if args:
+            return _is_valid_config_field(args[0])
+
+        return False
+
+    if _is_union_origin(origin):
+        non_none_args = [a for a in typing.get_args(annotation) if a is not type(None)]
+
+        if len(non_none_args) == 1:
+            return _is_valid_config_field(non_none_args[0])
+
+        if FieldReference in typing.get_args(annotation):
+            return True
+
+        if all(_is_valid_config_field(arg) for arg in non_none_args):
+            return True
+
+        return False
+
+    return False
 
 
 class Config(BaseModel):
     """Base class for resource configuration schemas."""
 
     model_config = {"extra": "forbid"}
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """Validate that all fields use required Config field types.
+
+        Raises:
+            TypeError: If any field uses a bare type instead of Field[T],
+                ImmutableField[T], Dependency[T], or ImmutableDependency[T].
+        """
+        super().__pydantic_init_subclass__(**kwargs)
+
+        for field_name, field_info in cls.model_fields.items():
+            if not _is_valid_config_field(field_info.annotation):
+                raise TypeError(
+                    f"Config field '{field_name}' on {cls.__name__} must use "
+                    f"Field[T], ImmutableField[T], Dependency[T], or "
+                    f"ImmutableDependency[T] — bare types are not allowed"
+                )
+
+    @classmethod
+    def model_json_schema(
+        cls,
+        by_alias: bool = True,
+        ref_template: str = "#/$defs/{model}",
+        schema_generator: type[GenerateJsonSchema] = GenerateJsonSchema,
+        mode: JsonSchemaMode = "validation",
+        *,
+        union_format: Literal["any_of", "primitive_type_array"] = "any_of",
+    ) -> dict[str, Any]:
+        """Generate JSON schema with immutable field metadata.
+
+        Extends Pydantic's schema generation to add ``"immutable": true``
+        to properties that use ImmutableField or ImmutableDependency.
+
+        Args:
+            by_alias: Whether to use field aliases in the schema.
+            ref_template: Template for JSON schema $ref values.
+            schema_generator: JSON schema generator class to use.
+            mode: Validation or serialization mode.
+            union_format: Format for union types in the schema.
+
+        Returns:
+            JSON schema dictionary with immutable annotations.
+        """
+        schema = super().model_json_schema(
+            by_alias=by_alias,
+            ref_template=ref_template,
+            schema_generator=schema_generator,
+            mode=mode,
+            union_format=union_format,
+        )
+
+        immutable_fields = _collect_immutable_fields(cls)
+
+        if not immutable_fields:
+            return schema
+
+        properties = schema.get("properties", {})
+
+        for field_name in immutable_fields:
+            if field_name in properties:
+                properties[field_name]["immutable"] = True
+
+        _mark_immutable_in_defs(schema, immutable_fields, properties)
+
+        return schema
+
+
+def _collect_immutable_fields(cls: type[Config]) -> set[str]:
+    """Collect field names marked with the Immutable marker.
+
+    Args:
+        cls: A Config subclass to inspect.
+
+    Returns:
+        Set of field names that have the Immutable marker.
+    """
+    immutable_fields: set[str] = set()
+
+    for field_name, field_info in cls.model_fields.items():
+        annotation = field_info.annotation
+        origin = typing.get_origin(annotation)
+
+        if isinstance(origin, typing.TypeAliasType) and _has_immutable_marker(origin):
+            immutable_fields.add(field_name)
+        elif _is_union_origin(origin):
+            non_none_args = [a for a in typing.get_args(annotation) if a is not type(None)]
+
+            for arg in non_none_args:
+                arg_origin = typing.get_origin(arg)
+
+                if isinstance(arg_origin, typing.TypeAliasType) and _has_immutable_marker(arg_origin):
+                    immutable_fields.add(field_name)
+                    break
+
+    return immutable_fields
+
+
+def _mark_immutable_in_defs(
+    schema: dict[str, Any],
+    immutable_fields: set[str],
+    properties: dict[str, Any],
+) -> None:
+    """Mark immutable fields in $defs when properties use $ref.
+
+    When a property references a $def (e.g., ``{"$ref": "#/$defs/ImmutableField_str_"}``),
+    the immutable marker must be set on the referenced definition.
+
+    Args:
+        schema: The full JSON schema dictionary.
+        immutable_fields: Set of field names marked as immutable.
+        properties: The properties section of the schema.
+    """
+    defs = schema.get("$defs", {})
+
+    if not defs:
+        return
+
+    for field_name in immutable_fields:
+        prop = properties.get(field_name, {})
+        ref = prop.get("$ref", "")
+
+        if not ref.startswith("#/$defs/"):
+            continue
+
+        def_name = ref[len("#/$defs/") :]
+
+        if def_name in defs:
+            defs[def_name]["immutable"] = True
 
 
 class Outputs(BaseModel):
@@ -213,7 +455,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         if origin is type(None):
             return None
 
-        if origin is typing.Union:
+        if _is_union_origin(origin):
             args = typing.get_args(annotation)
             for arg in args:
                 if arg is not type(None) and isinstance(arg, type) and issubclass(arg, Outputs):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import BaseModel, PrivateAttr
 from pydantic import Field as PydanticField
@@ -114,6 +114,21 @@ class Dependency[ResourceT: "Resource"](BaseModel):
 
 type Field[T] = T | FieldReference
 """Config field that accepts a direct value or a FieldReference."""
+
+
+class Immutable:
+    """Marker for config fields that cannot be changed after resource creation.
+
+    Used as metadata in Annotated types to flag fields as immutable.
+    The API enforces immutability by rejecting updates that modify these fields.
+    """
+
+
+type ImmutableField[T] = Annotated[T | FieldReference, Immutable()]
+"""Config field that accepts a direct value or FieldReference and is immutable after creation."""
+
+type ImmutableDependency[ResourceT: "Resource"] = Annotated[Dependency[ResourceT], Immutable()]
+"""Typed dependency that is immutable after resource creation."""
 
 
 def is_dependency_marker(value: Any) -> bool:
