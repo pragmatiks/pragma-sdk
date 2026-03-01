@@ -214,6 +214,15 @@ def _collect_immutable_fields(cls: type[Config]) -> set[str]:
 
         if isinstance(origin, typing.TypeAliasType) and _has_immutable_marker(origin):
             immutable_fields.add(field_name)
+        elif _is_union_origin(origin):
+            non_none_args = [a for a in typing.get_args(annotation) if a is not type(None)]
+
+            for arg in non_none_args:
+                arg_origin = typing.get_origin(arg)
+
+                if isinstance(arg_origin, typing.TypeAliasType) and _has_immutable_marker(arg_origin):
+                    immutable_fields.add(field_name)
+                    break
 
     return immutable_fields
 

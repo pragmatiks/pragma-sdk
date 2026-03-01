@@ -319,7 +319,7 @@ def test_error_message_includes_field_name_and_class() -> None:
 # --- extract_schemas includes immutable metadata ---
 
 
-def test_extract_schemas_includes_immutable_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_extract_schemas_includes_immutable_metadata() -> None:
     """extract_schemas propagates immutable metadata from model_json_schema."""
 
     class RegionConfig(Config):
@@ -376,3 +376,42 @@ def test_is_union_origin_handles_types_union_type() -> None:
     assert _is_union_origin(types.UnionType) is True
     assert _is_union_origin(None) is False
     assert _is_union_origin(list) is False
+
+
+# --- Optional immutable field tests ---
+
+
+def test_optional_immutable_field_has_immutable_in_schema() -> None:
+    """ImmutableField[str] | None generates schema with immutable=true."""
+
+    class MyConfig(Config):
+        region: ImmutableField[str] | None = None
+
+    schema = MyConfig.model_json_schema()
+
+    region_variants = schema.get("properties", {}).get("region", {})
+    assert region_variants.get("immutable") is True
+
+
+def test_optional_immutable_dependency_has_immutable_in_schema() -> None:
+    """ImmutableDependency[T] | None generates schema with both __dependency__ and immutable=true."""
+
+    class MyConfig(Config):
+        db: ImmutableDependency[StubResource] | None = None
+
+    schema = MyConfig.model_json_schema()
+    db_prop = schema["properties"]["db"]
+
+    assert db_prop.get("immutable") is True
+
+
+def test_optional_field_does_not_have_immutable_in_schema() -> None:
+    """Field[str] | None does NOT get immutable marker."""
+
+    class MyConfig(Config):
+        label: Field[str] | None = None
+
+    schema = MyConfig.model_json_schema()
+    label_prop = schema["properties"]["label"]
+
+    assert "immutable" not in label_prop
