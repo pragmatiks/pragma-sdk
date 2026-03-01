@@ -13,7 +13,7 @@ tasks:
     desc: Check Python code with ruff and ty
     cmds:
       - uv run ruff check --fix .
-      - uvx ty check .
+      - uvx ty check
 
   test:
     cmd: uv run pytest tests/ --cov=pragma_sdk --cov-report=term-missing {{.CLI_ARGS}}
