@@ -120,6 +120,9 @@ def _is_valid_config_field(annotation: Any) -> bool:
         if FieldReference in typing.get_args(annotation):
             return True
 
+        if all(_is_valid_config_field(arg) for arg in non_none_args):
+            return True
+
         return False
 
     return False
