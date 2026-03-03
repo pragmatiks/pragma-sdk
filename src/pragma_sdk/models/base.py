@@ -146,6 +146,33 @@ def _is_valid_config_field(annotation: Any) -> bool:
     return False
 
 
+def _build_field_alias_map(cls: type[BaseModel], by_alias: bool) -> dict[str, str]:
+    """Map Python field names to JSON property names, respecting aliases.
+
+    Pydantic generates property keys using aliases when ``by_alias=True``.
+    This function builds a mapping so that schema post-processing can look up
+    properties by their aliased key instead of the Python attribute name.
+
+    Args:
+        cls: A Pydantic model class to inspect.
+        by_alias: Whether the schema was generated with aliases.
+
+    Returns:
+        Mapping from Python field name to the JSON property key used in the schema.
+        Fields without aliases map to themselves.
+    """
+    alias_map: dict[str, str] = {}
+
+    if not by_alias:
+        return alias_map
+
+    for field_name, field_info in cls.model_fields.items():
+        prop_key = field_info.serialization_alias or field_info.alias or field_name
+        alias_map[field_name] = prop_key
+
+    return alias_map
+
+
 class Config(BaseModel):
     """Base class for resource configuration schemas."""
 
@@ -211,18 +238,26 @@ class Config(BaseModel):
         if not immutable_fields and not sensitive_fields:
             return schema
 
+        alias_map = _build_field_alias_map(cls, by_alias)
         properties = schema.get("properties", {})
 
         for field_name in immutable_fields:
-            if field_name in properties:
-                properties[field_name]["immutable"] = True
+            prop_key = alias_map.get(field_name, field_name)
+
+            if prop_key in properties:
+                properties[prop_key]["immutable"] = True
 
         for field_name in sensitive_fields:
-            if field_name in properties:
-                properties[field_name]["sensitive"] = True
+            prop_key = alias_map.get(field_name, field_name)
 
-        _mark_immutable_in_defs(schema, immutable_fields, properties)
-        _mark_sensitive_in_defs(schema, sensitive_fields, properties)
+            if prop_key in properties:
+                properties[prop_key]["sensitive"] = True
+
+        aliased_immutable = {alias_map.get(f, f) for f in immutable_fields}
+        aliased_sensitive = {alias_map.get(f, f) for f in sensitive_fields}
+
+        _mark_immutable_in_defs(schema, aliased_immutable, properties)
+        _mark_sensitive_in_defs(schema, aliased_sensitive, properties)
 
         return schema
 
@@ -441,11 +476,14 @@ class Outputs(BaseModel):
         if not sensitive_fields:
             return schema
 
+        alias_map = _build_field_alias_map(cls, by_alias)
         properties = schema.get("properties", {})
 
         for field_name in sensitive_fields:
-            if field_name in properties:
-                properties[field_name]["sensitive"] = True
+            prop_key = alias_map.get(field_name, field_name)
+
+            if prop_key in properties:
+                properties[prop_key]["sensitive"] = True
 
         return schema
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+from pydantic import Field as PydanticField
+
 from pragma_sdk import (
     Config,
     Dependency,
@@ -340,6 +342,35 @@ def test_immutable_sensitive_field_accepts_field_reference() -> None:
     ref = FieldReference(provider="vault", resource="secret", name="master", field="outputs.key")
     config = MyConfig(master_key=ref)
     assert isinstance(config.master_key, FieldReference)
+
+
+# --- Aliased field regression tests ---
+
+
+def test_sensitive_field_with_alias_marks_aliased_property() -> None:
+    """SensitiveField with alias generates sensitive=true on the aliased property name."""
+
+    class MyConfig(Config):
+        api_key: SensitiveField[str] = PydanticField(alias="api_key_alias")
+
+    schema = MyConfig.model_json_schema()
+
+    assert "api_key_alias" in schema["properties"]
+    assert schema["properties"]["api_key_alias"].get("sensitive") is True
+    assert "api_key" not in schema["properties"]
+
+
+def test_sensitive_output_with_alias_marks_aliased_property() -> None:
+    """SensitiveOutput with alias generates sensitive=true on the aliased property name."""
+
+    class MyOutputs(Outputs):
+        secret: SensitiveOutput[str] = PydanticField(alias="secret_alias")
+
+    schema = MyOutputs.model_json_schema()
+
+    assert "secret_alias" in schema["properties"]
+    assert schema["properties"]["secret_alias"].get("sensitive") is True
+    assert "secret" not in schema["properties"]
 
 
 # --- Sensitive marker class tests ---

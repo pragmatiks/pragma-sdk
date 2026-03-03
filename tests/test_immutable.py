@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import ClassVar
 
 import pytest
+from pydantic import Field as PydanticField
 
 from pragma_sdk import (
     Config,
@@ -415,3 +416,19 @@ def test_optional_field_does_not_have_immutable_in_schema() -> None:
     label_prop = schema["properties"]["label"]
 
     assert "immutable" not in label_prop
+
+
+# --- Aliased field regression tests ---
+
+
+def test_immutable_field_with_alias_marks_aliased_property() -> None:
+    """ImmutableField with alias generates immutable=true on the aliased property name."""
+
+    class MyConfig(Config):
+        region: ImmutableField[str] = PydanticField(alias="immutable_alias")
+
+    schema = MyConfig.model_json_schema()
+
+    assert "immutable_alias" in schema["properties"]
+    assert schema["properties"]["immutable_alias"].get("immutable") is True
+    assert "region" not in schema["properties"]
