@@ -1,3 +1,9 @@
+## v0.24.0 (2026-03-03)
+
+### Feat
+
+- add Sensitive field type for schema-driven masking (PRA-227) (#11)
+
 ## v0.23.0 (2026-03-01)
 
 ### Feat
