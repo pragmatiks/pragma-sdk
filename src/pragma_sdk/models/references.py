@@ -124,11 +124,31 @@ class Immutable:
     """
 
 
+class Sensitive:
+    """Marker for fields that contain sensitive data (secrets, credentials, tokens).
+
+    Used as metadata in Annotated types to flag fields as sensitive.
+    The API redacts sensitive fields in responses unless explicitly revealed.
+    """
+
+
 type ImmutableField[T] = Annotated[T | FieldReference, Immutable()]
 """Config field that accepts a direct value or FieldReference and is immutable after creation."""
 
 type ImmutableDependency[ResourceT: "Resource"] = Annotated[Dependency[ResourceT], Immutable()]
 """Typed dependency that is immutable after resource creation."""
+
+type SensitiveField[T] = Annotated[T | FieldReference, Sensitive()]
+"""Config field that accepts a direct value or FieldReference and is redacted in responses."""
+
+type SensitiveDependency[ResourceT: "Resource"] = Annotated[Dependency[ResourceT], Sensitive()]
+"""Typed dependency that is redacted in responses."""
+
+type ImmutableSensitiveField[T] = Annotated[T | FieldReference, Immutable(), Sensitive()]
+"""Config field that is both immutable after creation and redacted in responses."""
+
+type SensitiveOutput[T] = Annotated[T, Sensitive()]
+"""Output field that is redacted in responses. No FieldReference union (outputs are produced, not configured)."""
 
 
 def is_dependency_marker(value: Any) -> bool:

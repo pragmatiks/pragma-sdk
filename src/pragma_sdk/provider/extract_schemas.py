@@ -7,10 +7,12 @@ metadata for all resources in a provider package.
 from __future__ import annotations
 
 import tomllib
+import types
+import typing
 from pathlib import Path
 from typing import Any, TypedDict
 
-from pragma_sdk.models import Config, Resource
+from pragma_sdk.models import Config, Outputs, Resource
 from pragma_sdk.provider.discovery import discover_resources
 
 
@@ -66,6 +68,40 @@ def get_config_class(resource_class: type[Resource]) -> type[Config]:
         raise ValueError(f"Resource {resource_class.__name__} config field is not a Config subclass")
 
     return config_type
+
+
+def get_outputs_class(resource_class: type[Resource]) -> type[Outputs] | None:
+    """Extract Outputs subclass from Resource's outputs field annotation.
+
+    Handles ``OutputsT | None`` union types by unwrapping the Optional.
+
+    Args:
+        resource_class: A Resource subclass.
+
+    Returns:
+        Outputs subclass type, or None if not determinable.
+    """
+    outputs_field = resource_class.model_fields.get("outputs")
+
+    if outputs_field is None:
+        return None
+
+    annotation = outputs_field.annotation
+
+    if annotation is None:
+        return None
+
+    if isinstance(annotation, type) and issubclass(annotation, Outputs):
+        return annotation
+
+    origin = typing.get_origin(annotation)
+
+    if origin is typing.Union or origin is types.UnionType:
+        for arg in typing.get_args(annotation):
+            if arg is not type(None) and isinstance(arg, type) and issubclass(arg, Outputs):
+                return arg
+
+    return None
 
 
 def detect_provider_package() -> str | None:
@@ -167,11 +203,19 @@ def extract_schemas(package_name: str) -> list[dict[str, Any]]:
         try:
             config_type = get_config_class(cls)
             config_schema = config_type.model_json_schema()
-            schemas.append({
+
+            entry: dict[str, Any] = {
                 "provider": provider,
                 "resource": resource,
                 "config_schema": config_schema,
-            })
+            }
+
+            outputs_type = get_outputs_class(cls)
+
+            if outputs_type is not None:
+                entry["outputs_schema"] = outputs_type.model_json_schema()
+
+            schemas.append(entry)
         except ValueError:
             continue
 

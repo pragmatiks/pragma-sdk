@@ -19,6 +19,7 @@ from pragma_sdk.models.references import (
     Immutable,
     OwnerReference,
     ResourceReference,
+    Sensitive,
     format_resource_id,
 )
 from pragma_sdk.types import HealthStatus, LifecycleState, LogEntry
@@ -57,6 +58,23 @@ def _has_immutable_marker(alias: typing.TypeAliasType) -> bool:
         return False
 
     return any(isinstance(arg, Immutable) for arg in typing.get_args(val)[1:])
+
+
+def _has_sensitive_marker(alias: typing.TypeAliasType) -> bool:
+    """Check if a TypeAliasType's underlying value carries the Sensitive marker.
+
+    Args:
+        alias: A PEP 695 type alias to inspect.
+
+    Returns:
+        True if the alias wraps an Annotated type containing a Sensitive instance.
+    """
+    val = alias.__value__
+
+    if typing.get_origin(val) is not Annotated:
+        return False
+
+    return any(isinstance(arg, Sensitive) for arg in typing.get_args(val)[1:])
 
 
 def _is_valid_config_field(annotation: Any) -> bool:
@@ -128,6 +146,33 @@ def _is_valid_config_field(annotation: Any) -> bool:
     return False
 
 
+def _build_field_alias_map(cls: type[BaseModel], by_alias: bool) -> dict[str, str]:
+    """Map Python field names to JSON property names, respecting aliases.
+
+    Pydantic generates property keys using aliases when ``by_alias=True``.
+    This function builds a mapping so that schema post-processing can look up
+    properties by their aliased key instead of the Python attribute name.
+
+    Args:
+        cls: A Pydantic model class to inspect.
+        by_alias: Whether the schema was generated with aliases.
+
+    Returns:
+        Mapping from Python field name to the JSON property key used in the schema.
+        Fields without aliases map to themselves.
+    """
+    alias_map: dict[str, str] = {}
+
+    if not by_alias:
+        return alias_map
+
+    for field_name, field_info in cls.model_fields.items():
+        prop_key = field_info.serialization_alias or field_info.alias or field_name
+        alias_map[field_name] = prop_key
+
+    return alias_map
+
+
 class Config(BaseModel):
     """Base class for resource configuration schemas."""
 
@@ -147,8 +192,10 @@ class Config(BaseModel):
             if not _is_valid_config_field(field_info.annotation):
                 raise TypeError(
                     f"Config field '{field_name}' on {cls.__name__} must use "
-                    f"Field[T], ImmutableField[T], Dependency[T], or "
-                    f"ImmutableDependency[T] — bare types are not allowed"
+                    f"Field[T], ImmutableField[T], SensitiveField[T], "
+                    f"ImmutableSensitiveField[T], Dependency[T], "
+                    f"ImmutableDependency[T], or SensitiveDependency[T] "
+                    f"— bare types are not allowed"
                 )
 
     @classmethod
@@ -161,10 +208,11 @@ class Config(BaseModel):
         *,
         union_format: Literal["any_of", "primitive_type_array"] = "any_of",
     ) -> dict[str, Any]:
-        """Generate JSON schema with immutable field metadata.
+        """Generate JSON schema with immutable and sensitive field metadata.
 
         Extends Pydantic's schema generation to add ``"immutable": true``
-        to properties that use ImmutableField or ImmutableDependency.
+        and/or ``"sensitive": true`` to properties that use the corresponding
+        marker types.
 
         Args:
             by_alias: Whether to use field aliases in the schema.
@@ -174,7 +222,7 @@ class Config(BaseModel):
             union_format: Format for union types in the schema.
 
         Returns:
-            JSON schema dictionary with immutable annotations.
+            JSON schema dictionary with immutable and sensitive annotations.
         """
         schema = super().model_json_schema(
             by_alias=by_alias,
@@ -185,17 +233,31 @@ class Config(BaseModel):
         )
 
         immutable_fields = _collect_immutable_fields(cls)
+        sensitive_fields = _collect_sensitive_fields(cls)
 
-        if not immutable_fields:
+        if not immutable_fields and not sensitive_fields:
             return schema
 
+        alias_map = _build_field_alias_map(cls, by_alias)
         properties = schema.get("properties", {})
 
         for field_name in immutable_fields:
-            if field_name in properties:
-                properties[field_name]["immutable"] = True
+            prop_key = alias_map.get(field_name, field_name)
 
-        _mark_immutable_in_defs(schema, immutable_fields, properties)
+            if prop_key in properties:
+                properties[prop_key]["immutable"] = True
+
+        for field_name in sensitive_fields:
+            prop_key = alias_map.get(field_name, field_name)
+
+            if prop_key in properties:
+                properties[prop_key]["sensitive"] = True
+
+        aliased_immutable = {alias_map.get(f, f) for f in immutable_fields}
+        aliased_sensitive = {alias_map.get(f, f) for f in sensitive_fields}
+
+        _mark_immutable_in_defs(schema, aliased_immutable, properties)
+        _mark_sensitive_in_defs(schema, aliased_sensitive, properties)
 
         return schema
 
@@ -263,10 +325,167 @@ def _mark_immutable_in_defs(
             defs[def_name]["immutable"] = True
 
 
+def _collect_sensitive_fields(cls: type[Config]) -> set[str]:
+    """Collect field names marked with the Sensitive marker.
+
+    Args:
+        cls: A Config subclass to inspect.
+
+    Returns:
+        Set of field names that have the Sensitive marker.
+    """
+    sensitive_fields: set[str] = set()
+
+    for field_name, field_info in cls.model_fields.items():
+        annotation = field_info.annotation
+        origin = typing.get_origin(annotation)
+
+        if isinstance(origin, typing.TypeAliasType) and _has_sensitive_marker(origin):
+            sensitive_fields.add(field_name)
+        elif _is_union_origin(origin):
+            non_none_args = [a for a in typing.get_args(annotation) if a is not type(None)]
+
+            for arg in non_none_args:
+                arg_origin = typing.get_origin(arg)
+
+                if isinstance(arg_origin, typing.TypeAliasType) and _has_sensitive_marker(arg_origin):
+                    sensitive_fields.add(field_name)
+                    break
+
+    return sensitive_fields
+
+
+def _mark_sensitive_in_defs(
+    schema: dict[str, Any],
+    sensitive_fields: set[str],
+    properties: dict[str, Any],
+) -> None:
+    """Mark sensitive fields in $defs when properties use $ref.
+
+    When a property references a $def (e.g., ``{"$ref": "#/$defs/SensitiveField_str_"}``),
+    the sensitive marker must be set on the referenced definition.
+
+    Args:
+        schema: The full JSON schema dictionary.
+        sensitive_fields: Set of field names marked as sensitive.
+        properties: The properties section of the schema.
+    """
+    defs = schema.get("$defs", {})
+
+    if not defs:
+        return
+
+    for field_name in sensitive_fields:
+        prop = properties.get(field_name, {})
+        ref = prop.get("$ref", "")
+
+        if not ref.startswith("#/$defs/"):
+            continue
+
+        def_name = ref[len("#/$defs/") :]
+
+        if def_name in defs:
+            defs[def_name]["sensitive"] = True
+
+
+def _collect_sensitive_output_fields(cls: type[Outputs]) -> set[str]:
+    """Collect output field names marked with the Sensitive marker.
+
+    Simpler than the Config version because output fields use ``SensitiveOutput[T]``
+    which is ``Annotated[T, Sensitive()]`` without the FieldReference union.
+
+    Args:
+        cls: An Outputs subclass to inspect.
+
+    Returns:
+        Set of field names that have the Sensitive marker.
+    """
+    sensitive_fields: set[str] = set()
+
+    for field_name, field_info in cls.model_fields.items():
+        annotation = field_info.annotation
+        origin = typing.get_origin(annotation)
+
+        if isinstance(origin, typing.TypeAliasType) and _has_sensitive_marker(origin):
+            sensitive_fields.add(field_name)
+        elif origin is Annotated:
+            args = typing.get_args(annotation)
+
+            if any(isinstance(arg, Sensitive) for arg in args[1:]):
+                sensitive_fields.add(field_name)
+        elif _is_union_origin(origin):
+            non_none_args = [a for a in typing.get_args(annotation) if a is not type(None)]
+
+            for arg in non_none_args:
+                arg_origin = typing.get_origin(arg)
+
+                if isinstance(arg_origin, typing.TypeAliasType) and _has_sensitive_marker(arg_origin):
+                    sensitive_fields.add(field_name)
+                    break
+
+                if arg_origin is Annotated:
+                    arg_args = typing.get_args(arg)
+
+                    if any(isinstance(a, Sensitive) for a in arg_args[1:]):
+                        sensitive_fields.add(field_name)
+                        break
+
+    return sensitive_fields
+
+
 class Outputs(BaseModel):
     """Base class for resource outputs produced by lifecycle handlers."""
 
     model_config = {"extra": "forbid"}
+
+    @classmethod
+    def model_json_schema(
+        cls,
+        by_alias: bool = True,
+        ref_template: str = "#/$defs/{model}",
+        schema_generator: type[GenerateJsonSchema] = GenerateJsonSchema,
+        mode: JsonSchemaMode = "validation",
+        *,
+        union_format: Literal["any_of", "primitive_type_array"] = "any_of",
+    ) -> dict[str, Any]:
+        """Generate JSON schema with sensitive output field metadata.
+
+        Extends Pydantic's schema generation to add ``"sensitive": true``
+        to output properties that use SensitiveOutput.
+
+        Args:
+            by_alias: Whether to use field aliases in the schema.
+            ref_template: Template for JSON schema $ref values.
+            schema_generator: JSON schema generator class to use.
+            mode: Validation or serialization mode.
+            union_format: Format for union types in the schema.
+
+        Returns:
+            JSON schema dictionary with sensitive annotations.
+        """
+        schema = super().model_json_schema(
+            by_alias=by_alias,
+            ref_template=ref_template,
+            schema_generator=schema_generator,
+            mode=mode,
+            union_format=union_format,
+        )
+
+        sensitive_fields = _collect_sensitive_output_fields(cls)
+
+        if not sensitive_fields:
+            return schema
+
+        alias_map = _build_field_alias_map(cls, by_alias)
+        properties = schema.get("properties", {})
+
+        for field_name in sensitive_fields:
+            prop_key = alias_map.get(field_name, field_name)
+
+            if prop_key in properties:
+                properties[prop_key]["sensitive"] = True
+
+        return schema
 
 
 class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):

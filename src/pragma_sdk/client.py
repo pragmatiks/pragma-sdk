@@ -197,6 +197,7 @@ class PragmaClient(BaseClient):
         tags: list[str] | None = None,
         *,
         model: type[ResourceT] | None = None,
+        reveal: bool = False,
     ) -> list[ResourceT] | list[dict[str, Any]]:
         """List resources with optional filters.
 
@@ -205,6 +206,7 @@ class PragmaClient(BaseClient):
             resource: Filter by resource type.
             tags: Filter by tags (must match all).
             model: Resource subclass for typed response; returns raw dicts if None.
+            reveal: Include sensitive field values in the response.
 
         Returns:
             List of resources as typed instances or raw dicts.
@@ -212,13 +214,15 @@ class PragmaClient(BaseClient):
         Raises:
             httpx.HTTPStatusError: If the request fails.
         """  # noqa: DOC502
-        params = {}
+        params: dict[str, Any] = {}
         if provider:
             params["provider"] = provider
         if resource:
             params["resource"] = resource
         if tags:
             params["tags"] = tags
+        if reveal:
+            params["reveal"] = "true"
 
         response = self._request("GET", "/resources/", params=params)
         if model is not None:
@@ -249,6 +253,7 @@ class PragmaClient(BaseClient):
         name: str,
         *,
         model: type[ResourceT] | None = None,
+        reveal: bool = False,
     ) -> ResourceT | dict[str, Any]:
         """Get a resource by its full identifier.
 
@@ -257,6 +262,7 @@ class PragmaClient(BaseClient):
             resource: Resource type name.
             name: Resource instance name.
             model: Resource subclass for typed response; returns raw dict if None.
+            reveal: Include sensitive field values in the response.
 
         Returns:
             Resource as typed instance or raw dict.
@@ -265,7 +271,10 @@ class PragmaClient(BaseClient):
             httpx.HTTPStatusError: If resource not found or request fails.
         """  # noqa: DOC502
         resource_id = format_resource_id(provider, resource, name)
-        response = self._request("GET", f"/resources/{resource_id}")
+        params: dict[str, Any] = {}
+        if reveal:
+            params["reveal"] = "true"
+        response = self._request("GET", f"/resources/{resource_id}", params=params)
         if model is not None:
             return model.model_validate(response)
         return response
@@ -275,12 +284,14 @@ class PragmaClient(BaseClient):
         resource: ResourceT | dict[str, Any],
         *,
         model: type[ResourceT] | None = None,
+        reveal: bool = False,
     ) -> ResourceT | dict[str, Any]:
         """Apply a resource (create or update).
 
         Args:
             resource: Resource to apply as typed instance or raw dict.
             model: Resource subclass for typed response; returns raw dict if None.
+            reveal: Include sensitive field values in the response.
 
         Returns:
             Applied resource as typed instance or raw dict.
@@ -289,7 +300,10 @@ class PragmaClient(BaseClient):
             httpx.HTTPStatusError: If the apply operation fails.
         """  # noqa: DOC502
         json_data = resource.model_dump() if isinstance(resource, Resource) else resource
-        response = self._request("POST", "/resources/apply", json_data=json_data)
+        params: dict[str, Any] = {}
+        if reveal:
+            params["reveal"] = "true"
+        response = self._request("POST", "/resources/apply", json_data=json_data, params=params)
         if model is not None:
             return model.model_validate(response)
         return response
@@ -811,6 +825,7 @@ class AsyncPragmaClient(BaseClient):
         tags: list[str] | None = None,
         *,
         model: type[ResourceT] | None = None,
+        reveal: bool = False,
     ) -> list[ResourceT] | list[dict[str, Any]]:
         """List resources with optional filters.
 
@@ -819,6 +834,7 @@ class AsyncPragmaClient(BaseClient):
             resource: Filter by resource type.
             tags: Filter by tags (must match all).
             model: Resource subclass for typed response; returns raw dicts if None.
+            reveal: Include sensitive field values in the response.
 
         Returns:
             List of resources as typed instances or raw dicts.
@@ -826,13 +842,15 @@ class AsyncPragmaClient(BaseClient):
         Raises:
             httpx.HTTPStatusError: If the request fails.
         """  # noqa: DOC502
-        params = {}
+        params: dict[str, Any] = {}
         if provider:
             params["provider"] = provider
         if resource:
             params["resource"] = resource
         if tags:
             params["tags"] = tags
+        if reveal:
+            params["reveal"] = "true"
 
         response = await self._request("GET", "/resources/", params=params)
         if model is not None:
@@ -863,6 +881,7 @@ class AsyncPragmaClient(BaseClient):
         name: str,
         *,
         model: type[ResourceT] | None = None,
+        reveal: bool = False,
     ) -> ResourceT | dict[str, Any]:
         """Get a resource by its full identifier.
 
@@ -871,6 +890,7 @@ class AsyncPragmaClient(BaseClient):
             resource: Resource type name.
             name: Resource instance name.
             model: Resource subclass for typed response; returns raw dict if None.
+            reveal: Include sensitive field values in the response.
 
         Returns:
             Resource as typed instance or raw dict.
@@ -879,7 +899,10 @@ class AsyncPragmaClient(BaseClient):
             httpx.HTTPStatusError: If resource not found or request fails.
         """  # noqa: DOC502
         resource_id = format_resource_id(provider, resource, name)
-        response = await self._request("GET", f"/resources/{resource_id}")
+        params: dict[str, Any] = {}
+        if reveal:
+            params["reveal"] = "true"
+        response = await self._request("GET", f"/resources/{resource_id}", params=params)
         if model is not None:
             return model.model_validate(response)
         return response
@@ -889,12 +912,14 @@ class AsyncPragmaClient(BaseClient):
         resource: ResourceT | dict[str, Any],
         *,
         model: type[ResourceT] | None = None,
+        reveal: bool = False,
     ) -> ResourceT | dict[str, Any]:
         """Apply a resource (create or update).
 
         Args:
             resource: Resource to apply as typed instance or raw dict.
             model: Resource subclass for typed response; returns raw dict if None.
+            reveal: Include sensitive field values in the response.
 
         Returns:
             Applied resource as typed instance or raw dict.
@@ -903,7 +928,10 @@ class AsyncPragmaClient(BaseClient):
             httpx.HTTPStatusError: If the apply operation fails.
         """  # noqa: DOC502
         json_data = resource.model_dump() if isinstance(resource, Resource) else resource
-        response = await self._request("POST", "/resources/apply", json_data=json_data)
+        params: dict[str, Any] = {}
+        if reveal:
+            params["reveal"] = "true"
+        response = await self._request("POST", "/resources/apply", json_data=json_data, params=params)
         if model is not None:
             return model.model_validate(response)
         return response
