@@ -1,3 +1,9 @@
+## v0.25.0 (2026-03-04)
+
+### Feat
+
+- forward ref validation + Resource description field (PRA-139, PRA-141) (#12)
+
 ## v0.24.0 (2026-03-03)
 
 ### Feat
