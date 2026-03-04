@@ -599,6 +599,21 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
     provider: ClassVar[str]
     resource: ClassVar[str]
+    description: ClassVar[str | None] = None
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """Set description from docstring if not explicitly provided."""
+        super().__pydantic_init_subclass__(**kwargs)
+
+        if "description" not in cls.__dict__:
+            docstring = cls.__doc__
+
+            if docstring:
+                first_line = docstring.strip().split("\n")[0].strip()
+                cls.description = first_line
+            else:
+                cls.description = None
 
     name: str
     config: ConfigT

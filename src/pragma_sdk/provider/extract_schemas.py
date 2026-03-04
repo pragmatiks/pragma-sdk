@@ -210,6 +210,9 @@ def extract_schemas(package_name: str) -> list[dict[str, Any]]:
                 "config_schema": config_schema,
             }
 
+            if cls.description is not None:
+                entry["description"] = cls.description
+
             outputs_type = get_outputs_class(cls)
 
             if outputs_type is not None:
