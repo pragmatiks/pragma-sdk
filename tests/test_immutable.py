@@ -49,6 +49,8 @@ def test_immutable_field_adds_immutable_to_schema() -> None:
     """ImmutableField[str] generates JSON schema with immutable=true on the property."""
 
     class MyConfig(Config):
+        """Test config."""
+
         region: ImmutableField[str]
 
     schema = MyConfig.model_json_schema()
@@ -61,6 +63,8 @@ def test_immutable_dependency_adds_immutable_to_schema() -> None:
     """ImmutableDependency[T] generates schema with __dependency__ marker and immutable=true."""
 
     class MyConfig(Config):
+        """Test config."""
+
         db: ImmutableDependency[StubResource]
 
     schema = MyConfig.model_json_schema()
@@ -82,6 +86,8 @@ def test_field_does_not_have_immutable_in_schema() -> None:
     """Field[str] does NOT have immutable in schema."""
 
     class MyConfig(Config):
+        """Test config."""
+
         name: Field[str]
 
     schema = MyConfig.model_json_schema()
@@ -100,6 +106,8 @@ def test_dependency_does_not_have_immutable_in_schema() -> None:
     """Dependency[T] does NOT have immutable in schema."""
 
     class MyConfig(Config):
+        """Test config."""
+
         db: Dependency[StubResource]
 
     schema = MyConfig.model_json_schema()
@@ -118,6 +126,8 @@ def test_mixed_field_and_immutable_field_schema() -> None:
     """Mix of Field and ImmutableField generates correct schema markers."""
 
     class MyConfig(Config):
+        """Test config."""
+
         name: Field[str]
         region: ImmutableField[str]
         size: Field[int]
@@ -147,6 +157,8 @@ def test_mixed_dependency_and_immutable_dependency_schema() -> None:
     """Mix of Dependency and ImmutableDependency generates correct schema markers."""
 
     class MyConfig(Config):
+        """Test config."""
+
         mutable_db: Dependency[StubResource]
         immutable_db: ImmutableDependency[StubResource]
 
@@ -217,6 +229,8 @@ def test_field_str_passes_validation() -> None:
     """Config with Field[str] passes validation."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         name: Field[str]
 
     config = GoodConfig(name="test")
@@ -227,6 +241,8 @@ def test_immutable_field_str_passes_validation() -> None:
     """Config with ImmutableField[str] passes validation."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         region: ImmutableField[str]
 
     config = GoodConfig(region="us-east-1")
@@ -237,6 +253,8 @@ def test_dependency_passes_validation() -> None:
     """Config with Dependency[T] passes validation."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         db: Dependency[StubResource]
 
     dep = Dependency[StubResource](provider="test", resource="stub", name="my-db")
@@ -248,6 +266,8 @@ def test_immutable_dependency_passes_validation() -> None:
     """Config with ImmutableDependency[T] passes validation."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         db: ImmutableDependency[StubResource]
 
     dep = Dependency[StubResource](provider="test", resource="stub", name="my-db")
@@ -259,6 +279,8 @@ def test_optional_field_passes_validation() -> None:
     """Config with Field[str] | None passes validation."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         label: Field[str] | None = None
 
     config = GoodConfig()
@@ -269,6 +291,8 @@ def test_optional_dependency_passes_validation() -> None:
     """Config with Dependency[T] | None passes validation."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         db: Dependency[StubResource] | None = None
 
     config = GoodConfig()
@@ -279,6 +303,8 @@ def test_list_field_passes_validation() -> None:
     """Config with list[Field[str]] passes validation."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         tags: list[Field[str]]
 
     config = GoodConfig(tags=["a", "b"])
@@ -289,6 +315,8 @@ def test_list_dependency_passes_validation() -> None:
     """Config with list[Dependency[T]] passes validation."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         dbs: list[Dependency[StubResource]]
 
     dep = Dependency[StubResource](provider="test", resource="stub", name="db1")
@@ -300,6 +328,8 @@ def test_field_with_default_passes_validation() -> None:
     """Config with Field[int] and default value passes validation."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         name: Field[str]
         size: Field[int] = 10
 
@@ -324,6 +354,8 @@ def test_extract_schemas_includes_immutable_metadata() -> None:
     """extract_schemas propagates immutable metadata from model_json_schema."""
 
     class RegionConfig(Config):
+        """Test config."""
+
         name: Field[str]
         region: ImmutableField[str]
 
@@ -341,6 +373,8 @@ def test_immutable_field_accepts_field_reference() -> None:
     from pragma_sdk import FieldReference
 
     class MyConfig(Config):
+        """Test config."""
+
         region: ImmutableField[str]
 
     ref = FieldReference(provider="gcp", resource="project", name="my-proj", field="outputs.region")
@@ -353,6 +387,8 @@ def test_immutable_field_accepts_direct_value() -> None:
     """ImmutableField[str] accepts a direct string value."""
 
     class MyConfig(Config):
+        """Test config."""
+
         region: ImmutableField[str]
 
     config = MyConfig(region="us-central1")
@@ -386,6 +422,8 @@ def test_optional_immutable_field_has_immutable_in_schema() -> None:
     """ImmutableField[str] | None generates schema with immutable=true."""
 
     class MyConfig(Config):
+        """Test config."""
+
         region: ImmutableField[str] | None = None
 
     schema = MyConfig.model_json_schema()
@@ -398,6 +436,8 @@ def test_optional_immutable_dependency_has_immutable_in_schema() -> None:
     """ImmutableDependency[T] | None generates schema with both __dependency__ and immutable=true."""
 
     class MyConfig(Config):
+        """Test config."""
+
         db: ImmutableDependency[StubResource] | None = None
 
     schema = MyConfig.model_json_schema()
@@ -410,6 +450,8 @@ def test_optional_field_does_not_have_immutable_in_schema() -> None:
     """Field[str] | None does NOT get immutable marker."""
 
     class MyConfig(Config):
+        """Test config."""
+
         label: Field[str] | None = None
 
     schema = MyConfig.model_json_schema()
@@ -425,6 +467,8 @@ def test_immutable_field_with_alias_marks_aliased_property() -> None:
     """ImmutableField with alias generates immutable=true on the aliased property name."""
 
     class MyConfig(Config):
+        """Test config."""
+
         region: ImmutableField[str] = PydanticField(alias="immutable_alias")
 
     schema = MyConfig.model_json_schema()

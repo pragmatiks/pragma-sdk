@@ -136,6 +136,8 @@ def test_resource_with_field_reference_in_config() -> None:
     )
 
     class AppConfig(Config):
+        """Test config."""
+
         name: Field[str]
         database_url: Field[str]
 
@@ -354,6 +356,8 @@ def test_dependency_in_config() -> None:
     from conftest import StubResource
 
     class AppConfig(Config):
+        """Test config."""
+
         database: Dependency[StubResource]
 
     dep = Dependency[StubResource](

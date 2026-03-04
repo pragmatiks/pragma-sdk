@@ -12,6 +12,7 @@ import typing
 from pathlib import Path
 from typing import Any, TypedDict
 
+from pragma_sdk.docstrings import extract_short_description, parse_attributes_section
 from pragma_sdk.models import Config, Outputs, Resource
 from pragma_sdk.provider.discovery import discover_resources
 
@@ -210,13 +211,25 @@ def extract_schemas(package_name: str) -> list[dict[str, Any]]:
                 "config_schema": config_schema,
             }
 
-            if cls.description is not None:
-                entry["description"] = cls.description
+            description = extract_short_description(cls.__doc__)
+
+            if description is not None:
+                entry["description"] = description
+
+            config_field_descriptions = parse_attributes_section(config_type.__doc__)
+
+            if config_field_descriptions:
+                entry["field_descriptions"] = config_field_descriptions
 
             outputs_type = get_outputs_class(cls)
 
             if outputs_type is not None:
                 entry["outputs_schema"] = outputs_type.model_json_schema()
+
+                output_field_descriptions = parse_attributes_section(outputs_type.__doc__)
+
+                if output_field_descriptions:
+                    entry["output_descriptions"] = output_field_descriptions
 
             schemas.append(entry)
         except ValueError:
