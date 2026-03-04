@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import re
 import types
 import typing
 from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Annotated, Any, ClassVar, Literal, Union
+from typing import Annotated, Any, ClassVar, ForwardRef, Literal, Union
 
 from pydantic import BaseModel
 from pydantic import Field as PydanticField
@@ -75,6 +76,94 @@ def _has_sensitive_marker(alias: typing.TypeAliasType) -> bool:
         return False
 
     return any(isinstance(arg, Sensitive) for arg in typing.get_args(val)[1:])
+
+
+_DEPENDENCY_FORWARD_REF_RE = re.compile(r"(?:Immutable|Sensitive)?Dependency\[['\"](\w+)['\"]\]")
+
+
+def _find_dependency_forward_ref(annotation: Any) -> str | None:
+    """Find a string forward reference inside a Dependency type parameter.
+
+    Checks whether a type annotation contains a Dependency (or variant like
+    ImmutableDependency, SensitiveDependency) parameterized with a string
+    forward reference instead of an actual class. Recurses into list and
+    Optional/Union wrappers.
+
+    Also handles ``ForwardRef`` annotations that arise when
+    ``from __future__ import annotations`` causes the entire annotation
+    string to be deferred and Pydantic cannot resolve it.
+
+    Args:
+        annotation: The type annotation to inspect.
+
+    Returns:
+        The forward reference string if found, None otherwise.
+    """
+    if isinstance(annotation, ForwardRef):
+        match = _DEPENDENCY_FORWARD_REF_RE.search(annotation.__forward_arg__)
+
+        if match:
+            return match.group(1)
+
+        return None
+
+    origin = typing.get_origin(annotation)
+
+    if isinstance(annotation, type) and issubclass(annotation, Dependency):
+        meta = getattr(annotation, "__pydantic_generic_metadata__", None)
+
+        if meta and meta.get("args"):
+            resource_arg = meta["args"][0]
+
+            if isinstance(resource_arg, str):
+                return resource_arg
+
+        return None
+
+    if isinstance(origin, typing.TypeAliasType):
+        alias_args = typing.get_args(annotation)
+
+        for arg in alias_args:
+            if isinstance(arg, str):
+                val = origin.__value__
+                inner_origin = typing.get_origin(val)
+
+                if inner_origin is Annotated:
+                    inner_type = typing.get_args(val)[0]
+                else:
+                    inner_type = val
+
+                dep_origin = typing.get_origin(inner_type)
+
+                if dep_origin is not None and isinstance(dep_origin, type) and issubclass(dep_origin, Dependency):
+                    return arg
+
+                if isinstance(inner_type, type) and issubclass(inner_type, Dependency):
+                    return arg
+
+        return None
+
+    if origin is list:
+        args = typing.get_args(annotation)
+
+        if args:
+            return _find_dependency_forward_ref(args[0])
+
+        return None
+
+    if _is_union_origin(origin):
+        for arg in typing.get_args(annotation):
+            if arg is type(None):
+                continue
+
+            result = _find_dependency_forward_ref(arg)
+
+            if result is not None:
+                return result
+
+        return None
+
+    return None
 
 
 def _is_valid_config_field(annotation: Any) -> bool:
@@ -185,10 +274,21 @@ class Config(BaseModel):
         Raises:
             TypeError: If any field uses a bare type instead of Field[T],
                 ImmutableField[T], Dependency[T], or ImmutableDependency[T].
+            TypeError: If any Dependency field uses a string forward reference
+                instead of a direct class reference.
         """
         super().__pydantic_init_subclass__(**kwargs)
 
         for field_name, field_info in cls.model_fields.items():
+            forward_ref = _find_dependency_forward_ref(field_info.annotation)
+
+            if forward_ref is not None:
+                raise TypeError(
+                    f'Forward reference "{forward_ref}" in Dependency declaration '
+                    f"on {cls.__name__}.{field_name} is not supported. "
+                    f"Move {forward_ref} above {cls.__name__} or import it directly."
+                )
+
             if not _is_valid_config_field(field_info.annotation):
                 raise TypeError(
                     f"Config field '{field_name}' on {cls.__name__} must use "
