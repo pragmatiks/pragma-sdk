@@ -111,6 +111,8 @@ def test_dependency_direct_reference_passes() -> None:
     """Dependency[ActualClass] (direct reference) works without error."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         dep: Dependency[StubResource]
 
     dep = Dependency[StubResource](provider="test", resource="stub", name="my-db")
@@ -122,6 +124,8 @@ def test_immutable_dependency_direct_reference_passes() -> None:
     """ImmutableDependency[ActualClass] works without error."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         dep: ImmutableDependency[StubResource]
 
     dep = Dependency[StubResource](provider="test", resource="stub", name="my-db")
@@ -133,6 +137,8 @@ def test_sensitive_dependency_direct_reference_passes() -> None:
     """SensitiveDependency[ActualClass] works without error."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         dep: SensitiveDependency[StubResource]
 
     dep = Dependency[StubResource](provider="test", resource="stub", name="my-db")
@@ -144,6 +150,8 @@ def test_list_dependency_direct_reference_passes() -> None:
     """list[Dependency[ActualClass]] works without error."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         deps: list[Dependency[StubResource]]
 
     dep = Dependency[StubResource](provider="test", resource="stub", name="db1")
@@ -155,6 +163,8 @@ def test_optional_dependency_direct_reference_passes() -> None:
     """Dependency[ActualClass] | None works without error."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         dep: Dependency[StubResource] | None = None
 
     config = GoodConfig()
@@ -165,6 +175,8 @@ def test_non_dependency_fields_unaffected() -> None:
     """Non-dependency fields like Field[str] are not affected by the check."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         name: Field[str]
         dep: Dependency[StubResource]
 

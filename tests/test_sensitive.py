@@ -53,6 +53,8 @@ def test_sensitive_field_adds_sensitive_to_schema() -> None:
     """SensitiveField[str] generates JSON schema with sensitive=true on the property."""
 
     class MyConfig(Config):
+        """Test config."""
+
         api_key: SensitiveField[str]
 
     schema = MyConfig.model_json_schema()
@@ -65,6 +67,8 @@ def test_sensitive_dependency_adds_sensitive_to_schema() -> None:
     """SensitiveDependency[T] generates schema with __dependency__ marker and sensitive=true."""
 
     class MyConfig(Config):
+        """Test config."""
+
         secret_db: SensitiveDependency[StubResource]
 
     schema = MyConfig.model_json_schema()
@@ -86,6 +90,8 @@ def test_immutable_sensitive_field_has_both_markers() -> None:
     """ImmutableSensitiveField[str] generates schema with both immutable=true and sensitive=true."""
 
     class MyConfig(Config):
+        """Test config."""
+
         master_key: ImmutableSensitiveField[str]
 
     schema = MyConfig.model_json_schema()
@@ -99,6 +105,8 @@ def test_field_does_not_have_sensitive_in_schema() -> None:
     """Field[str] does NOT have sensitive in schema."""
 
     class MyConfig(Config):
+        """Test config."""
+
         name: Field[str]
 
     schema = MyConfig.model_json_schema()
@@ -117,6 +125,8 @@ def test_dependency_does_not_have_sensitive_in_schema() -> None:
     """Dependency[T] does NOT have sensitive in schema."""
 
     class MyConfig(Config):
+        """Test config."""
+
         db: Dependency[StubResource]
 
     schema = MyConfig.model_json_schema()
@@ -135,6 +145,8 @@ def test_mixed_field_and_sensitive_field_schema() -> None:
     """Mix of Field and SensitiveField generates correct schema markers."""
 
     class MyConfig(Config):
+        """Test config."""
+
         name: Field[str]
         api_key: SensitiveField[str]
         size: Field[int]
@@ -154,6 +166,8 @@ def test_mixed_dependency_and_sensitive_dependency_schema() -> None:
     """Mix of Dependency and SensitiveDependency generates correct schema markers."""
 
     class MyConfig(Config):
+        """Test config."""
+
         public_db: Dependency[StubResource]
         secret_db: SensitiveDependency[StubResource]
 
@@ -170,6 +184,8 @@ def test_mixed_immutable_and_sensitive_fields() -> None:
     """Mix of ImmutableField, SensitiveField, and ImmutableSensitiveField in one Config."""
 
     class MyConfig(Config):
+        """Test config."""
+
         region: ImmutableField[str]
         api_key: SensitiveField[str]
         master_key: ImmutableSensitiveField[str]
@@ -202,6 +218,8 @@ def test_optional_sensitive_field_has_sensitive_in_schema() -> None:
     """SensitiveField[str] | None generates schema with sensitive=true."""
 
     class MyConfig(Config):
+        """Test config."""
+
         token: SensitiveField[str] | None = None
 
     schema = MyConfig.model_json_schema()
@@ -214,6 +232,8 @@ def test_optional_sensitive_dependency_has_sensitive_in_schema() -> None:
     """SensitiveDependency[T] | None generates schema with sensitive=true."""
 
     class MyConfig(Config):
+        """Test config."""
+
         secret_db: SensitiveDependency[StubResource] | None = None
 
     schema = MyConfig.model_json_schema()
@@ -229,6 +249,8 @@ def test_sensitive_output_adds_sensitive_to_schema() -> None:
     """SensitiveOutput[str] generates JSON schema with sensitive=true on the output property."""
 
     class MyOutputs(Outputs):
+        """Test outputs."""
+
         url: str
         connection_string: SensitiveOutput[str]
 
@@ -245,6 +267,8 @@ def test_outputs_without_sensitive_has_no_markers() -> None:
     """Outputs with no sensitive fields returns clean schema."""
 
     class MyOutputs(Outputs):
+        """Test outputs."""
+
         url: str
         port: int
 
@@ -258,6 +282,8 @@ def test_all_sensitive_outputs() -> None:
     """Outputs where all fields are sensitive."""
 
     class MyOutputs(Outputs):
+        """Test outputs."""
+
         token: SensitiveOutput[str]
         secret: SensitiveOutput[str]
 
@@ -274,6 +300,8 @@ def test_sensitive_field_str_passes_validation() -> None:
     """Config with SensitiveField[str] passes validation."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         api_key: SensitiveField[str]
 
     config = GoodConfig(api_key="sk-1234")
@@ -284,6 +312,8 @@ def test_sensitive_dependency_passes_validation() -> None:
     """Config with SensitiveDependency[T] passes validation."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         secret_db: SensitiveDependency[StubResource]
 
     dep = Dependency[StubResource](provider="test", resource="stub", name="my-db")
@@ -295,6 +325,8 @@ def test_immutable_sensitive_field_passes_validation() -> None:
     """Config with ImmutableSensitiveField[str] passes validation."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         master_key: ImmutableSensitiveField[str]
 
     config = GoodConfig(master_key="mk-secret")
@@ -305,6 +337,8 @@ def test_optional_sensitive_field_passes_validation() -> None:
     """Config with SensitiveField[str] | None passes validation."""
 
     class GoodConfig(Config):
+        """Test config."""
+
         token: SensitiveField[str] | None = None
 
     config = GoodConfig()
@@ -315,6 +349,8 @@ def test_sensitive_field_accepts_field_reference() -> None:
     """SensitiveField[str] accepts a FieldReference value, same as Field[str]."""
 
     class MyConfig(Config):
+        """Test config."""
+
         api_key: SensitiveField[str]
 
     ref = FieldReference(provider="vault", resource="secret", name="my-key", field="outputs.value")
@@ -327,6 +363,8 @@ def test_sensitive_field_accepts_direct_value() -> None:
     """SensitiveField[str] accepts a direct string value."""
 
     class MyConfig(Config):
+        """Test config."""
+
         api_key: SensitiveField[str]
 
     config = MyConfig(api_key="sk-1234")
@@ -337,6 +375,8 @@ def test_immutable_sensitive_field_accepts_field_reference() -> None:
     """ImmutableSensitiveField[str] accepts a FieldReference value."""
 
     class MyConfig(Config):
+        """Test config."""
+
         master_key: ImmutableSensitiveField[str]
 
     ref = FieldReference(provider="vault", resource="secret", name="master", field="outputs.key")
@@ -351,6 +391,8 @@ def test_sensitive_field_with_alias_marks_aliased_property() -> None:
     """SensitiveField with alias generates sensitive=true on the aliased property name."""
 
     class MyConfig(Config):
+        """Test config."""
+
         api_key: SensitiveField[str] = PydanticField(alias="api_key_alias")
 
     schema = MyConfig.model_json_schema()
@@ -364,6 +406,8 @@ def test_sensitive_output_with_alias_marks_aliased_property() -> None:
     """SensitiveOutput with alias generates sensitive=true on the aliased property name."""
 
     class MyOutputs(Outputs):
+        """Test outputs."""
+
         secret: SensitiveOutput[str] = PydanticField(alias="secret_alias")
 
     schema = MyOutputs.model_json_schema()

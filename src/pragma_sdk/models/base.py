@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import types
 import typing
+import warnings
 from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Annotated, Any, ClassVar, ForwardRef, Literal, Union
@@ -264,6 +265,59 @@ def _build_field_alias_map(cls: type[BaseModel], by_alias: bool) -> dict[str, st
     return alias_map
 
 
+_BASE_MODEL_CLASSES = {"Config", "Outputs"}
+
+
+def _has_own_fields(cls: type[BaseModel]) -> bool:
+    """Check if a model class defines its own fields (not just inherited ones).
+
+    Args:
+        cls: A Pydantic BaseModel subclass to inspect.
+
+    Returns:
+        True if the class has annotations that define new model fields.
+    """
+    own_annotations = set(cls.__annotations__) if "__annotations__" in cls.__dict__ else set()
+    parent_annotations: set[str] = set()
+
+    for parent in cls.__mro__[1:]:
+        if hasattr(parent, "__annotations__"):
+            parent_annotations.update(parent.__annotations__)
+
+    own_field_names = own_annotations - parent_annotations
+
+    return bool(own_field_names & set(cls.model_fields))
+
+
+def _validate_model_docstring(cls: type[BaseModel], kind: str) -> None:
+    """Validate that a Config or Outputs subclass has a docstring.
+
+    Skips base classes and classes with no fields of their own. Raises
+    TypeError for missing docstrings and warns for missing Attributes section.
+
+    Args:
+        cls: A Config or Outputs subclass to validate.
+        kind: Label for error messages ("Config" or "Outputs").
+
+    Raises:
+        TypeError: If the subclass defines fields but has no docstring.
+    """
+    if cls.__name__ in _BASE_MODEL_CLASSES:
+        return
+
+    if not _has_own_fields(cls):
+        return
+
+    if not cls.__doc__:
+        raise TypeError(f"{kind} class '{cls.__name__}' must have a docstring.")
+
+    if "Attributes:" not in cls.__doc__:
+        warnings.warn(
+            f"{kind} class '{cls.__name__}' should document fields in a Google-style Attributes section.",
+            stacklevel=3,
+        )
+
+
 class Config(BaseModel):
     """Base class for resource configuration schemas."""
 
@@ -271,13 +325,14 @@ class Config(BaseModel):
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
-        """Validate that all fields use required Config field types.
+        """Validate field types and docstring on Config subclasses.
 
         Raises:
             TypeError: If any field uses a bare type instead of Field[T],
                 ImmutableField[T], Dependency[T], or ImmutableDependency[T].
             TypeError: If any Dependency field uses a string forward reference
                 instead of a direct class reference.
+            TypeError: If the subclass defines fields but has no docstring.
         """
         super().__pydantic_init_subclass__(**kwargs)
 
@@ -299,6 +354,8 @@ class Config(BaseModel):
                     f"ImmutableDependency[T], or SensitiveDependency[T] "
                     f"— bare types are not allowed"
                 )
+
+        _validate_model_docstring(cls, "Config")
 
     @classmethod
     def model_json_schema(
@@ -541,6 +598,12 @@ class Outputs(BaseModel):
     model_config = {"extra": "forbid"}
 
     @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """Validate docstring on Outputs subclasses."""
+        super().__pydantic_init_subclass__(**kwargs)
+        _validate_model_docstring(cls, "Outputs")
+
+    @classmethod
     def model_json_schema(
         cls,
         by_alias: bool = True,
@@ -601,21 +664,6 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
     provider: ClassVar[str]
     resource: ClassVar[str]
-    description: ClassVar[str | None] = None
-
-    @classmethod
-    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
-        """Set description from docstring if not explicitly provided."""
-        super().__pydantic_init_subclass__(**kwargs)
-
-        if "description" not in cls.__dict__:
-            docstring = cls.__doc__
-
-            if docstring:
-                first_line = docstring.strip().split("\n")[0].strip()
-                cls.description = first_line
-            else:
-                cls.description = None
 
     name: str
     config: ConfigT
