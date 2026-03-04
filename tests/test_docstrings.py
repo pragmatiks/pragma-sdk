@@ -183,3 +183,33 @@ def test_extract_short_description_whitespace_only() -> None:
     result = extract_short_description("   \n  \n  ")
 
     assert result is None
+
+
+def test_parse_attributes_with_types() -> None:
+    """Test parsing of typed Google-style attributes."""
+    docstring = """Config for database.
+
+    Attributes:
+        name (str): The database name.
+        instance (DatabaseInstance): The SQL instance to use.
+        charset (str): Character set.
+            Defaults to utf8mb4.
+    """
+    result = parse_attributes_section(docstring)
+    assert result == {
+        "name": "The database name.",
+        "instance": "The SQL instance to use.",
+        "charset": "Character set. Defaults to utf8mb4.",
+    }
+
+
+def test_parse_attributes_mixed_typed_and_untyped() -> None:
+    """Test parsing of mixed typed and untyped attributes."""
+    docstring = """Config.
+
+    Attributes:
+        name: Simple untyped.
+        port (int): Typed field.
+    """
+    result = parse_attributes_section(docstring)
+    assert result == {"name": "Simple untyped.", "port": "Typed field."}

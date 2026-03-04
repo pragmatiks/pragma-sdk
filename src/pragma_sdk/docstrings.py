@@ -6,7 +6,7 @@ import re
 
 
 _SECTION_HEADER_RE = re.compile(r"^(\w[\w\s]*):\s*$")
-_ATTRIBUTE_LINE_RE = re.compile(r"^(\s+)(\w+):\s*(.*)$")
+_ATTRIBUTE_LINE_RE = re.compile(r"^(\s+)(\w+)(?:\s*\([^)]*\))?:\s*(.*)$")
 
 
 def extract_short_description(docstring: str | None) -> str | None:
