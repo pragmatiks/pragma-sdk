@@ -78,7 +78,9 @@ def _has_sensitive_marker(alias: typing.TypeAliasType) -> bool:
     return any(isinstance(arg, Sensitive) for arg in typing.get_args(val)[1:])
 
 
-_DEPENDENCY_FORWARD_REF_RE = re.compile(r"(?:Immutable|Sensitive)?Dependency\[['\"](\w+)['\"]\]")
+_DEPENDENCY_FORWARD_REF_RE = re.compile(
+    r"(?<![A-Za-z_])(?:Immutable|Sensitive)?Dependency\[\s*['\"]?([A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)*)['\"]?\s*\]"
+)
 
 
 def _find_dependency_forward_ref(annotation: Any) -> str | None:

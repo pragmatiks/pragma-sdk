@@ -1,6 +1,6 @@
 """Tests for forward reference detection in Dependency declarations."""
 
-from typing import ClassVar
+from typing import ClassVar, ForwardRef
 
 import pytest
 
@@ -13,6 +13,7 @@ from pragma_sdk import (
     Resource,
     SensitiveDependency,
 )
+from pragma_sdk.models.base import _find_dependency_forward_ref
 
 
 class StubOutputs(Outputs):
@@ -170,3 +171,50 @@ def test_non_dependency_fields_unaffected() -> None:
     dep = Dependency[StubResource](provider="test", resource="stub", name="my-db")
     config = GoodConfig(name="test", dep=dep)
     assert config.name == "test"
+
+
+@pytest.mark.parametrize(
+    ("forward_arg", "expected"),
+    [
+        ("Dependency[NonExistent]", "NonExistent"),
+        ("ImmutableDependency[NonExistent]", "NonExistent"),
+        ("SensitiveDependency[NonExistent]", "NonExistent"),
+        ("Dependency[module.Resource]", "module.Resource"),
+        ("ImmutableDependency[pkg.mod.Cls]", "pkg.mod.Cls"),
+    ],
+)
+def test_find_dependency_forward_ref_unquoted(forward_arg: str, expected: str) -> None:
+    """Unquoted forward refs from postponed annotations are detected."""
+    ref = ForwardRef(forward_arg)
+    assert _find_dependency_forward_ref(ref) == expected
+
+
+@pytest.mark.parametrize(
+    ("forward_arg", "expected"),
+    [
+        ("Dependency['NonExistent']", "NonExistent"),
+        ('Dependency["NonExistent"]', "NonExistent"),
+        ('ImmutableDependency["NonExistent"]', "NonExistent"),
+        ('SensitiveDependency["NonExistent"]', "NonExistent"),
+        ('Dependency["module.Resource"]', "module.Resource"),
+    ],
+)
+def test_find_dependency_forward_ref_quoted(forward_arg: str, expected: str) -> None:
+    """Quoted forward refs (explicit string annotations) are detected."""
+    ref = ForwardRef(forward_arg)
+    assert _find_dependency_forward_ref(ref) == expected
+
+
+@pytest.mark.parametrize(
+    "forward_arg",
+    [
+        "str",
+        "list[str]",
+        "SomethingElse[Foo]",
+        "NotDependency[Bar]",
+    ],
+)
+def test_find_dependency_forward_ref_ignores_non_dependency(forward_arg: str) -> None:
+    """Non-Dependency forward refs return None."""
+    ref = ForwardRef(forward_arg)
+    assert _find_dependency_forward_ref(ref) is None
