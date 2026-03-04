@@ -73,6 +73,9 @@ known-first-party = ["pragma_sdk"]
     "DOC",      # Docstring content rules (Returns, Raises, Yields sections)
     "PLC0415",  # Import outside top-level (common in tests for isolation)
 ]
+"**/tests/test_forward_ref.py" = [
+    "F821",     # Undefined names are intentional (testing forward reference detection)
+]
 
 [tool.ruff.format]
 preview = true
