@@ -706,8 +706,12 @@ class PragmaClient(BaseClient):
             Updated installed provider info.
 
         Raises:
+            ValueError: If target_version is empty or whitespace.
             httpx.HTTPStatusError: If downgrade fails.
         """  # noqa: DOC502
+        if not target_version.strip():
+            raise ValueError("target_version must be a non-empty version string")
+
         path = _validate_provider_name(provider_name)
         data: dict = {"target_version": target_version}
 
@@ -1353,8 +1357,12 @@ class AsyncPragmaClient(BaseClient):
             Updated installed provider info.
 
         Raises:
+            ValueError: If target_version is empty or whitespace.
             httpx.HTTPStatusError: If downgrade fails.
         """  # noqa: DOC502
+        if not target_version.strip():
+            raise ValueError("target_version must be a non-empty version string")
+
         path = _validate_provider_name(provider_name)
         data: dict = {"target_version": target_version}
 

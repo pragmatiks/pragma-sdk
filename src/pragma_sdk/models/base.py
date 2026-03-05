@@ -695,7 +695,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         raise NotImplementedError(f"{self.__class__.__name__} must implement on_delete()")
 
     @classmethod
-    def upgrade(cls, config: dict, outputs: dict) -> tuple[dict, dict]:
+    def upgrade(cls, config: dict, outputs: dict | None) -> tuple[dict, dict | None]:
         """Migrate config and outputs from the previous provider version.
 
         Called during provider upgrade for each existing resource of this type.
@@ -704,7 +704,8 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
         Args:
             config: Resource config dict from the previous version.
-            outputs: Resource outputs dict from the previous version.
+            outputs: Resource outputs dict from the previous version, or None
+                if the resource has not yet produced outputs.
 
         Returns:
             Tuple of (migrated_config, migrated_outputs).
@@ -712,7 +713,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         return config, outputs
 
     @classmethod
-    def downgrade(cls, config: dict, outputs: dict) -> tuple[dict, dict]:
+    def downgrade(cls, config: dict, outputs: dict | None) -> tuple[dict, dict | None]:
         """Migrate config and outputs back to the previous provider version.
 
         Called during provider downgrade for each existing resource of this type.
@@ -721,7 +722,8 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
         Args:
             config: Resource config dict from the current version.
-            outputs: Resource outputs dict from the current version.
+            outputs: Resource outputs dict from the current version, or None
+                if the resource has not yet produced outputs.
 
         Returns:
             Tuple of (downgraded_config, downgraded_outputs).

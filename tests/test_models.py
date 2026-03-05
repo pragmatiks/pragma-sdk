@@ -572,22 +572,28 @@ def test_resource_custom_upgrade_transforms_data() -> None:
         async def on_create(self) -> StubOutputs:
             return StubOutputs(url="")
 
-        async def on_update(self, previous_config: StubConfig) -> StubOutputs:
+        async def on_update(self, _previous_config: StubConfig) -> StubOutputs:
             return StubOutputs(url="")
 
         async def on_delete(self) -> None:
             pass
 
         @classmethod
-        def upgrade(cls, config: dict, outputs: dict) -> tuple[dict, dict]:
+        def upgrade(cls, config: dict, outputs: dict | None) -> tuple[dict, dict | None]:
             config["new_field"] = "default_value"
-            outputs["extra"] = True
+
+            if outputs is not None:
+                outputs["extra"] = True
+
             return config, outputs
 
         @classmethod
-        def downgrade(cls, config: dict, outputs: dict) -> tuple[dict, dict]:
+        def downgrade(cls, config: dict, outputs: dict | None) -> tuple[dict, dict | None]:
             config.pop("new_field", None)
-            outputs.pop("extra", None)
+
+            if outputs is not None:
+                outputs.pop("extra", None)
+
             return config, outputs
 
     config = {"name": "my-resource"}
