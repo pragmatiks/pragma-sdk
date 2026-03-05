@@ -673,6 +673,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
     error: str | None = None
     lifecycle_state: LifecycleState = LifecycleState.DRAFT
     tags: list[str] | None = None
+    provider_version: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -692,6 +693,40 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
     async def on_delete(self) -> None:
         """Handle resource deletion."""
         raise NotImplementedError(f"{self.__class__.__name__} must implement on_delete()")
+
+    @classmethod
+    def upgrade(cls, config: dict, outputs: dict) -> tuple[dict, dict]:
+        """Migrate config and outputs from the previous provider version.
+
+        Called during provider upgrade for each existing resource of this type.
+        Override to transform config/outputs when the schema changes between versions.
+        Must be defined on every version, even if no-op.
+
+        Args:
+            config: Resource config dict from the previous version.
+            outputs: Resource outputs dict from the previous version.
+
+        Returns:
+            Tuple of (migrated_config, migrated_outputs).
+        """
+        return config, outputs
+
+    @classmethod
+    def downgrade(cls, config: dict, outputs: dict) -> tuple[dict, dict]:
+        """Migrate config and outputs back to the previous provider version.
+
+        Called during provider downgrade for each existing resource of this type.
+        Override to reverse the transformations applied by upgrade().
+        Must be defined on every version, even if no-op.
+
+        Args:
+            config: Resource config dict from the current version.
+            outputs: Resource outputs dict from the current version.
+
+        Returns:
+            Tuple of (downgraded_config, downgraded_outputs).
+        """
+        return config, outputs
 
     async def logs(
         self,

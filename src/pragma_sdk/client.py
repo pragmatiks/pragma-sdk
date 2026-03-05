@@ -695,6 +695,25 @@ class PragmaClient(BaseClient):
         response = self._request("POST", f"/providers/installed/{path}/upgrade", json_data=data)
         return InstalledProvider.model_validate(response)
 
+    def downgrade_provider(self, provider_name: str, target_version: str) -> InstalledProvider:
+        """Downgrade an installed provider to a specific version.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+            target_version: Target version to downgrade to.
+
+        Returns:
+            Updated installed provider info.
+
+        Raises:
+            httpx.HTTPStatusError: If downgrade fails.
+        """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
+        data: dict = {"target_version": target_version}
+
+        response = self._request("POST", f"/providers/installed/{path}/downgrade", json_data=data)
+        return InstalledProvider.model_validate(response)
+
     def deploy_provider(self, provider_name: str, version: str | None = None) -> DeploymentResult:
         """Deploy or redeploy an installed provider.
 
@@ -1321,6 +1340,25 @@ class AsyncPragmaClient(BaseClient):
             data["version"] = target_version
 
         response = await self._request("POST", f"/providers/installed/{path}/upgrade", json_data=data)
+        return InstalledProvider.model_validate(response)
+
+    async def downgrade_provider(self, provider_name: str, target_version: str) -> InstalledProvider:
+        """Downgrade an installed provider to a specific version.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+            target_version: Target version to downgrade to.
+
+        Returns:
+            Updated installed provider info.
+
+        Raises:
+            httpx.HTTPStatusError: If downgrade fails.
+        """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
+        data: dict = {"target_version": target_version}
+
+        response = await self._request("POST", f"/providers/installed/{path}/downgrade", json_data=data)
         return InstalledProvider.model_validate(response)
 
     async def deploy_provider(self, provider_name: str, version: str | None = None) -> DeploymentResult:
