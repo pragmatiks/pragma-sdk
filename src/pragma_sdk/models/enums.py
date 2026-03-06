@@ -29,6 +29,8 @@ class EventType(StrEnum):
     CREATE = "CREATE"
     UPDATE = "UPDATE"
     DELETE = "DELETE"
+    MIGRATE_UP = "MIGRATE_UP"
+    MIGRATE_DOWN = "MIGRATE_DOWN"
 
 
 class ResponseStatus(StrEnum):

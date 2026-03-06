@@ -252,6 +252,30 @@ def test_upgrade_provider_returns_installed() -> None:
     assert "target_version" not in body
 
 
+# --- Sync: downgrade_provider ---
+
+
+@respx.mock
+def test_downgrade_provider_returns_installed() -> None:
+    downgraded = {**INSTALLED_PROVIDER, "installed_version": "1.0.0"}
+    route = respx.post("http://localhost:8000/providers/installed/pragma/qdrant/downgrade").mock(
+        return_value=httpx.Response(200, json=downgraded)
+    )
+
+    with PragmaClient(auth_token=None) as client:
+        result = client.downgrade_provider("pragma/qdrant", target_version="1.0.0")
+
+    assert isinstance(result, InstalledProvider)
+    assert result.installed_version == "1.0.0"
+
+    import json
+
+    body = json.loads(route.calls[0].request.content)
+    assert "target_version" in body
+    assert body["target_version"] == "1.0.0"
+    assert "version" not in body
+
+
 # --- Sync: list_installed_providers ---
 
 
@@ -572,6 +596,30 @@ async def test_async_upgrade_provider_returns_installed() -> None:
     assert "version" in body
     assert body["version"] == "1.3.0"
     assert "target_version" not in body
+
+
+# --- Async: downgrade_provider ---
+
+
+@respx.mock
+async def test_async_downgrade_provider_returns_installed() -> None:
+    downgraded = {**INSTALLED_PROVIDER, "installed_version": "1.0.0"}
+    route = respx.post("http://localhost:8000/providers/installed/pragma/qdrant/downgrade").mock(
+        return_value=httpx.Response(200, json=downgraded)
+    )
+
+    async with AsyncPragmaClient(auth_token=None) as client:
+        result = await client.downgrade_provider("pragma/qdrant", target_version="1.0.0")
+
+    assert isinstance(result, InstalledProvider)
+    assert result.installed_version == "1.0.0"
+
+    import json
+
+    body = json.loads(route.calls[0].request.content)
+    assert "target_version" in body
+    assert body["target_version"] == "1.0.0"
+    assert "version" not in body
 
 
 # --- Async: list_installed_providers ---

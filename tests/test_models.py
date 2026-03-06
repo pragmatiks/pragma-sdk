@@ -528,6 +528,86 @@ def test_dependency_serialization_excludes_resolved() -> None:
     }
 
 
+# ==================== Resource.upgrade() / downgrade() Tests ====================
+
+
+def test_resource_default_upgrade_returns_inputs_unchanged() -> None:
+    """Default upgrade() returns config and outputs unchanged."""
+    from conftest import StubResource
+
+    config = {"name": "my-resource", "size": 10}
+    outputs = {"url": "https://example.com"}
+
+    result_config, result_outputs = StubResource.upgrade(config, outputs)
+
+    assert result_config is config
+    assert result_outputs is outputs
+
+
+def test_resource_default_downgrade_returns_inputs_unchanged() -> None:
+    """Default downgrade() returns config and outputs unchanged."""
+    from conftest import StubResource
+
+    config = {"name": "my-resource", "size": 10}
+    outputs = {"url": "https://example.com"}
+
+    result_config, result_outputs = StubResource.downgrade(config, outputs)
+
+    assert result_config is config
+    assert result_outputs is outputs
+
+
+def test_resource_custom_upgrade_transforms_data() -> None:
+    """Custom upgrade() override transforms config and outputs."""
+    from typing import ClassVar
+
+    from conftest import StubConfig, StubOutputs
+
+    from pragma_sdk import Resource
+
+    class V2Resource(Resource[StubConfig, StubOutputs]):
+        provider: ClassVar[str] = "test"
+        resource: ClassVar[str] = "v2"
+
+        async def on_create(self) -> StubOutputs:
+            return StubOutputs(url="")
+
+        async def on_update(self, _previous_config: StubConfig) -> StubOutputs:
+            return StubOutputs(url="")
+
+        async def on_delete(self) -> None:
+            pass
+
+        @classmethod
+        def upgrade(cls, config: dict, outputs: dict | None) -> tuple[dict, dict | None]:
+            config["new_field"] = "default_value"
+
+            if outputs is not None:
+                outputs["extra"] = True
+
+            return config, outputs
+
+        @classmethod
+        def downgrade(cls, config: dict, outputs: dict | None) -> tuple[dict, dict | None]:
+            config.pop("new_field", None)
+
+            if outputs is not None:
+                outputs.pop("extra", None)
+
+            return config, outputs
+
+    config = {"name": "my-resource"}
+    outputs = {"url": "https://example.com"}
+
+    upgraded_config, upgraded_outputs = V2Resource.upgrade(config, outputs)
+    assert upgraded_config["new_field"] == "default_value"
+    assert upgraded_outputs["extra"] is True
+
+    downgraded_config, downgraded_outputs = V2Resource.downgrade(upgraded_config, upgraded_outputs)
+    assert "new_field" not in downgraded_config
+    assert "extra" not in downgraded_outputs
+
+
 # ==================== Resource.set_owner() Tests ====================
 
 
