@@ -1,4 +1,4 @@
-"""Provider models for the Provider Store feature."""
+"""Provider models for the provider catalog."""
 
 from __future__ import annotations
 
@@ -11,14 +11,14 @@ from pragma_sdk.models.enums import ProviderScope, ResourceTier, TrustTier, Upgr
 
 
 class ProviderAuthor(BaseModel):
-    """Author information for a store provider."""
+    """Author information for a provider."""
 
     tenant_id: str
     org_name: str
 
 
 class Provider(BaseModel):
-    """Full store provider metadata."""
+    """Full provider metadata."""
 
     name: str
     display_name: str
@@ -36,7 +36,7 @@ class Provider(BaseModel):
 
 
 class ProviderVersion(BaseModel):
-    """A published version of a store provider."""
+    """A published version of a provider."""
 
     provider_name: str
     version: str
@@ -54,9 +54,9 @@ class ProviderVersion(BaseModel):
 
 
 class ProviderInstallation(BaseModel):
-    """A store provider installed in the current tenant."""
+    """A provider installed in the current tenant."""
 
-    store_provider_name: str
+    provider_name: str
     installed_version: str
     upgrade_policy: UpgradePolicy
     resource_tier: ResourceTier

@@ -437,7 +437,7 @@ class PragmaClient(BaseClient):
         limit: int = 20,
         offset: int = 0,
     ) -> PaginatedResponse[Provider]:
-        """Browse and search the provider store.
+        """Browse and search the provider catalog.
 
         Args:
             query: Search query string.
@@ -520,7 +520,7 @@ class PragmaClient(BaseClient):
         return Provider.model_validate(response)
 
     def delete_provider(self, provider_name: str) -> None:
-        """Delete a provider from the store.
+        """Delete a provider from the catalog.
 
         Args:
             provider_name: Namespaced provider name ('org/name').
@@ -551,9 +551,9 @@ class PragmaClient(BaseClient):
             version: Version string for this release.
             changelog: Optional changelog text.
             force: If True, allow overwriting an existing version.
-            display_name: Human-friendly provider name for the store listing.
-            description: Provider description for the store listing.
-            tags: Tags for the store listing.
+            display_name: Human-friendly provider name for the catalog listing.
+            description: Provider description for the catalog listing.
+            tags: Tags for the catalog listing.
 
         Returns:
             Published version info.
@@ -632,7 +632,7 @@ class PragmaClient(BaseClient):
         resource_tier: ResourceTier | str = ResourceTier.STANDARD,
         upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
     ) -> ProviderInstallation:
-        """Install a provider from the store.
+        """Install a provider from the catalog.
 
         Args:
             provider_name: Namespaced provider name ('org/name').
@@ -1105,7 +1105,7 @@ class AsyncPragmaClient(BaseClient):
         limit: int = 20,
         offset: int = 0,
     ) -> PaginatedResponse[Provider]:
-        """Browse and search the provider store.
+        """Browse and search the provider catalog.
 
         Args:
             query: Search query string.
@@ -1188,7 +1188,7 @@ class AsyncPragmaClient(BaseClient):
         return Provider.model_validate(response)
 
     async def delete_provider(self, provider_name: str) -> None:
-        """Delete a provider from the store.
+        """Delete a provider from the catalog.
 
         Args:
             provider_name: Namespaced provider name ('org/name').
@@ -1219,9 +1219,9 @@ class AsyncPragmaClient(BaseClient):
             version: Version string for this release.
             changelog: Optional changelog text.
             force: If True, allow overwriting an existing version.
-            display_name: Human-friendly provider name for the store listing.
-            description: Provider description for the store listing.
-            tags: Tags for the store listing.
+            display_name: Human-friendly provider name for the catalog listing.
+            description: Provider description for the catalog listing.
+            tags: Tags for the catalog listing.
 
         Returns:
             Published version info.
@@ -1300,7 +1300,7 @@ class AsyncPragmaClient(BaseClient):
         resource_tier: ResourceTier | str = ResourceTier.STANDARD,
         upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
     ) -> ProviderInstallation:
-        """Install a provider from the store.
+        """Install a provider from the catalog.
 
         Args:
             provider_name: Namespaced provider name ('org/name').

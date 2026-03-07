@@ -41,7 +41,7 @@ class ResponseStatus(StrEnum):
 
 
 class TrustTier(StrEnum):
-    """Trust level for store providers."""
+    """Trust level for providers."""
 
     OFFICIAL = "official"
     VERIFIED = "verified"
@@ -49,7 +49,7 @@ class TrustTier(StrEnum):
 
 
 class VersionStatus(StrEnum):
-    """Build/publish status for a store provider version."""
+    """Build/publish status for a provider version."""
 
     BUILDING = "building"
     PUBLISHED = "published"
@@ -58,21 +58,21 @@ class VersionStatus(StrEnum):
 
 
 class UpgradePolicy(StrEnum):
-    """Upgrade policy for installed store providers."""
+    """Upgrade policy for installed providers."""
 
     AUTO = "auto"
     MANUAL = "manual"
 
 
 class ProviderScope(StrEnum):
-    """Scope of a provider in the unified store."""
+    """Scope of a provider in the catalog."""
 
     PUBLIC = "public"
     TENANT = "tenant"
 
 
 class ResourceTier(StrEnum):
-    """Resource tier for installed store providers."""
+    """Resource tier for installed providers."""
 
     FREE = "free"
     STANDARD = "standard"

@@ -1,4 +1,4 @@
-"""Tests for provider store client methods."""
+"""Tests for provider catalog client methods."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from pragma_sdk.models import (
     Provider,
     ProviderInstallation,
     ProviderVersion,
+    ResourceSchema,
     ResourceTier,
     TrustTier,
     UpgradePolicy,
@@ -53,7 +54,7 @@ STORE_VERSION = {
 }
 
 INSTALLED_PROVIDER = {
-    "store_provider_name": "qdrant",
+    "provider_name": "qdrant",
     "installed_version": "1.2.0",
     "upgrade_policy": "manual",
     "resource_tier": "standard",
@@ -180,7 +181,7 @@ def test_install_provider_returns_installation() -> None:
         result = client.install_provider("pragma/qdrant", version="1.2.0")
 
     assert isinstance(result, ProviderInstallation)
-    assert result.store_provider_name == "qdrant"
+    assert result.provider_name == "qdrant"
     assert result.installed_version == "1.2.0"
     assert result.upgrade_policy == UpgradePolicy.MANUAL
     assert result.resource_tier == ResourceTier.STANDARD
@@ -284,7 +285,7 @@ def test_list_installations_returns_installations() -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], ProviderInstallation)
-    assert result[0].store_provider_name == "qdrant"
+    assert result[0].provider_name == "qdrant"
 
 
 # --- Sync: publish_provider ---
@@ -536,7 +537,7 @@ async def test_async_install_provider_returns_installation() -> None:
         result = await client.install_provider("pragma/qdrant", version="1.2.0")
 
     assert isinstance(result, ProviderInstallation)
-    assert result.store_provider_name == "qdrant"
+    assert result.provider_name == "qdrant"
     assert result.installed_version == "1.2.0"
 
 
@@ -638,7 +639,7 @@ async def test_async_list_installations_returns_installations() -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], ProviderInstallation)
-    assert result[0].store_provider_name == "qdrant"
+    assert result[0].provider_name == "qdrant"
 
 
 # --- Async: publish_provider ---
@@ -781,3 +782,172 @@ async def test_async_get_deployment_status_returns_result() -> None:
     assert isinstance(result, DeploymentResult)
     assert result.deployment_name == "pragma-qdrant"
     assert result.ready_replicas == 1
+
+
+# --- Sync: list_resource_schemas ---
+
+
+RESOURCE_SCHEMA_FULL = {
+    "provider": "pragma/qdrant",
+    "resource": "collection",
+    "config_schema": {"type": "object", "properties": {"size": {"type": "integer"}}},
+    "outputs_schema": {"type": "object", "properties": {"url": {"type": "string"}}},
+    "description": "Qdrant collection",
+    "tags": ["vector", "database"],
+    "created_at": "2026-01-15T12:00:00Z",
+    "updated_at": "2026-02-20T10:30:00Z",
+}
+
+RESOURCE_SCHEMA_MINIMAL = {
+    "provider": "pragma/qdrant",
+    "resource": "collection",
+}
+
+
+@respx.mock
+def test_list_resource_schemas_returns_schemas() -> None:
+    respx.get("http://localhost:8000/resources/schemas").mock(
+        return_value=httpx.Response(200, json=[RESOURCE_SCHEMA_FULL])
+    )
+
+    with PragmaClient(auth_token=None) as client:
+        result = client.list_resource_schemas()
+
+    assert len(result) == 1
+    schema = result[0]
+    assert isinstance(schema, ResourceSchema)
+    assert schema.provider == "pragma/qdrant"
+    assert schema.resource == "collection"
+    assert schema.config_schema == {"type": "object", "properties": {"size": {"type": "integer"}}}
+    assert schema.outputs_schema == {"type": "object", "properties": {"url": {"type": "string"}}}
+    assert schema.description == "Qdrant collection"
+    assert schema.tags == ["vector", "database"]
+
+
+@respx.mock
+def test_list_resource_schemas_with_none_optional_fields() -> None:
+    schema_data = {
+        "provider": "pragma/qdrant",
+        "resource": "collection",
+        "config_schema": None,
+        "outputs_schema": {},
+        "description": None,
+        "tags": None,
+        "created_at": None,
+        "updated_at": None,
+    }
+    respx.get("http://localhost:8000/resources/schemas").mock(return_value=httpx.Response(200, json=[schema_data]))
+
+    with PragmaClient(auth_token=None) as client:
+        result = client.list_resource_schemas()
+
+    schema = result[0]
+    assert schema.config_schema is None
+    assert schema.outputs_schema == {}
+    assert schema.description is None
+    assert schema.tags is None
+
+
+@respx.mock
+def test_list_resource_schemas_with_missing_optional_fields() -> None:
+    respx.get("http://localhost:8000/resources/schemas").mock(
+        return_value=httpx.Response(200, json=[RESOURCE_SCHEMA_MINIMAL])
+    )
+
+    with PragmaClient(auth_token=None) as client:
+        result = client.list_resource_schemas()
+
+    schema = result[0]
+    assert schema.provider == "pragma/qdrant"
+    assert schema.resource == "collection"
+    assert schema.config_schema is None
+    assert schema.outputs_schema == {}
+    assert schema.description is None
+    assert schema.tags is None
+    assert schema.created_at is None
+    assert schema.updated_at is None
+
+
+@respx.mock
+def test_list_resource_schemas_passes_provider_filter() -> None:
+    route = respx.get("http://localhost:8000/resources/schemas").mock(return_value=httpx.Response(200, json=[]))
+
+    with PragmaClient(auth_token=None) as client:
+        client.list_resource_schemas(provider="pragma/qdrant")
+
+    assert route.calls[0].request.url.params["provider"] == "pragma/qdrant"
+
+
+# --- Async: list_resource_schemas ---
+
+
+@respx.mock
+async def test_async_list_resource_schemas_returns_schemas() -> None:
+    respx.get("http://localhost:8000/resources/schemas").mock(
+        return_value=httpx.Response(200, json=[RESOURCE_SCHEMA_FULL])
+    )
+
+    async with AsyncPragmaClient(auth_token=None) as client:
+        result = await client.list_resource_schemas()
+
+    assert len(result) == 1
+    schema = result[0]
+    assert isinstance(schema, ResourceSchema)
+    assert schema.provider == "pragma/qdrant"
+    assert schema.resource == "collection"
+    assert schema.config_schema == {"type": "object", "properties": {"size": {"type": "integer"}}}
+    assert schema.outputs_schema == {"type": "object", "properties": {"url": {"type": "string"}}}
+
+
+@respx.mock
+async def test_async_list_resource_schemas_with_none_optional_fields() -> None:
+    schema_data = {
+        "provider": "pragma/qdrant",
+        "resource": "collection",
+        "config_schema": None,
+        "outputs_schema": {},
+        "description": None,
+        "tags": None,
+        "created_at": None,
+        "updated_at": None,
+    }
+    respx.get("http://localhost:8000/resources/schemas").mock(return_value=httpx.Response(200, json=[schema_data]))
+
+    async with AsyncPragmaClient(auth_token=None) as client:
+        result = await client.list_resource_schemas()
+
+    schema = result[0]
+    assert schema.config_schema is None
+    assert schema.outputs_schema == {}
+    assert schema.description is None
+    assert schema.tags is None
+
+
+@respx.mock
+async def test_async_list_resource_schemas_with_missing_optional_fields() -> None:
+    respx.get("http://localhost:8000/resources/schemas").mock(
+        return_value=httpx.Response(200, json=[RESOURCE_SCHEMA_MINIMAL])
+    )
+
+    async with AsyncPragmaClient(auth_token=None) as client:
+        result = await client.list_resource_schemas()
+
+    schema = result[0]
+    assert schema.provider == "pragma/qdrant"
+    assert schema.resource == "collection"
+    assert schema.config_schema is None
+    assert schema.outputs_schema == {}
+    assert schema.description is None
+    assert schema.tags is None
+    assert schema.created_at is None
+    assert schema.updated_at is None
+
+
+@respx.mock
+async def test_async_list_resource_schemas_passes_provider_filter() -> None:
+    route = respx.get("http://localhost:8000/resources/schemas").mock(return_value=httpx.Response(200, json=[]))
+
+    async with AsyncPragmaClient(auth_token=None) as client:
+        await client.list_resource_schemas(provider="pragma/qdrant")
+
+    assert route.calls[0].request.url.params["provider"] == "pragma/qdrant"
