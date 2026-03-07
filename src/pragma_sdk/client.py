@@ -13,15 +13,14 @@ from pragma_sdk.auth import BearerAuth
 from pragma_sdk.config import get_token_for_context
 from pragma_sdk.models import (
     DeploymentResult,
-    InstalledProvider,
-    InstalledProviderSummary,
     PaginatedResponse,
+    Provider,
+    ProviderInstallation,
     ProviderScope,
+    ProviderVersion,
     Resource,
+    ResourceSchema,
     ResourceTier,
-    StoreProviderDetail,
-    StoreProviderSummary,
-    StoreVersion,
     TrustTier,
     UpgradePolicy,
     UserInfo,
@@ -229,14 +228,14 @@ class PragmaClient(BaseClient):
             return [model.model_validate(item) for item in response]
         return response
 
-    def list_resource_types(self, provider: str | None = None) -> list[dict[str, Any]]:
-        """List available resource types from deployed providers.
+    def list_resource_schemas(self, provider: str | None = None) -> list[ResourceSchema]:
+        """List available resource schemas from deployed providers.
 
         Args:
             provider: Filter by provider name.
 
         Returns:
-            List of resource definitions containing provider, resource, schema, description.
+            List of resource schemas containing provider, resource, schema, description.
 
         Raises:
             httpx.HTTPStatusError: If the request fails.
@@ -244,7 +243,8 @@ class PragmaClient(BaseClient):
         params = {}
         if provider:
             params["provider"] = provider
-        return self._request("GET", "/resources/types", params=params)
+        response = self._request("GET", "/resources/schemas", params=params)
+        return [ResourceSchema.model_validate(item) for item in response]
 
     def get_resource[ResourceT: Resource](
         self,
@@ -436,7 +436,7 @@ class PragmaClient(BaseClient):
         tags: list[str] | None = None,
         limit: int = 20,
         offset: int = 0,
-    ) -> PaginatedResponse[StoreProviderSummary]:
+    ) -> PaginatedResponse[Provider]:
         """Browse and search the provider store.
 
         Args:
@@ -448,7 +448,7 @@ class PragmaClient(BaseClient):
             offset: Pagination offset.
 
         Returns:
-            Paginated list of provider summaries.
+            Paginated list of providers.
 
         Raises:
             httpx.HTTPStatusError: If the request fails.
@@ -468,25 +468,41 @@ class PragmaClient(BaseClient):
             params["tags"] = tags
 
         response = self._request("GET", "/providers", params=params)
-        return PaginatedResponse[StoreProviderSummary].model_validate(response)
+        return PaginatedResponse[Provider].model_validate(response)
 
-    def get_provider(self, provider_name: str) -> StoreProviderDetail:
-        """Get detailed info for a provider including versions.
+    def get_provider(self, provider_name: str) -> Provider:
+        """Get provider info.
 
         Args:
             provider_name: Namespaced provider name ('org/name').
 
         Returns:
-            Provider detail with version history.
+            Provider metadata.
 
         Raises:
             httpx.HTTPStatusError: If provider not found or request fails.
         """  # noqa: DOC502
         path = _validate_provider_name(provider_name)
         response = self._request("GET", f"/providers/{path}")
-        return StoreProviderDetail.model_validate(response)
+        return Provider.model_validate(response)
 
-    def update_provider(self, provider_name: str, metadata: dict[str, Any]) -> StoreProviderDetail:
+    def list_provider_versions(self, provider_name: str) -> list[ProviderVersion]:
+        """List all versions of a provider.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+
+        Returns:
+            List of provider versions.
+
+        Raises:
+            httpx.HTTPStatusError: If provider not found or request fails.
+        """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
+        response = self._request("GET", f"/providers/{path}/versions")
+        return [ProviderVersion.model_validate(item) for item in response]
+
+    def update_provider(self, provider_name: str, metadata: dict[str, Any]) -> Provider:
         """Update provider metadata.
 
         Args:
@@ -494,14 +510,14 @@ class PragmaClient(BaseClient):
             metadata: Fields to update (e.g. display_name, description, tags).
 
         Returns:
-            Updated provider detail.
+            Updated provider.
 
         Raises:
             httpx.HTTPStatusError: If provider not found or update fails.
         """  # noqa: DOC502
         path = _validate_provider_name(provider_name)
         response = self._request("PATCH", f"/providers/{path}", json_data=metadata)
-        return StoreProviderDetail.model_validate(response)
+        return Provider.model_validate(response)
 
     def delete_provider(self, provider_name: str) -> None:
         """Delete a provider from the store.
@@ -526,7 +542,7 @@ class PragmaClient(BaseClient):
         display_name: str | None = None,
         description: str | None = None,
         tags: list[str] | None = None,
-    ) -> StoreVersion:
+    ) -> ProviderVersion:
         """Publish a new version of a provider.
 
         Args:
@@ -569,9 +585,9 @@ class PragmaClient(BaseClient):
             files={"code": ("source.tar.gz", tarball, "application/gzip")},
             data=data,
         )
-        return StoreVersion.model_validate(response)
+        return ProviderVersion.model_validate(response)
 
-    def get_publish_status(self, provider_name: str, version: str) -> StoreVersion:
+    def get_publish_status(self, provider_name: str, version: str) -> ProviderVersion:
         """Check build/publish status for a provider version.
 
         Args:
@@ -586,7 +602,7 @@ class PragmaClient(BaseClient):
         """  # noqa: DOC502
         path = _validate_provider_name(provider_name)
         response = self._request("GET", f"/providers/{path}/versions/{version}/status")
-        return StoreVersion.model_validate(response)
+        return ProviderVersion.model_validate(response)
 
     def stream_publish_logs(self, provider_name: str, version: str) -> AbstractContextManager[httpx.Response]:
         """Stream build logs for a provider version.
@@ -615,7 +631,7 @@ class PragmaClient(BaseClient):
         version: str | None = None,
         resource_tier: ResourceTier | str = ResourceTier.STANDARD,
         upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
-    ) -> InstalledProvider:
+    ) -> ProviderInstallation:
         """Install a provider from the store.
 
         Args:
@@ -641,19 +657,19 @@ class PragmaClient(BaseClient):
             data["version"] = version
 
         response = self._request("POST", "/providers/install", json_data=data)
-        return InstalledProvider.model_validate(response)
+        return ProviderInstallation.model_validate(response)
 
-    def list_installed_providers(self) -> list[InstalledProviderSummary]:
+    def list_installations(self) -> list[ProviderInstallation]:
         """List installed providers for the current tenant.
 
         Returns:
-            List of installed provider summaries.
+            List of provider installations.
 
         Raises:
             httpx.HTTPStatusError: If the request fails.
         """  # noqa: DOC502
         response = self._request("GET", "/providers/installed")
-        return [InstalledProviderSummary.model_validate(item) for item in response]
+        return [ProviderInstallation.model_validate(item) for item in response]
 
     def uninstall_provider(self, provider_name: str, *, cascade: bool = False) -> None:
         """Uninstall an installed provider.
@@ -673,7 +689,7 @@ class PragmaClient(BaseClient):
 
         self._request("DELETE", f"/providers/installed/{path}", params=params)
 
-    def upgrade_provider(self, provider_name: str, target_version: str | None = None) -> InstalledProvider:
+    def upgrade_provider(self, provider_name: str, target_version: str | None = None) -> ProviderInstallation:
         """Upgrade an installed provider.
 
         Args:
@@ -693,9 +709,9 @@ class PragmaClient(BaseClient):
             data["version"] = target_version
 
         response = self._request("POST", f"/providers/installed/{path}/upgrade", json_data=data)
-        return InstalledProvider.model_validate(response)
+        return ProviderInstallation.model_validate(response)
 
-    def downgrade_provider(self, provider_name: str, target_version: str) -> InstalledProvider:
+    def downgrade_provider(self, provider_name: str, target_version: str) -> ProviderInstallation:
         """Downgrade an installed provider to a specific version.
 
         Args:
@@ -716,7 +732,7 @@ class PragmaClient(BaseClient):
         data: dict = {"target_version": target_version}
 
         response = self._request("POST", f"/providers/installed/{path}/downgrade", json_data=data)
-        return InstalledProvider.model_validate(response)
+        return ProviderInstallation.model_validate(response)
 
     def deploy_provider(self, provider_name: str, version: str | None = None) -> DeploymentResult:
         """Deploy or redeploy an installed provider.
@@ -880,14 +896,14 @@ class AsyncPragmaClient(BaseClient):
             return [model.model_validate(item) for item in response]
         return response
 
-    async def list_resource_types(self, provider: str | None = None) -> list[dict[str, Any]]:
-        """List available resource types from deployed providers.
+    async def list_resource_schemas(self, provider: str | None = None) -> list[ResourceSchema]:
+        """List available resource schemas from deployed providers.
 
         Args:
             provider: Filter by provider name.
 
         Returns:
-            List of resource definitions containing provider, resource, schema, description.
+            List of resource schemas containing provider, resource, schema, description.
 
         Raises:
             httpx.HTTPStatusError: If the request fails.
@@ -895,7 +911,8 @@ class AsyncPragmaClient(BaseClient):
         params = {}
         if provider:
             params["provider"] = provider
-        return await self._request("GET", "/resources/types", params=params)
+        response = await self._request("GET", "/resources/schemas", params=params)
+        return [ResourceSchema.model_validate(item) for item in response]
 
     async def get_resource[ResourceT: Resource](
         self,
@@ -1087,7 +1104,7 @@ class AsyncPragmaClient(BaseClient):
         tags: list[str] | None = None,
         limit: int = 20,
         offset: int = 0,
-    ) -> PaginatedResponse[StoreProviderSummary]:
+    ) -> PaginatedResponse[Provider]:
         """Browse and search the provider store.
 
         Args:
@@ -1099,7 +1116,7 @@ class AsyncPragmaClient(BaseClient):
             offset: Pagination offset.
 
         Returns:
-            Paginated list of provider summaries.
+            Paginated list of providers.
 
         Raises:
             httpx.HTTPStatusError: If the request fails.
@@ -1119,25 +1136,41 @@ class AsyncPragmaClient(BaseClient):
             params["tags"] = tags
 
         response = await self._request("GET", "/providers", params=params)
-        return PaginatedResponse[StoreProviderSummary].model_validate(response)
+        return PaginatedResponse[Provider].model_validate(response)
 
-    async def get_provider(self, provider_name: str) -> StoreProviderDetail:
-        """Get detailed info for a provider including versions.
+    async def get_provider(self, provider_name: str) -> Provider:
+        """Get provider info.
 
         Args:
             provider_name: Namespaced provider name ('org/name').
 
         Returns:
-            Provider detail with version history.
+            Provider metadata.
 
         Raises:
             httpx.HTTPStatusError: If provider not found or request fails.
         """  # noqa: DOC502
         path = _validate_provider_name(provider_name)
         response = await self._request("GET", f"/providers/{path}")
-        return StoreProviderDetail.model_validate(response)
+        return Provider.model_validate(response)
 
-    async def update_provider(self, provider_name: str, metadata: dict[str, Any]) -> StoreProviderDetail:
+    async def list_provider_versions(self, provider_name: str) -> list[ProviderVersion]:
+        """List all versions of a provider.
+
+        Args:
+            provider_name: Namespaced provider name ('org/name').
+
+        Returns:
+            List of provider versions.
+
+        Raises:
+            httpx.HTTPStatusError: If provider not found or request fails.
+        """  # noqa: DOC502
+        path = _validate_provider_name(provider_name)
+        response = await self._request("GET", f"/providers/{path}/versions")
+        return [ProviderVersion.model_validate(item) for item in response]
+
+    async def update_provider(self, provider_name: str, metadata: dict[str, Any]) -> Provider:
         """Update provider metadata.
 
         Args:
@@ -1145,14 +1178,14 @@ class AsyncPragmaClient(BaseClient):
             metadata: Fields to update (e.g. display_name, description, tags).
 
         Returns:
-            Updated provider detail.
+            Updated provider.
 
         Raises:
             httpx.HTTPStatusError: If provider not found or update fails.
         """  # noqa: DOC502
         path = _validate_provider_name(provider_name)
         response = await self._request("PATCH", f"/providers/{path}", json_data=metadata)
-        return StoreProviderDetail.model_validate(response)
+        return Provider.model_validate(response)
 
     async def delete_provider(self, provider_name: str) -> None:
         """Delete a provider from the store.
@@ -1177,7 +1210,7 @@ class AsyncPragmaClient(BaseClient):
         display_name: str | None = None,
         description: str | None = None,
         tags: list[str] | None = None,
-    ) -> StoreVersion:
+    ) -> ProviderVersion:
         """Publish a new version of a provider.
 
         Args:
@@ -1220,9 +1253,9 @@ class AsyncPragmaClient(BaseClient):
             files={"code": ("source.tar.gz", tarball, "application/gzip")},
             data=data,
         )
-        return StoreVersion.model_validate(response)
+        return ProviderVersion.model_validate(response)
 
-    async def get_publish_status(self, provider_name: str, version: str) -> StoreVersion:
+    async def get_publish_status(self, provider_name: str, version: str) -> ProviderVersion:
         """Check build/publish status for a provider version.
 
         Args:
@@ -1237,7 +1270,7 @@ class AsyncPragmaClient(BaseClient):
         """  # noqa: DOC502
         path = _validate_provider_name(provider_name)
         response = await self._request("GET", f"/providers/{path}/versions/{version}/status")
-        return StoreVersion.model_validate(response)
+        return ProviderVersion.model_validate(response)
 
     def stream_publish_logs(self, provider_name: str, version: str) -> AbstractAsyncContextManager[httpx.Response]:
         """Stream build logs for a provider version.
@@ -1266,7 +1299,7 @@ class AsyncPragmaClient(BaseClient):
         version: str | None = None,
         resource_tier: ResourceTier | str = ResourceTier.STANDARD,
         upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
-    ) -> InstalledProvider:
+    ) -> ProviderInstallation:
         """Install a provider from the store.
 
         Args:
@@ -1292,19 +1325,19 @@ class AsyncPragmaClient(BaseClient):
             data["version"] = version
 
         response = await self._request("POST", "/providers/install", json_data=data)
-        return InstalledProvider.model_validate(response)
+        return ProviderInstallation.model_validate(response)
 
-    async def list_installed_providers(self) -> list[InstalledProviderSummary]:
+    async def list_installations(self) -> list[ProviderInstallation]:
         """List installed providers for the current tenant.
 
         Returns:
-            List of installed provider summaries.
+            List of provider installations.
 
         Raises:
             httpx.HTTPStatusError: If the request fails.
         """  # noqa: DOC502
         response = await self._request("GET", "/providers/installed")
-        return [InstalledProviderSummary.model_validate(item) for item in response]
+        return [ProviderInstallation.model_validate(item) for item in response]
 
     async def uninstall_provider(self, provider_name: str, *, cascade: bool = False) -> None:
         """Uninstall an installed provider.
@@ -1324,7 +1357,7 @@ class AsyncPragmaClient(BaseClient):
 
         await self._request("DELETE", f"/providers/installed/{path}", params=params)
 
-    async def upgrade_provider(self, provider_name: str, target_version: str | None = None) -> InstalledProvider:
+    async def upgrade_provider(self, provider_name: str, target_version: str | None = None) -> ProviderInstallation:
         """Upgrade an installed provider.
 
         Args:
@@ -1344,9 +1377,9 @@ class AsyncPragmaClient(BaseClient):
             data["version"] = target_version
 
         response = await self._request("POST", f"/providers/installed/{path}/upgrade", json_data=data)
-        return InstalledProvider.model_validate(response)
+        return ProviderInstallation.model_validate(response)
 
-    async def downgrade_provider(self, provider_name: str, target_version: str) -> InstalledProvider:
+    async def downgrade_provider(self, provider_name: str, target_version: str) -> ProviderInstallation:
         """Downgrade an installed provider to a specific version.
 
         Args:
@@ -1367,7 +1400,7 @@ class AsyncPragmaClient(BaseClient):
         data: dict = {"target_version": target_version}
 
         response = await self._request("POST", f"/providers/installed/{path}/downgrade", json_data=data)
-        return InstalledProvider.model_validate(response)
+        return ProviderInstallation.model_validate(response)
 
     async def deploy_provider(self, provider_name: str, version: str | None = None) -> DeploymentResult:
         """Deploy or redeploy an installed provider.

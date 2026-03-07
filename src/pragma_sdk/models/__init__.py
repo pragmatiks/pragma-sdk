@@ -8,7 +8,7 @@ from pragma_sdk.models.api import (
     ProviderResponse,
     ProviderStatus,
     PushResult,
-    ResourceDefinition,
+    ResourceSchema,
     UserInfo,
 )
 from pragma_sdk.models.base import Config, Outputs, Resource
@@ -22,6 +22,13 @@ from pragma_sdk.models.enums import (
     TrustTier,
     UpgradePolicy,
     VersionStatus,
+)
+from pragma_sdk.models.provider import (
+    PaginatedResponse,
+    Provider,
+    ProviderAuthor,
+    ProviderInstallation,
+    ProviderVersion,
 )
 from pragma_sdk.models.references import (
     Dependency,
@@ -41,17 +48,6 @@ from pragma_sdk.models.references import (
     is_dependency_marker,
     is_field_ref_marker,
 )
-from pragma_sdk.models.store import (
-    InstalledProvider,
-    InstalledProviderSummary,
-    PaginatedResponse,
-    StoreAuthor,
-    StoreProvider,
-    StoreProviderDetail,
-    StoreProviderSummary,
-    StoreVersion,
-    StoreVersionDetail,
-)
 
 
 __all__ = [
@@ -68,32 +64,28 @@ __all__ = [
     "ImmutableDependency",
     "ImmutableField",
     "ImmutableSensitiveField",
-    "InstalledProvider",
-    "InstalledProviderSummary",
     "Outputs",
     "OwnerReference",
     "PaginatedResponse",
+    "Provider",
+    "ProviderAuthor",
     "ProviderDeleteResult",
     "ProviderInfo",
+    "ProviderInstallation",
     "ProviderResponse",
     "ProviderScope",
     "ProviderStatus",
+    "ProviderVersion",
     "PushResult",
     "Resource",
-    "ResourceDefinition",
     "ResourceReference",
+    "ResourceSchema",
     "ResourceTier",
     "ResponseStatus",
     "Sensitive",
     "SensitiveDependency",
     "SensitiveField",
     "SensitiveOutput",
-    "StoreAuthor",
-    "StoreProvider",
-    "StoreProviderDetail",
-    "StoreProviderSummary",
-    "StoreVersion",
-    "StoreVersionDetail",
     "TrustTier",
     "UpgradePolicy",
     "UserInfo",

@@ -1,4 +1,4 @@
-"""Store models for the Provider Store feature."""
+"""Provider models for the Provider Store feature."""
 
 from __future__ import annotations
 
@@ -10,35 +10,20 @@ from pydantic import BaseModel
 from pragma_sdk.models.enums import ProviderScope, ResourceTier, TrustTier, UpgradePolicy, VersionStatus
 
 
-class StoreAuthor(BaseModel):
+class ProviderAuthor(BaseModel):
     """Author information for a store provider."""
 
     tenant_id: str
     org_name: str
 
 
-class StoreProviderSummary(BaseModel):
-    """Summary view of a store provider for catalog listings."""
-
-    name: str
-    display_name: str
-    description: str
-    author: StoreAuthor
-    trust_tier: TrustTier
-    scope: ProviderScope = ProviderScope.PUBLIC
-    icon_url: str | None = None
-    tags: list[str]
-    latest_version: str | None = None
-    install_count: int
-
-
-class StoreProvider(BaseModel):
+class Provider(BaseModel):
     """Full store provider metadata."""
 
     name: str
     display_name: str
     description: str
-    author: StoreAuthor
+    author: ProviderAuthor
     trust_tier: TrustTier
     scope: ProviderScope = ProviderScope.PUBLIC
     icon_url: str | None = None
@@ -50,7 +35,7 @@ class StoreProvider(BaseModel):
     updated_at: datetime
 
 
-class StoreVersion(BaseModel):
+class ProviderVersion(BaseModel):
     """A published version of a store provider."""
 
     provider_name: str
@@ -68,41 +53,18 @@ class StoreVersion(BaseModel):
     updated_at: datetime
 
 
-class StoreProviderDetail(BaseModel):
-    """Detailed store provider info including version history."""
-
-    provider: StoreProvider
-    versions: list[StoreVersion]
-
-
-class StoreVersionDetail(BaseModel):
-    """Detail view for a single store provider version."""
-
-    version: StoreVersion
-
-
-class InstalledProvider(BaseModel):
+class ProviderInstallation(BaseModel):
     """A store provider installed in the current tenant."""
 
     store_provider_name: str
     installed_version: str
     upgrade_policy: UpgradePolicy
     resource_tier: ResourceTier
+    current_version: str | None = None
+    current_image: str | None = None
     installed_at: datetime
     created_at: datetime
     updated_at: datetime
-
-
-class InstalledProviderSummary(BaseModel):
-    """Summary of an installed store provider with upgrade info."""
-
-    store_provider_name: str
-    installed_version: str
-    upgrade_policy: UpgradePolicy
-    resource_tier: ResourceTier
-    installed_at: datetime
-    latest_version: str | None = None
-    upgrade_available: bool
 
 
 class PaginatedResponse[T](BaseModel):
