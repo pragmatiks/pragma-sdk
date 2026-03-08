@@ -817,6 +817,11 @@ def test_list_resource_schemas_returns_schemas() -> None:
     assert schema.description == "Qdrant collection"
     assert schema.tags == ["vector", "database"]
 
+    serialized = schema.model_dump(mode="json")
+    assert "config_schema" in serialized
+    assert "outputs_schema" in serialized
+    assert "schema" not in serialized
+
 
 @respx.mock
 def test_list_resource_schemas_with_none_optional_fields() -> None:
