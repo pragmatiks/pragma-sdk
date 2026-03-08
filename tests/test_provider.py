@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 import respx
@@ -21,7 +23,7 @@ from pragma_sdk.models import (
 )
 
 
-STORE_PROVIDER = {
+PROVIDER_DATA = {
     "name": "qdrant",
     "display_name": "Qdrant",
     "description": "Vector database provider",
@@ -37,7 +39,7 @@ STORE_PROVIDER = {
     "updated_at": "2026-02-20T10:30:00Z",
 }
 
-STORE_VERSION = {
+VERSION_DATA = {
     "provider_name": "qdrant",
     "version": "1.2.0",
     "runtime_version": "0.5.0",
@@ -73,7 +75,7 @@ def test_list_providers_returns_paginated_response() -> None:
         return_value=httpx.Response(
             200,
             json={
-                "items": [STORE_PROVIDER],
+                "items": [PROVIDER_DATA],
                 "total": 1,
                 "limit": 20,
                 "offset": 0,
@@ -121,7 +123,7 @@ def test_list_providers_passes_query_params() -> None:
 @respx.mock
 def test_get_provider_returns_provider() -> None:
     respx.get("http://localhost:8000/providers/pragma/qdrant").mock(
-        return_value=httpx.Response(200, json=STORE_PROVIDER)
+        return_value=httpx.Response(200, json=PROVIDER_DATA)
     )
 
     with PragmaClient(auth_token=None) as client:
@@ -157,7 +159,7 @@ def test_get_provider_raises_on_unnamespaced_name() -> None:
 @respx.mock
 def test_list_provider_versions_returns_versions() -> None:
     respx.get("http://localhost:8000/providers/pragma/qdrant/versions").mock(
-        return_value=httpx.Response(200, json=[STORE_VERSION])
+        return_value=httpx.Response(200, json=[VERSION_DATA])
     )
 
     with PragmaClient(auth_token=None) as client:
@@ -239,8 +241,6 @@ def test_upgrade_provider_returns_installation() -> None:
     assert isinstance(result, ProviderInstallation)
     assert result.installed_version == "1.3.0"
 
-    import json
-
     body = json.loads(route.calls[0].request.content)
     assert "version" in body
     assert body["version"] == "1.3.0"
@@ -262,8 +262,6 @@ def test_downgrade_provider_returns_installation() -> None:
 
     assert isinstance(result, ProviderInstallation)
     assert result.installed_version == "1.0.0"
-
-    import json
 
     body = json.loads(route.calls[0].request.content)
     assert "target_version" in body
@@ -293,7 +291,7 @@ def test_list_installations_returns_installations() -> None:
 
 @respx.mock
 def test_publish_provider_returns_version() -> None:
-    building_version = {**STORE_VERSION, "status": "building", "published_at": None}
+    building_version = {**VERSION_DATA, "status": "building", "published_at": None}
     route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
         return_value=httpx.Response(202, json=building_version)
     )
@@ -310,7 +308,7 @@ def test_publish_provider_returns_version() -> None:
 
 @respx.mock
 def test_publish_provider_includes_metadata_fields() -> None:
-    building_version = {**STORE_VERSION, "status": "building", "published_at": None}
+    building_version = {**VERSION_DATA, "status": "building", "published_at": None}
     route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
         return_value=httpx.Response(202, json=building_version)
     )
@@ -338,7 +336,7 @@ def test_publish_provider_includes_metadata_fields() -> None:
 
 @respx.mock
 def test_publish_provider_omits_none_metadata_fields() -> None:
-    building_version = {**STORE_VERSION, "status": "building", "published_at": None}
+    building_version = {**VERSION_DATA, "status": "building", "published_at": None}
     route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
         return_value=httpx.Response(202, json=building_version)
     )
@@ -360,7 +358,7 @@ def test_publish_provider_omits_none_metadata_fields() -> None:
 @respx.mock
 def test_get_publish_status_returns_version() -> None:
     respx.get("http://localhost:8000/providers/pragma/qdrant/versions/1.2.0/status").mock(
-        return_value=httpx.Response(200, json=STORE_VERSION)
+        return_value=httpx.Response(200, json=VERSION_DATA)
     )
 
     with PragmaClient(auth_token=None) as client:
@@ -439,7 +437,7 @@ async def test_async_list_providers_returns_paginated_response() -> None:
         return_value=httpx.Response(
             200,
             json={
-                "items": [STORE_PROVIDER],
+                "items": [PROVIDER_DATA],
                 "total": 1,
                 "limit": 20,
                 "offset": 0,
@@ -484,7 +482,7 @@ async def test_async_list_providers_passes_query_params() -> None:
 @respx.mock
 async def test_async_get_provider_returns_provider() -> None:
     respx.get("http://localhost:8000/providers/pragma/qdrant").mock(
-        return_value=httpx.Response(200, json=STORE_PROVIDER)
+        return_value=httpx.Response(200, json=PROVIDER_DATA)
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
@@ -513,7 +511,7 @@ async def test_async_get_provider_raises_on_not_found() -> None:
 @respx.mock
 async def test_async_list_provider_versions_returns_versions() -> None:
     respx.get("http://localhost:8000/providers/pragma/qdrant/versions").mock(
-        return_value=httpx.Response(200, json=[STORE_VERSION])
+        return_value=httpx.Response(200, json=[VERSION_DATA])
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
@@ -593,8 +591,6 @@ async def test_async_upgrade_provider_returns_installation() -> None:
     assert isinstance(result, ProviderInstallation)
     assert result.installed_version == "1.3.0"
 
-    import json
-
     body = json.loads(route.calls[0].request.content)
     assert "version" in body
     assert body["version"] == "1.3.0"
@@ -616,8 +612,6 @@ async def test_async_downgrade_provider_returns_installation() -> None:
 
     assert isinstance(result, ProviderInstallation)
     assert result.installed_version == "1.0.0"
-
-    import json
 
     body = json.loads(route.calls[0].request.content)
     assert "target_version" in body
@@ -647,7 +641,7 @@ async def test_async_list_installations_returns_installations() -> None:
 
 @respx.mock
 async def test_async_publish_provider_returns_version() -> None:
-    building_version = {**STORE_VERSION, "status": "building", "published_at": None}
+    building_version = {**VERSION_DATA, "status": "building", "published_at": None}
     route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
         return_value=httpx.Response(202, json=building_version)
     )
@@ -664,7 +658,7 @@ async def test_async_publish_provider_returns_version() -> None:
 
 @respx.mock
 async def test_async_publish_provider_includes_metadata_fields() -> None:
-    building_version = {**STORE_VERSION, "status": "building", "published_at": None}
+    building_version = {**VERSION_DATA, "status": "building", "published_at": None}
     route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
         return_value=httpx.Response(202, json=building_version)
     )
@@ -692,7 +686,7 @@ async def test_async_publish_provider_includes_metadata_fields() -> None:
 
 @respx.mock
 async def test_async_publish_provider_omits_none_metadata_fields() -> None:
-    building_version = {**STORE_VERSION, "status": "building", "published_at": None}
+    building_version = {**VERSION_DATA, "status": "building", "published_at": None}
     route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
         return_value=httpx.Response(202, json=building_version)
     )
@@ -714,7 +708,7 @@ async def test_async_publish_provider_omits_none_metadata_fields() -> None:
 @respx.mock
 async def test_async_get_publish_status_returns_version() -> None:
     respx.get("http://localhost:8000/providers/pragma/qdrant/versions/1.2.0/status").mock(
-        return_value=httpx.Response(200, json=STORE_VERSION)
+        return_value=httpx.Response(200, json=VERSION_DATA)
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
