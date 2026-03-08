@@ -133,21 +133,17 @@ class ProviderResponse(BaseModel):
     timestamp: datetime
 
 
-class ResourceDefinition(BaseModel):
+class ResourceSchema(BaseModel):
     """Metadata about a registered resource type."""
 
     provider: str
     resource: str
-    schema_: dict[str, Any] | None = PydanticField(default=None, alias="schema")
+    config_schema: dict[str, Any] | None = None
+    outputs_schema: dict[str, Any] = PydanticField(default_factory=dict)
     description: str | None = None
     tags: list[str] | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
-
-    @property
-    def id(self) -> str:
-        """Unique resource definition ID: resource_definition:{provider}_{resource}."""
-        return f"resource_definition:{self.provider}_{self.resource}"
 
 
 class UserInfo(BaseModel):

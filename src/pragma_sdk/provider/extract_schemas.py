@@ -18,7 +18,7 @@ from pragma_sdk.provider.discovery import discover_resources
 
 
 class ProviderMetadata(TypedDict, total=False):
-    """Store metadata fields from a provider's pyproject.toml [tool.pragma] section."""
+    """Catalog metadata fields from a provider's pyproject.toml [tool.pragma] section."""
 
     display_name: str
     description: str
@@ -142,7 +142,7 @@ _EXPECTED_TYPES: dict[str, type] = {
 
 
 def extract_metadata() -> ProviderMetadata | None:
-    """Extract provider store metadata from pyproject.toml [tool.pragma] section.
+    """Extract provider catalog metadata from pyproject.toml [tool.pragma] section.
 
     Reads optional metadata keys (display_name, description, author, tags, icon)
     from the [tool.pragma] section. Only includes keys that are present.
