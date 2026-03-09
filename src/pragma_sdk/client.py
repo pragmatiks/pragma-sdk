@@ -223,7 +223,7 @@ class PragmaClient(BaseClient):
         if reveal:
             params["reveal"] = "true"
 
-        response = self._request("GET", "/resources/", params=params)
+        response = self._request("GET", "/resources", params=params)
         if model is not None:
             return [model.model_validate(item) for item in response]
         return response
@@ -891,7 +891,7 @@ class AsyncPragmaClient(BaseClient):
         if reveal:
             params["reveal"] = "true"
 
-        response = await self._request("GET", "/resources/", params=params)
+        response = await self._request("GET", "/resources", params=params)
         if model is not None:
             return [model.model_validate(item) for item in response]
         return response
