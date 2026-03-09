@@ -38,7 +38,7 @@ def test_pragma_client_is_healthy_returns_false_on_error() -> None:
 @respx.mock
 def test_pragma_client_list_resources_returns_dicts_without_model() -> None:
     """Returns list of dicts when no model parameter provided."""
-    respx.get("http://localhost:8000/resources/").mock(
+    respx.get("http://localhost:8000/resources").mock(
         return_value=httpx.Response(
             200,
             json=[
@@ -60,7 +60,7 @@ def test_pragma_client_list_resources_returns_dicts_without_model() -> None:
 @respx.mock
 def test_pragma_client_list_resources_returns_typed_resources_with_model() -> None:
     """Returns list of typed Resource instances when model parameter provided."""
-    respx.get("http://localhost:8000/resources/").mock(
+    respx.get("http://localhost:8000/resources").mock(
         return_value=httpx.Response(
             200,
             json=[
@@ -227,7 +227,7 @@ async def test_async_pragma_client_is_healthy_returns_false_on_error() -> None:
 @respx.mock
 async def test_async_pragma_client_list_resources_returns_dicts_without_model() -> None:
     """Returns list of dicts when no model parameter provided."""
-    respx.get("http://localhost:8000/resources/").mock(
+    respx.get("http://localhost:8000/resources").mock(
         return_value=httpx.Response(
             200,
             json=[
@@ -249,7 +249,7 @@ async def test_async_pragma_client_list_resources_returns_dicts_without_model() 
 @respx.mock
 async def test_async_pragma_client_list_resources_returns_typed_resources_with_model() -> None:
     """Returns list of typed Resource instances when model parameter provided."""
-    respx.get("http://localhost:8000/resources/").mock(
+    respx.get("http://localhost:8000/resources").mock(
         return_value=httpx.Response(
             200,
             json=[
