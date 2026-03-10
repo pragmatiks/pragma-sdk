@@ -60,7 +60,7 @@ class BaseClient:
     def __init__(
         self,
         base_url: str | None = None,
-        timeout: float = 10.0,
+        timeout: float = 30.0,
         auth_token: str | None | object = ...,
         context: str | None = None,
         require_auth: bool = False,
@@ -109,7 +109,7 @@ class PragmaClient(BaseClient):
     def __init__(
         self,
         base_url: str | None = None,
-        timeout: float = 10.0,
+        timeout: float = 30.0,
         auth_token: str | None | object = ...,
         context: str | None = None,
         require_auth: bool = False,
@@ -785,7 +785,7 @@ class AsyncPragmaClient(BaseClient):
     def __init__(
         self,
         base_url: str | None = None,
-        timeout: float = 10.0,
+        timeout: float = 30.0,
         auth_token: str | None | object = ...,
         context: str | None = None,
         require_auth: bool = False,
