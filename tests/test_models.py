@@ -16,6 +16,7 @@ from pragma_sdk.models import (
     OwnerReference,
     PushResult,
     ResourceReference,
+    format_internal_resource_id,
     format_resource_id,
     is_dependency_marker,
 )
@@ -37,15 +38,27 @@ def test_lifecycle_state_values() -> None:
 
 
 def test_format_resource_id() -> None:
-    """format_resource_id creates format ID."""
+    """format_resource_id creates external format ID."""
     result = format_resource_id("postgres", "database", "my-db")
-    assert result == "resource:postgres_database_my-db"
+    assert result == "postgres/database/my-db"
+
+
+def test_format_internal_resource_id() -> None:
+    """format_internal_resource_id creates internal SurrealDB format ID."""
+    result = format_internal_resource_id("postgres", "database", "analytics")
+    assert result == "resource:postgres_database_analytics"
+
+
+def test_format_internal_resource_id_slash_normalization() -> None:
+    """format_internal_resource_id normalizes slashes in resource type."""
+    result = format_internal_resource_id("gcp", "cloudsql/instance", "my-db")
+    assert result == "resource:gcp_cloudsql_instance_my-db"
 
 
 def test_resource_reference_id_property() -> None:
     """ResourceReference.id returns formatted resource ID."""
     ref = ResourceReference(provider="postgres", resource="database", name="my-db")
-    assert ref.id == "resource:postgres_database_my-db"
+    assert ref.id == "postgres/database/my-db"
 
 
 def test_field_reference_extends_resource_reference() -> None:
@@ -60,7 +73,7 @@ def test_field_reference_extends_resource_reference() -> None:
     assert ref.resource == "database"
     assert ref.name == "my-db"
     assert ref.field == "outputs.connection_url"
-    assert ref.id == "resource:postgres_database_my-db"
+    assert ref.id == "postgres/database/my-db"
 
 
 # --- OwnerReference tests ---
@@ -77,7 +90,7 @@ def test_owner_reference_initialization() -> None:
 def test_owner_reference_id_property() -> None:
     """OwnerReference.id returns formatted resource ID."""
     ref = OwnerReference(provider="app", resource="server", name="my-server")
-    assert ref.id == "resource:app_server_my-server"
+    assert ref.id == "app/server/my-server"
 
 
 def test_owner_reference_validation_requires_all_fields() -> None:
@@ -118,7 +131,7 @@ def test_config_forbids_extra_fields() -> None:
 
 def test_resource_id_property(stub_resource: StubResource) -> None:
     """Resource.id returns formatted resource ID."""
-    assert stub_resource.id == "resource:test_stub_my-resource"
+    assert stub_resource.id == "test/stub/my-resource"
 
 
 def test_resource_default_lifecycle_state(stub_resource: StubResource) -> None:
@@ -263,7 +276,7 @@ def test_dependency_id_property() -> None:
         resource="database",
         name="my-db",
     )
-    assert dep.id == "resource:postgres_database_my-db"
+    assert dep.id == "postgres/database/my-db"
 
 
 def test_dependency_serialization_includes_marker() -> None:
@@ -369,7 +382,7 @@ def test_dependency_in_config() -> None:
 
     assert isinstance(config.database, Dependency)
     assert config.database.name == "my-db"
-    assert config.database.id == "resource:test_stub_my-db"
+    assert config.database.id == "test/stub/my-db"
 
 
 # --- is_dependency_marker tests ---
@@ -1032,7 +1045,7 @@ async def test_wait_ready_propagates_resource_failed_error(stub_resource: StubRe
     from pragma_sdk.exceptions import ResourceFailedError
 
     ctx = MockRuntimeContextForWaitReady(
-        raise_exception=ResourceFailedError("resource:test_stub_test", "Database connection failed")
+        raise_exception=ResourceFailedError("test/stub/test", "Database connection failed")
     )
     token = set_runtime_context(ctx)
     try:
