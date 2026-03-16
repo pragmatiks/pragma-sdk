@@ -190,6 +190,58 @@ def test_install_provider_returns_installation() -> None:
 
 
 @respx.mock
+def test_install_provider_sends_config_in_request_body() -> None:
+    installed_with_config = {
+        **INSTALLED_PROVIDER,
+        "config": {"API_KEY": "secret-123", "REGION": "eu-west-1"},
+    }
+    route = respx.post("http://localhost:8000/providers/install").mock(
+        return_value=httpx.Response(201, json=installed_with_config)
+    )
+
+    with PragmaClient(auth_token=None) as client:
+        result = client.install_provider(
+            "pragma/qdrant",
+            version="1.2.0",
+            config={"API_KEY": "secret-123", "REGION": "eu-west-1"},
+        )
+
+    body = json.loads(route.calls[0].request.content)
+    assert body["config"] == {"API_KEY": "secret-123", "REGION": "eu-west-1"}
+    assert isinstance(result, ProviderInstallation)
+    assert result.config == {"API_KEY": "secret-123", "REGION": "eu-west-1"}
+
+
+@respx.mock
+def test_install_provider_omits_config_when_none() -> None:
+    route = respx.post("http://localhost:8000/providers/install").mock(
+        return_value=httpx.Response(201, json=INSTALLED_PROVIDER)
+    )
+
+    with PragmaClient(auth_token=None) as client:
+        client.install_provider("pragma/qdrant")
+
+    body = json.loads(route.calls[0].request.content)
+    assert "config" not in body
+
+
+@respx.mock
+def test_install_provider_sends_empty_config_when_empty_dict() -> None:
+    installed_with_empty_config = {**INSTALLED_PROVIDER, "config": {}}
+    route = respx.post("http://localhost:8000/providers/install").mock(
+        return_value=httpx.Response(201, json=installed_with_empty_config)
+    )
+
+    with PragmaClient(auth_token=None) as client:
+        result = client.install_provider("pragma/test", config={})
+
+    body = json.loads(route.calls[0].request.content)
+    assert body["config"] == {}
+    assert isinstance(result, ProviderInstallation)
+    assert result.config == {}
+
+
+@respx.mock
 def test_install_provider_raises_on_conflict() -> None:
     respx.post("http://localhost:8000/providers/install").mock(
         return_value=httpx.Response(409, json={"detail": "Already installed"})
@@ -537,6 +589,58 @@ async def test_async_install_provider_returns_installation() -> None:
     assert isinstance(result, ProviderInstallation)
     assert result.provider_name == "qdrant"
     assert result.installed_version == "1.2.0"
+
+
+@respx.mock
+async def test_async_install_provider_sends_config_in_request_body() -> None:
+    installed_with_config = {
+        **INSTALLED_PROVIDER,
+        "config": {"API_KEY": "secret-123", "REGION": "eu-west-1"},
+    }
+    route = respx.post("http://localhost:8000/providers/install").mock(
+        return_value=httpx.Response(201, json=installed_with_config)
+    )
+
+    async with AsyncPragmaClient(auth_token=None) as client:
+        result = await client.install_provider(
+            "pragma/qdrant",
+            version="1.2.0",
+            config={"API_KEY": "secret-123", "REGION": "eu-west-1"},
+        )
+
+    body = json.loads(route.calls[0].request.content)
+    assert body["config"] == {"API_KEY": "secret-123", "REGION": "eu-west-1"}
+    assert isinstance(result, ProviderInstallation)
+    assert result.config == {"API_KEY": "secret-123", "REGION": "eu-west-1"}
+
+
+@respx.mock
+async def test_async_install_provider_omits_config_when_none() -> None:
+    route = respx.post("http://localhost:8000/providers/install").mock(
+        return_value=httpx.Response(201, json=INSTALLED_PROVIDER)
+    )
+
+    async with AsyncPragmaClient(auth_token=None) as client:
+        await client.install_provider("pragma/qdrant")
+
+    body = json.loads(route.calls[0].request.content)
+    assert "config" not in body
+
+
+@respx.mock
+async def test_async_install_provider_sends_empty_config_when_empty_dict() -> None:
+    installed_with_empty_config = {**INSTALLED_PROVIDER, "config": {}}
+    route = respx.post("http://localhost:8000/providers/install").mock(
+        return_value=httpx.Response(201, json=installed_with_empty_config)
+    )
+
+    async with AsyncPragmaClient(auth_token=None) as client:
+        result = await client.install_provider("pragma/test", config={})
+
+    body = json.loads(route.calls[0].request.content)
+    assert body["config"] == {}
+    assert isinstance(result, ProviderInstallation)
+    assert result.config == {}
 
 
 @respx.mock

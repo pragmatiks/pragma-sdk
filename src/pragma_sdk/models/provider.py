@@ -60,6 +60,7 @@ class ProviderInstallation(BaseModel):
     installed_version: str
     upgrade_policy: UpgradePolicy
     resource_tier: ResourceTier
+    config: dict[str, str] | None = None
     current_version: str | None = None
     current_image: str | None = None
     installed_at: datetime
