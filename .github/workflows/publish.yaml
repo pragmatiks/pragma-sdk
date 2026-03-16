@@ -2,11 +2,12 @@ name: Publish SDK
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
-  release:
+  bump-and-release:
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -17,10 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Extract version from tag
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -30,23 +28,58 @@ jobs:
       - name: Set up Python
         run: uv python install 3.13
 
+      - name: Install commitizen
+        run: uv tool install commitizen
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version and create changelog
+        id: bump
+        run: |
+          cz bump --yes --changelog 2>&1 | tee bump_output.txt
+          EXIT_CODE=${PIPESTATUS[0]}
+
+          # Check for no-bump scenarios (cz bump exits 0 even for NO_COMMITS_TO_BUMP)
+          if grep -qE "No commits found|is not a bump|NO_COMMITS_TO_BUMP" bump_output.txt; then
+            echo "No version bump needed"
+            echo "bumped=false" >> $GITHUB_OUTPUT
+          elif [ $EXIT_CODE -eq 0 ]; then
+            echo "bumped=true" >> $GITHUB_OUTPUT
+            NEW_VERSION=$(cz version --project)
+            echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          else
+            cat bump_output.txt
+            exit 1
+          fi
+
+      - name: Push changes
+        if: steps.bump.outputs.bumped == 'true'
+        run: git push origin main --tags
+
       - name: Build package
+        if: steps.bump.outputs.bumped == 'true'
         run: uv build
 
       - name: Create GitHub Release
+        if: steps.bump.outputs.bumped == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: pragmatiks-sdk v${{ steps.version.outputs.version }}
+          tag_name: v${{ steps.bump.outputs.version }}
+          name: pragmatiks-sdk v${{ steps.bump.outputs.version }}
           files: |
             dist/*.tar.gz
             dist/*.whl
           generate_release_notes: true
 
       - name: Publish to PyPI
+        if: steps.bump.outputs.bumped == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: Generate GitHub App token
+        if: steps.bump.outputs.bumped == 'true'
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
@@ -56,25 +89,28 @@ jobs:
           repositories: pragma-providers,pragma-cli,pragma-os
 
       - name: Trigger providers update
+        if: steps.bump.outputs.bumped == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           gh workflow run update-sdk.yaml \
             --repo pragmatiks/pragma-providers \
-            --field sdk_version=${{ steps.version.outputs.version }}
+            --field sdk_version=${{ steps.bump.outputs.version }}
 
       - name: Trigger CLI update
+        if: steps.bump.outputs.bumped == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           gh workflow run update-sdk.yaml \
             --repo pragmatiks/pragma-cli \
-            --field sdk_version=${{ steps.version.outputs.version }}
+            --field sdk_version=${{ steps.bump.outputs.version }}
 
       - name: Trigger OS update and runtime rebuild
+        if: steps.bump.outputs.bumped == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           gh workflow run update-sdk.yaml \
             --repo pragmatiks/pragma-os \
-            --field sdk_version=${{ steps.version.outputs.version }}
+            --field sdk_version=${{ steps.bump.outputs.version }}
