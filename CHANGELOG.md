@@ -1,3 +1,9 @@
+## v0.29.0 (2026-03-16)
+
+### Feat
+
+- add deactivate_resource method to sync and async clients (#19)
+
 ## v0.28.0 (2026-03-16)
 
 ### Feat
