@@ -1,3 +1,9 @@
+## v0.29.1 (2026-03-16)
+
+### Fix
+
+- unset VIRTUAL_ENV in ty pre-commit hook (#20)
+
 ## v0.29.0 (2026-03-16)
 
 ### Feat
