@@ -1,3 +1,14 @@
+## v0.28.0 (2026-03-16)
+
+### Feat
+
+- add config parameter to install_provider for provider-level env vars (#17)
+- provider migration framework (PRA-226) (#14)
+
+### Refactor
+
+- rename provider models and client methods (PRA-253) (#15)
+
 ## v0.26.0 (2026-03-04)
 
 ## v0.25.0 (2026-03-04)
