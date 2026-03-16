@@ -631,6 +631,7 @@ class PragmaClient(BaseClient):
         version: str | None = None,
         resource_tier: ResourceTier | str = ResourceTier.STANDARD,
         upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
+        config: dict[str, str] | None = None,
     ) -> ProviderInstallation:
         """Install a provider from the catalog.
 
@@ -639,6 +640,8 @@ class PragmaClient(BaseClient):
             version: Specific version to install (latest if None).
             resource_tier: Resource tier for the installation.
             upgrade_policy: Upgrade policy for the installation.
+            config: Key-value pairs injected as environment variables
+                on the provider deployment.
 
         Returns:
             Installed provider info.
@@ -655,6 +658,9 @@ class PragmaClient(BaseClient):
 
         if version is not None:
             data["version"] = version
+
+        if config is not None:
+            data["config"] = config
 
         response = self._request("POST", "/providers/install", json_data=data)
         return ProviderInstallation.model_validate(response)
@@ -1299,6 +1305,7 @@ class AsyncPragmaClient(BaseClient):
         version: str | None = None,
         resource_tier: ResourceTier | str = ResourceTier.STANDARD,
         upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
+        config: dict[str, str] | None = None,
     ) -> ProviderInstallation:
         """Install a provider from the catalog.
 
@@ -1307,6 +1314,8 @@ class AsyncPragmaClient(BaseClient):
             version: Specific version to install (latest if None).
             resource_tier: Resource tier for the installation.
             upgrade_policy: Upgrade policy for the installation.
+            config: Key-value pairs injected as environment variables
+                on the provider deployment.
 
         Returns:
             Installed provider info.
@@ -1323,6 +1332,9 @@ class AsyncPragmaClient(BaseClient):
 
         if version is not None:
             data["version"] = version
+
+        if config is not None:
+            data["config"] = config
 
         response = await self._request("POST", "/providers/install", json_data=data)
         return ProviderInstallation.model_validate(response)
