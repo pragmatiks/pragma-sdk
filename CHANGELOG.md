@@ -1,3 +1,9 @@
+## v0.30.0 (2026-03-16)
+
+### Feat
+
+- expose resource ID as provider/resource/name (#21)
+
 ## v0.29.1 (2026-03-16)
 
 ### Fix
