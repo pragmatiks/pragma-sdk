@@ -71,7 +71,7 @@ def test_reset_runtime_context_clears_context():
 async def test_wait_for_resource_state_raises_when_no_context():
     """wait_for_resource_state() raises RuntimeError when called without context."""
     with pytest.raises(RuntimeError, match="must be called from within a provider lifecycle handler"):
-        await wait_for_resource_state("resource:test", LifecycleState.READY)
+        await wait_for_resource_state("test/type/name", LifecycleState.READY)
 
 
 @pytest.mark.asyncio
@@ -81,13 +81,13 @@ async def test_wait_for_resource_state_delegates_to_context():
     token = set_runtime_context(ctx)
     try:
         result = await wait_for_resource_state(
-            "resource:provider_type_name",
+            "provider/type/name",
             LifecycleState.READY,
             timeout=30.0,
         )
         assert result == {"lifecycle_state": "ready", "outputs": {"url": "http://test"}}
         assert len(ctx.wait_calls) == 1
-        assert ctx.wait_calls[0] == ("resource:provider_type_name", LifecycleState.READY, 30.0)
+        assert ctx.wait_calls[0] == ("provider/type/name", LifecycleState.READY, 30.0)
     finally:
         reset_runtime_context(token)
 
@@ -98,7 +98,7 @@ async def test_wait_for_resource_state_uses_default_timeout():
     ctx = MockRuntimeContext()
     token = set_runtime_context(ctx)
     try:
-        await wait_for_resource_state("resource:test", LifecycleState.READY)
+        await wait_for_resource_state("test/type/name", LifecycleState.READY)
         assert ctx.wait_calls[0][2] == 60.0
     finally:
         reset_runtime_context(token)

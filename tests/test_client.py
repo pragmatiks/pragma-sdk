@@ -83,7 +83,7 @@ def test_pragma_client_list_resources_returns_typed_resources_with_model() -> No
 @respx.mock
 def test_pragma_client_get_resource_returns_dict_without_model() -> None:
     """Returns dict when no model parameter provided."""
-    respx.get("http://localhost:8000/resources/resource:postgres_database_mydb").mock(
+    respx.get("http://localhost:8000/resources/postgres/database/mydb").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -104,7 +104,7 @@ def test_pragma_client_get_resource_returns_dict_without_model() -> None:
 @respx.mock
 def test_pragma_client_get_resource_returns_typed_resource_with_model() -> None:
     """Returns typed Resource instance when model parameter provided."""
-    respx.get("http://localhost:8000/resources/resource:test_stub_mydb").mock(
+    respx.get("http://localhost:8000/resources/test/stub/mydb").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -169,7 +169,7 @@ def test_pragma_client_apply_resource_returns_typed_resource_with_model() -> Non
 @respx.mock
 def test_pragma_client_deactivate_resource_returns_dict_without_model() -> None:
     """Returns dict when no model parameter provided."""
-    respx.post("http://localhost:8000/resources/resource:postgres_database_mydb/deactivate").mock(
+    respx.post("http://localhost:8000/resources/postgres/database/mydb/deactivate").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -190,7 +190,7 @@ def test_pragma_client_deactivate_resource_returns_dict_without_model() -> None:
 @respx.mock
 def test_pragma_client_deactivate_resource_returns_typed_resource_with_model() -> None:
     """Returns typed Resource instance when model parameter provided."""
-    respx.post("http://localhost:8000/resources/resource:test_stub_mydb/deactivate").mock(
+    respx.post("http://localhost:8000/resources/test/stub/mydb/deactivate").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -212,7 +212,7 @@ def test_pragma_client_deactivate_resource_returns_typed_resource_with_model() -
 @respx.mock
 def test_pragma_client_raises_on_not_found() -> None:
     """Raises HTTPStatusError when resource not found."""
-    respx.get("http://localhost:8000/resources/resource:test_db_notfound").mock(
+    respx.get("http://localhost:8000/resources/test/db/notfound").mock(
         return_value=httpx.Response(404, json={"detail": "Not found"})
     )
 
@@ -315,7 +315,7 @@ async def test_async_pragma_client_list_resources_returns_typed_resources_with_m
 @respx.mock
 async def test_async_pragma_client_get_resource_returns_dict_without_model() -> None:
     """Returns dict when no model parameter provided."""
-    respx.get("http://localhost:8000/resources/resource:postgres_database_mydb").mock(
+    respx.get("http://localhost:8000/resources/postgres/database/mydb").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -336,7 +336,7 @@ async def test_async_pragma_client_get_resource_returns_dict_without_model() -> 
 @respx.mock
 async def test_async_pragma_client_get_resource_returns_typed_resource_with_model() -> None:
     """Returns typed Resource instance when model parameter provided."""
-    respx.get("http://localhost:8000/resources/resource:test_stub_mydb").mock(
+    respx.get("http://localhost:8000/resources/test/stub/mydb").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -403,7 +403,7 @@ async def test_async_pragma_client_apply_resource_returns_typed_resource_with_mo
 @respx.mock
 async def test_async_pragma_client_deactivate_resource_returns_dict_without_model() -> None:
     """Returns dict when no model parameter provided."""
-    respx.post("http://localhost:8000/resources/resource:postgres_database_mydb/deactivate").mock(
+    respx.post("http://localhost:8000/resources/postgres/database/mydb/deactivate").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -424,7 +424,7 @@ async def test_async_pragma_client_deactivate_resource_returns_dict_without_mode
 @respx.mock
 async def test_async_pragma_client_deactivate_resource_returns_typed_resource_with_model() -> None:
     """Returns typed Resource instance when model parameter provided."""
-    respx.post("http://localhost:8000/resources/resource:test_stub_mydb/deactivate").mock(
+    respx.post("http://localhost:8000/resources/test/stub/mydb/deactivate").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -446,7 +446,7 @@ async def test_async_pragma_client_deactivate_resource_returns_typed_resource_wi
 @respx.mock
 async def test_async_pragma_client_raises_on_not_found() -> None:
     """Raises HTTPStatusError when resource not found."""
-    respx.get("http://localhost:8000/resources/resource:test_db_notfound").mock(
+    respx.get("http://localhost:8000/resources/test/db/notfound").mock(
         return_value=httpx.Response(404, json={"detail": "Not found"})
     )
 

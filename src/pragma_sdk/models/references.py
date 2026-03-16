@@ -13,9 +13,33 @@ if TYPE_CHECKING:
 
 
 def format_resource_id(provider: str, resource: str, name: str) -> str:
-    """Format a unique resource ID.
+    """Format an external user-facing resource ID.
 
-    Slashes in resource type are replaced with underscores for URL safety.
+    Uses slash-separated format suitable for display and API paths.
+    Slashes in resource type are replaced with underscores for safety.
+
+    Args:
+        provider: Provider name.
+        resource: Resource type name.
+        name: Resource instance name.
+
+    Returns:
+        Resource ID as `provider/resource/name`.
+    """
+    resource_normalized = resource.replace("/", "_")
+    return f"{provider}/{resource_normalized}/{name}"
+
+
+def format_internal_resource_id(provider: str, resource: str, name: str) -> str:
+    """Format an internal SurrealDB resource ID.
+
+    Uses underscore-separated format with `resource:` prefix for database keys.
+    Slashes in resource type are replaced with underscores for safety.
+
+    Args:
+        provider: Provider name.
+        resource: Resource type name.
+        name: Resource instance name.
 
     Returns:
         Resource ID as `resource:{provider}_{resource}_{name}`.

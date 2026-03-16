@@ -679,7 +679,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
     @property
     def id(self) -> str:
-        """Unique resource ID: resource:{provider}_{resource}_{name}."""
+        """Unique external resource ID: provider/resource/name."""
         return format_resource_id(self.provider, self.resource, self.name)
 
     async def on_create(self) -> OutputsT:
