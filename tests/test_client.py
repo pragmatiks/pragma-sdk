@@ -167,6 +167,49 @@ def test_pragma_client_apply_resource_returns_typed_resource_with_model() -> Non
 
 
 @respx.mock
+def test_pragma_client_deactivate_resource_returns_dict_without_model() -> None:
+    """Returns dict when no model parameter provided."""
+    respx.post("http://localhost:8000/resources/resource:postgres_database_mydb/deactivate").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "name": "mydb",
+                "config": {},
+                "lifecycle_state": "deleting",
+            },
+        )
+    )
+
+    with PragmaClient(auth_token=None) as client:
+        result = client.deactivate_resource("postgres", "database", "mydb")
+
+    assert result["name"] == "mydb"
+    assert result["lifecycle_state"] == "deleting"
+
+
+@respx.mock
+def test_pragma_client_deactivate_resource_returns_typed_resource_with_model() -> None:
+    """Returns typed Resource instance when model parameter provided."""
+    respx.post("http://localhost:8000/resources/resource:test_stub_mydb/deactivate").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "name": "mydb",
+                "config": {"name": "mydb"},
+                "lifecycle_state": "deleting",
+            },
+        )
+    )
+
+    with PragmaClient(auth_token=None) as client:
+        result = client.deactivate_resource("test", "stub", "mydb", model=StubResource)
+
+    assert isinstance(result, StubResource)
+    assert result.name == "mydb"
+    assert result.lifecycle_state == LifecycleState.DELETING
+
+
+@respx.mock
 def test_pragma_client_raises_on_not_found() -> None:
     """Raises HTTPStatusError when resource not found."""
     respx.get("http://localhost:8000/resources/resource:test_db_notfound").mock(
@@ -355,6 +398,49 @@ async def test_async_pragma_client_apply_resource_returns_typed_resource_with_mo
     assert isinstance(result, StubResource)
     assert result.name == "mydb"
     assert result.lifecycle_state == LifecycleState.PENDING
+
+
+@respx.mock
+async def test_async_pragma_client_deactivate_resource_returns_dict_without_model() -> None:
+    """Returns dict when no model parameter provided."""
+    respx.post("http://localhost:8000/resources/resource:postgres_database_mydb/deactivate").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "name": "mydb",
+                "config": {},
+                "lifecycle_state": "deleting",
+            },
+        )
+    )
+
+    async with AsyncPragmaClient(auth_token=None) as client:
+        result = await client.deactivate_resource("postgres", "database", "mydb")
+
+    assert result["name"] == "mydb"
+    assert result["lifecycle_state"] == "deleting"
+
+
+@respx.mock
+async def test_async_pragma_client_deactivate_resource_returns_typed_resource_with_model() -> None:
+    """Returns typed Resource instance when model parameter provided."""
+    respx.post("http://localhost:8000/resources/resource:test_stub_mydb/deactivate").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "name": "mydb",
+                "config": {"name": "mydb"},
+                "lifecycle_state": "deleting",
+            },
+        )
+    )
+
+    async with AsyncPragmaClient(auth_token=None) as client:
+        result = await client.deactivate_resource("test", "stub", "mydb", model=StubResource)
+
+    assert isinstance(result, StubResource)
+    assert result.name == "mydb"
+    assert result.lifecycle_state == LifecycleState.DELETING
 
 
 @respx.mock

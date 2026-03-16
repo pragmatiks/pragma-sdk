@@ -308,6 +308,39 @@ class PragmaClient(BaseClient):
             return model.model_validate(response)
         return response
 
+    def deactivate_resource[ResourceT: Resource](
+        self,
+        provider: str,
+        resource: str,
+        name: str,
+        *,
+        model: type[ResourceT] | None = None,
+    ) -> ResourceT | dict[str, Any]:
+        """Deactivate a resource, triggering provider teardown.
+
+        Soft-deletes the resource by moving it to DELETING state and initiating
+        provider teardown. The resource returns to DRAFT state once teardown completes.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+            model: Resource subclass for typed response; returns raw dict if None.
+
+        Returns:
+            Resource in deleting state as typed instance or raw dict.
+
+        Raises:
+            httpx.HTTPStatusError: If resource not found or deactivation fails.
+        """  # noqa: DOC502
+        resource_id = format_resource_id(provider, resource, name)
+        response = self._request("POST", f"/resources/{resource_id}/deactivate")
+
+        if model is not None:
+            return model.model_validate(response)
+
+        return response
+
     def delete_resource(self, provider: str, resource: str, name: str) -> None:
         """Delete a resource.
 
@@ -980,6 +1013,39 @@ class AsyncPragmaClient(BaseClient):
         response = await self._request("POST", "/resources/apply", json_data=json_data, params=params)
         if model is not None:
             return model.model_validate(response)
+        return response
+
+    async def deactivate_resource[ResourceT: Resource](
+        self,
+        provider: str,
+        resource: str,
+        name: str,
+        *,
+        model: type[ResourceT] | None = None,
+    ) -> ResourceT | dict[str, Any]:
+        """Deactivate a resource, triggering provider teardown.
+
+        Soft-deletes the resource by moving it to DELETING state and initiating
+        provider teardown. The resource returns to DRAFT state once teardown completes.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+            model: Resource subclass for typed response; returns raw dict if None.
+
+        Returns:
+            Resource in deleting state as typed instance or raw dict.
+
+        Raises:
+            httpx.HTTPStatusError: If resource not found or deactivation fails.
+        """  # noqa: DOC502
+        resource_id = format_resource_id(provider, resource, name)
+        response = await self._request("POST", f"/resources/{resource_id}/deactivate")
+
+        if model is not None:
+            return model.model_validate(response)
+
         return response
 
     async def delete_resource(self, provider: str, resource: str, name: str) -> None:
