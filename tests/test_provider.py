@@ -27,7 +27,7 @@ PROVIDER_DATA = {
     "name": "qdrant",
     "display_name": "Qdrant",
     "description": "Vector database provider",
-    "author": {"organization_id": "tenant_123", "org_name": "Pragmatiks"},
+    "author": {"organization_id": "org_123", "org_name": "Pragmatiks"},
     "trust_tier": "official",
     "scope": "public",
     "icon_url": "https://example.com/qdrant.png",
