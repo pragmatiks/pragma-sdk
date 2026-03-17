@@ -77,3 +77,11 @@ class ResourceTier(StrEnum):
     FREE = "free"
     STANDARD = "standard"
     PERFORMANCE = "performance"
+
+
+class OrganizationStatus(StrEnum):
+    """Lifecycle status of an organization."""
+
+    ACTIVE = "active"
+    DEACTIVATING = "deactivating"
+    DELETED = "deleted"

@@ -8,7 +8,13 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic import Field as PydanticField
 
-from pragma_sdk.models.enums import BuildStatus, DeploymentStatus, EventType, ResponseStatus
+from pragma_sdk.models.enums import (
+    BuildStatus,
+    DeploymentStatus,
+    EventType,
+    OrganizationStatus,
+    ResponseStatus,
+)
 
 
 class BuildInfo(BaseModel):
@@ -144,6 +150,26 @@ class ResourceSchema(BaseModel):
     tags: list[str] | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class Organization(BaseModel):
+    """Organization details.
+
+    Attributes:
+        organization_id: Unique identifier for the organization.
+        name: Display name of the organization.
+        slug: URL-friendly identifier for the organization.
+        status: Lifecycle status of the organization.
+        created_at: When the organization was created.
+        updated_at: When the organization was last updated.
+    """
+
+    organization_id: str
+    name: str
+    slug: str
+    status: OrganizationStatus
+    created_at: datetime
+    updated_at: datetime
 
 
 class UserInfo(BaseModel):

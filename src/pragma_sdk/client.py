@@ -13,6 +13,7 @@ from pragma_sdk.auth import BearerAuth
 from pragma_sdk.config import get_token_for_context
 from pragma_sdk.models import (
     DeploymentResult,
+    Organization,
     PaginatedResponse,
     Provider,
     ProviderInstallation,
@@ -811,6 +812,46 @@ class PragmaClient(BaseClient):
         response = self._request("GET", f"/providers/installed/{path}/deployment")
         return DeploymentResult.model_validate(response)
 
+    def list_organizations(self) -> list[Organization]:
+        """List all organizations accessible to the current user.
+
+        Returns:
+            List of organizations.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", "/organizations")
+        return [Organization.model_validate(item) for item in response]
+
+    def get_organization(self, organization_id: str) -> Organization:
+        """Get organization details by ID.
+
+        Args:
+            organization_id: Unique identifier for the organization.
+
+        Returns:
+            Organization details.
+
+        Raises:
+            httpx.HTTPStatusError: If organization not found or request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", f"/organizations/{organization_id}")
+        return Organization.model_validate(response)
+
+    def cleanup_organization(self, organization_id: str) -> None:
+        """Trigger cleanup for an organization.
+
+        Initiates resource teardown and deprovisioning for the organization.
+
+        Args:
+            organization_id: Unique identifier for the organization.
+
+        Raises:
+            httpx.HTTPStatusError: If organization not found or cleanup fails.
+        """  # noqa: DOC502
+        self._request("POST", f"/organizations/{organization_id}/cleanup")
+
 
 class AsyncPragmaClient(BaseClient):
     """Asynchronous client for the Pragma API.
@@ -1517,3 +1558,43 @@ class AsyncPragmaClient(BaseClient):
         path = _validate_provider_name(provider_name)
         response = await self._request("GET", f"/providers/installed/{path}/deployment")
         return DeploymentResult.model_validate(response)
+
+    async def list_organizations(self) -> list[Organization]:
+        """List all organizations accessible to the current user.
+
+        Returns:
+            List of organizations.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        response = await self._request("GET", "/organizations")
+        return [Organization.model_validate(item) for item in response]
+
+    async def get_organization(self, organization_id: str) -> Organization:
+        """Get organization details by ID.
+
+        Args:
+            organization_id: Unique identifier for the organization.
+
+        Returns:
+            Organization details.
+
+        Raises:
+            httpx.HTTPStatusError: If organization not found or request fails.
+        """  # noqa: DOC502
+        response = await self._request("GET", f"/organizations/{organization_id}")
+        return Organization.model_validate(response)
+
+    async def cleanup_organization(self, organization_id: str) -> None:
+        """Trigger cleanup for an organization.
+
+        Initiates resource teardown and deprovisioning for the organization.
+
+        Args:
+            organization_id: Unique identifier for the organization.
+
+        Raises:
+            httpx.HTTPStatusError: If organization not found or cleanup fails.
+        """  # noqa: DOC502
+        await self._request("POST", f"/organizations/{organization_id}/cleanup")
