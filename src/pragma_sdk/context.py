@@ -39,7 +39,7 @@ class RuntimeContext(Protocol):
         """Wait for a resource to reach a specific lifecycle state.
 
         Args:
-            resource_id: Unique resource ID (e.g., "resource:provider_type_name").
+            resource_id: Unique resource ID (e.g., "provider/type/name").
             target_state: State to wait for (typically READY or FAILED).
             timeout: Maximum seconds to wait.
 
@@ -116,7 +116,7 @@ async def wait_for_resource_state(
     coordinating between resources where one needs another to be READY.
 
     Args:
-        resource_id: Unique resource ID (e.g., "resource:provider_type_name").
+        resource_id: Unique resource ID (e.g., "provider/type/name").
         target_state: State to wait for (typically READY or FAILED).
         timeout: Maximum seconds to wait before raising TimeoutError.
 
@@ -133,13 +133,11 @@ async def wait_for_resource_state(
 
         class MyResource(Resource[MyConfig, MyOutputs]):
             async def on_create(self):
-                # Wait for a dependency to be ready
                 data = await wait_for_resource_state(
-                    "resource:other_provider_type_name",
+                    "other_provider/type/name",
                     LifecycleState.READY,
                     timeout=30.0,
                 )
-                # Use data from the ready resource
                 connection_url = data["outputs"]["url"]
         ```
     """

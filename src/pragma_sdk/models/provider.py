@@ -13,7 +13,7 @@ from pragma_sdk.models.enums import ProviderScope, ResourceTier, TrustTier, Upgr
 class ProviderAuthor(BaseModel):
     """Author information for a provider."""
 
-    tenant_id: str
+    organization_id: str
     org_name: str
 
 
