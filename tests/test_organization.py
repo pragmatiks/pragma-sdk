@@ -99,7 +99,9 @@ def test_get_organization_raises_on_not_found() -> None:
 @respx.mock
 def test_cleanup_organization_makes_post_returns_none() -> None:
     """Makes POST request and returns None on success."""
-    route = respx.post("http://localhost:8000/organizations/org_123/cleanup").mock(return_value=httpx.Response(204))
+    route = respx.post("http://localhost:8000/organizations/org_123/cleanup").mock(
+        return_value=httpx.Response(202, json={"status": "cleanup initiated"})
+    )
 
     with PragmaClient(auth_token=None) as client:
         result = client.cleanup_organization("org_123")
@@ -192,7 +194,9 @@ async def test_async_get_organization_raises_on_not_found() -> None:
 @respx.mock
 async def test_async_cleanup_organization_makes_post_returns_none() -> None:
     """Makes POST request and returns None on success."""
-    route = respx.post("http://localhost:8000/organizations/org_123/cleanup").mock(return_value=httpx.Response(204))
+    route = respx.post("http://localhost:8000/organizations/org_123/cleanup").mock(
+        return_value=httpx.Response(202, json={"status": "cleanup initiated"})
+    )
 
     async with AsyncPragmaClient(auth_token=None) as client:
         result = await client.cleanup_organization("org_123")
