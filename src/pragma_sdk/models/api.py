@@ -126,7 +126,7 @@ class ProviderResponse(BaseModel):
     event_id: str
     event_type: EventType
     resource_id: str
-    tenant_id: str
+    organization_id: str
     status: ResponseStatus
     outputs: dict | None = None
     error: str | None = None
