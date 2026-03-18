@@ -25,7 +25,6 @@ from pragma_sdk.models import (
     TrustTier,
     UpgradePolicy,
     UserInfo,
-    format_resource_id,
 )
 
 
@@ -271,13 +270,16 @@ class PragmaClient(BaseClient):
         Raises:
             httpx.HTTPStatusError: If resource not found or request fails.
         """  # noqa: DOC502
-        resource_id = format_resource_id(provider, resource, name)
-        params: dict[str, Any] = {}
+        params: dict[str, Any] = {"provider": provider, "resource": resource, "name": name}
+
         if reveal:
             params["reveal"] = "true"
-        response = self._request("GET", f"/resources/{resource_id}", params=params)
+
+        response = self._request("GET", "/resources/by-name", params=params)
+
         if model is not None:
             return model.model_validate(response)
+
         return response
 
     def apply_resource[ResourceT: Resource](
@@ -334,8 +336,8 @@ class PragmaClient(BaseClient):
         Raises:
             httpx.HTTPStatusError: If resource not found or deactivation fails.
         """  # noqa: DOC502
-        resource_id = format_resource_id(provider, resource, name)
-        response = self._request("POST", f"/resources/{resource_id}/deactivate")
+        params = {"provider": provider, "resource": resource, "name": name}
+        response = self._request("POST", "/resources/deactivate", params=params)
 
         if model is not None:
             return model.model_validate(response)
@@ -348,8 +350,8 @@ class PragmaClient(BaseClient):
         Raises:
             httpx.HTTPStatusError: If resource not found or deletion fails.
         """  # noqa: DOC502
-        resource_id = format_resource_id(provider, resource, name)
-        self._request("DELETE", f"/resources/{resource_id}")
+        params = {"provider": provider, "resource": resource, "name": name}
+        self._request("DELETE", "/resources/by-name", params=params)
 
     def list_dead_letter_events(self, provider: str | None = None) -> list[dict[str, Any]]:
         """List dead letter events with optional provider filter.
@@ -1018,13 +1020,16 @@ class AsyncPragmaClient(BaseClient):
         Raises:
             httpx.HTTPStatusError: If resource not found or request fails.
         """  # noqa: DOC502
-        resource_id = format_resource_id(provider, resource, name)
-        params: dict[str, Any] = {}
+        params: dict[str, Any] = {"provider": provider, "resource": resource, "name": name}
+
         if reveal:
             params["reveal"] = "true"
-        response = await self._request("GET", f"/resources/{resource_id}", params=params)
+
+        response = await self._request("GET", "/resources/by-name", params=params)
+
         if model is not None:
             return model.model_validate(response)
+
         return response
 
     async def apply_resource[ResourceT: Resource](
@@ -1081,8 +1086,8 @@ class AsyncPragmaClient(BaseClient):
         Raises:
             httpx.HTTPStatusError: If resource not found or deactivation fails.
         """  # noqa: DOC502
-        resource_id = format_resource_id(provider, resource, name)
-        response = await self._request("POST", f"/resources/{resource_id}/deactivate")
+        params = {"provider": provider, "resource": resource, "name": name}
+        response = await self._request("POST", "/resources/deactivate", params=params)
 
         if model is not None:
             return model.model_validate(response)
@@ -1095,8 +1100,8 @@ class AsyncPragmaClient(BaseClient):
         Raises:
             httpx.HTTPStatusError: If resource not found or deletion fails.
         """  # noqa: DOC502
-        resource_id = format_resource_id(provider, resource, name)
-        await self._request("DELETE", f"/resources/{resource_id}")
+        params = {"provider": provider, "resource": resource, "name": name}
+        await self._request("DELETE", "/resources/by-name", params=params)
 
     async def list_dead_letter_events(self, provider: str | None = None) -> list[dict[str, Any]]:
         """List dead letter events with optional provider filter.
