@@ -1,3 +1,9 @@
+## v0.32.1 (2026-03-18)
+
+### Fix
+
+- use query params for resource get/delete/deactivate methods (#24)
+
 ## v0.32.0 (2026-03-17)
 
 ## v0.30.0 (2026-03-16)
