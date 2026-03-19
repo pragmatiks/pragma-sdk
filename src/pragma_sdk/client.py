@@ -574,7 +574,6 @@ class PragmaClient(BaseClient):
         version: str,
         changelog: str | None = None,
         *,
-        force: bool = False,
         display_name: str | None = None,
         description: str | None = None,
         tags: list[str] | None = None,
@@ -586,7 +585,6 @@ class PragmaClient(BaseClient):
             tarball: Gzipped tarball containing provider source code.
             version: Version string for this release.
             changelog: Optional changelog text.
-            force: If True, allow overwriting an existing version.
             display_name: Human-friendly provider name for the catalog listing.
             description: Provider description for the catalog listing.
             tags: Tags for the catalog listing.
@@ -602,9 +600,6 @@ class PragmaClient(BaseClient):
 
         if changelog is not None:
             data["changelog"] = changelog
-
-        if force:
-            data["force"] = "true"
 
         if display_name is not None:
             data["display_name"] = display_name
@@ -1324,7 +1319,6 @@ class AsyncPragmaClient(BaseClient):
         version: str,
         changelog: str | None = None,
         *,
-        force: bool = False,
         display_name: str | None = None,
         description: str | None = None,
         tags: list[str] | None = None,
@@ -1336,7 +1330,6 @@ class AsyncPragmaClient(BaseClient):
             tarball: Gzipped tarball containing provider source code.
             version: Version string for this release.
             changelog: Optional changelog text.
-            force: If True, allow overwriting an existing version.
             display_name: Human-friendly provider name for the catalog listing.
             description: Provider description for the catalog listing.
             tags: Tags for the catalog listing.
@@ -1352,9 +1345,6 @@ class AsyncPragmaClient(BaseClient):
 
         if changelog is not None:
             data["changelog"] = changelog
-
-        if force:
-            data["force"] = "true"
 
         if display_name is not None:
             data["display_name"] = display_name
