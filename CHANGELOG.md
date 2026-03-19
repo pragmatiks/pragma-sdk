@@ -1,3 +1,9 @@
+## v0.32.2 (2026-03-19)
+
+### Fix
+
+- remove force parameter from publish_provider (#25)
+
 ## v0.32.1 (2026-03-18)
 
 ### Fix
