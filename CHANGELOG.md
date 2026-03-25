@@ -1,3 +1,9 @@
+## v0.32.4 (2026-03-25)
+
+### Fix
+
+- **ci**: pull --rebase before push to prevent race conditions
+
 ## v0.32.3 (2026-03-25)
 
 ### Refactor
