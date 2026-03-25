@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import ClassVar
 
 import pytest
 
 from pragma_sdk import Config, Field, Outputs, Resource
+from pragma_sdk.context import reset_provider_name, set_provider_name
 from pragma_sdk.provider import ProviderHarness
 
 
@@ -26,7 +28,6 @@ class StubOutputs(Outputs):
 class StubResource(Resource[StubConfig, StubOutputs]):
     """Stub resource with working lifecycle methods."""
 
-    provider: ClassVar[str] = "test"
     resource: ClassVar[str] = "stub"
 
     async def on_create(self) -> StubOutputs:
@@ -44,7 +45,6 @@ class StubResource(Resource[StubConfig, StubOutputs]):
 class FailingResource(Resource[StubConfig, StubOutputs]):
     """Stub resource that fails all lifecycle operations."""
 
-    provider: ClassVar[str] = "test"
     resource: ClassVar[str] = "failing"
 
     async def on_create(self) -> StubOutputs:
@@ -58,6 +58,14 @@ class FailingResource(Resource[StubConfig, StubOutputs]):
     async def on_delete(self) -> None:
         """Fail on delete."""
         raise ValueError("Deletion failed")
+
+
+@pytest.fixture(autouse=True)
+def provider_context() -> Iterator[None]:
+    """Set provider name context for all tests."""
+    token = set_provider_name("test")
+    yield
+    reset_provider_name(token)
 
 
 @pytest.fixture

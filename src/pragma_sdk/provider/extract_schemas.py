@@ -184,7 +184,7 @@ def extract_metadata() -> ProviderMetadata | None:
     return result
 
 
-def extract_schemas(package_name: str) -> list[dict[str, Any]]:
+def extract_schemas(package_name: str, catalog_name: str) -> list[dict[str, Any]]:
     """Extract JSON schemas for all resources in a provider package.
 
     Discovers all Resource classes in the package and extracts their
@@ -192,6 +192,7 @@ def extract_schemas(package_name: str) -> list[dict[str, Any]]:
 
     Args:
         package_name: Python package name to scan (e.g., "postgres_provider").
+        catalog_name: Catalog name of the provider (e.g., "pragmatiks/gcp").
 
     Returns:
         List of schema dictionaries with provider, resource, and config_schema keys.
@@ -200,14 +201,14 @@ def extract_schemas(package_name: str) -> list[dict[str, Any]]:
 
     resources = discover_resources(package_name)
 
-    for (provider, resource), cls in resources.items():
+    for resource_name, cls in resources.items():
         try:
             config_type = get_config_class(cls)
             config_schema = config_type.model_json_schema()
 
             entry: dict[str, Any] = {
-                "provider": provider,
-                "resource": resource,
+                "provider": catalog_name,
+                "resource": resource_name,
                 "config_schema": config_schema,
             }
 

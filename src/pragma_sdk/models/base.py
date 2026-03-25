@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from pydantic import Field as PydanticField
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode
 
-from pragma_sdk.context import apply_resource, get_current_resource_owner, wait_for_resource_state
+from pragma_sdk.context import apply_resource, get_current_resource_owner, get_provider_name, wait_for_resource_state
 from pragma_sdk.models.references import (
     Dependency,
     FieldReference,
@@ -662,7 +662,6 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
     result when called multiple times with the same input.
     """
 
-    provider: ClassVar[str]
     resource: ClassVar[str]
 
     name: str
@@ -676,6 +675,27 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
     provider_version: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+    @property
+    def provider(self) -> str:
+        """Catalog name of the provider that manages this resource.
+
+        Reads the provider name from the runtime context. The runtime sets
+        this before invoking lifecycle methods.
+
+        Returns:
+            Provider catalog name (e.g., "pragmatiks/gcp").
+
+        Raises:
+            RuntimeError: If called outside a runtime context where the
+                provider name has not been set.
+        """
+        name = get_provider_name()
+
+        if name is None:
+            raise RuntimeError("provider name not set — this must be called within a runtime context")
+
+        return name
 
     @property
     def id(self) -> str:

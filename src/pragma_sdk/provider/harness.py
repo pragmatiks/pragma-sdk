@@ -15,7 +15,6 @@ Example:
         some_field: str
 
     class MyResource(Resource[MyConfig, MyOutputs]):
-        provider: ClassVar[str] = "mycompany"
         resource: ClassVar[str] = "myresource"
 
         async def on_create(self) -> MyOutputs:
@@ -41,6 +40,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from uuid import uuid4
 
+from pragma_sdk.context import reset_provider_name, set_provider_name
 from pragma_sdk.models import Config, Outputs, Resource
 from pragma_sdk.types import LifecycleState
 
@@ -119,8 +119,14 @@ class ProviderHarness:
         assert delete_result.success
     """
 
-    def __init__(self) -> None:
-        """Initialize empty harness for testing."""
+    def __init__(self, provider_name: str = "test/local") -> None:
+        """Initialize harness for testing.
+
+        Args:
+            provider_name: Provider name to set in context during lifecycle
+                calls. Defaults to "test/local".
+        """
+        self._provider_name = provider_name
         self._events: list[LifecycleEvent] = []
         self._results: list[LifecycleResult] = []
 
@@ -169,11 +175,12 @@ class ProviderHarness:
         resource = resource_class(
             name=name,
             config=config,
-            outputs=None,  # Outputs don't exist before on_create
+            outputs=None,
             lifecycle_state=LifecycleState.PROCESSING,
             tags=tags,
         )
 
+        provider_token = set_provider_name(self._provider_name)
         try:
             outputs = await resource.on_create()
             result = LifecycleResult(
@@ -189,6 +196,8 @@ class ProviderHarness:
                 resource=resource,
                 event=event,
             )
+        finally:
+            reset_provider_name(provider_token)
 
         self._results.append(result)
         return result
@@ -233,6 +242,7 @@ class ProviderHarness:
             tags=tags,
         )
 
+        provider_token = set_provider_name(self._provider_name)
         try:
             outputs = await resource.on_update(previous_config)
             result = LifecycleResult(
@@ -248,6 +258,8 @@ class ProviderHarness:
                 resource=resource,
                 event=event,
             )
+        finally:
+            reset_provider_name(provider_token)
 
         self._results.append(result)
         return result
@@ -289,6 +301,7 @@ class ProviderHarness:
             tags=tags,
         )
 
+        provider_token = set_provider_name(self._provider_name)
         try:
             await resource.on_delete()
             result = LifecycleResult(
@@ -303,6 +316,8 @@ class ProviderHarness:
                 resource=resource,
                 event=event,
             )
+        finally:
+            reset_provider_name(provider_token)
 
         self._results.append(result)
         return result

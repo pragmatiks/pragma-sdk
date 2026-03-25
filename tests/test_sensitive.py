@@ -31,7 +31,6 @@ class StubOutputs(Outputs):
 class StubResource(Resource[Config, StubOutputs]):
     """Stub resource for dependency type tests."""
 
-    provider: ClassVar[str] = "test"
     resource: ClassVar[str] = "stub"
 
     async def on_create(self) -> StubOutputs:

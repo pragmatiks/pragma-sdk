@@ -8,11 +8,15 @@ import pytest
 
 from pragma_sdk import LifecycleState
 from pragma_sdk.context import (
+    _provider_name,
     get_current_resource_owner,
+    get_provider_name,
     get_runtime_context,
     reset_current_resource_owner,
+    reset_provider_name,
     reset_runtime_context,
     set_current_resource_owner,
+    set_provider_name,
     set_runtime_context,
     wait_for_resource_state,
 )
@@ -133,3 +137,47 @@ def test_reset_current_resource_owner_clears_owner():
     token = set_current_resource_owner(owner)
     reset_current_resource_owner(token)
     assert get_current_resource_owner() is None
+
+
+def test_get_provider_name_returns_none_when_not_set():
+    """get_provider_name() returns None when no provider name is set."""
+    clear_token = _provider_name.set(None)
+    try:
+        assert get_provider_name() is None
+    finally:
+        _provider_name.reset(clear_token)
+
+
+def test_set_provider_name_returns_token():
+    """set_provider_name() returns a token for resetting."""
+    clear_token = _provider_name.set(None)
+    try:
+        token = set_provider_name("pragmatiks/gcp")
+        assert token is not None
+        reset_provider_name(token)
+    finally:
+        _provider_name.reset(clear_token)
+
+
+def test_get_provider_name_returns_set_value():
+    """get_provider_name() returns the provider name that was set."""
+    clear_token = _provider_name.set(None)
+    try:
+        token = set_provider_name("pragmatiks/gcp")
+        try:
+            assert get_provider_name() == "pragmatiks/gcp"
+        finally:
+            reset_provider_name(token)
+    finally:
+        _provider_name.reset(clear_token)
+
+
+def test_reset_provider_name_clears_value():
+    """reset_provider_name() clears the provider name."""
+    clear_token = _provider_name.set(None)
+    try:
+        token = set_provider_name("pragmatiks/gcp")
+        reset_provider_name(token)
+        assert get_provider_name() is None
+    finally:
+        _provider_name.reset(clear_token)

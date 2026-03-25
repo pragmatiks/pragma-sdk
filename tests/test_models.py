@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from pragma_sdk import Config, Dependency, Field, FieldReference, LifecycleState
+from pragma_sdk.context import _provider_name
 from pragma_sdk.models import (
     BuildInfo,
     BuildStatus,
@@ -137,6 +138,21 @@ def test_resource_id_property(stub_resource: StubResource) -> None:
 def test_resource_default_lifecycle_state(stub_resource: StubResource) -> None:
     """Resource defaults to DRAFT lifecycle state."""
     assert stub_resource.lifecycle_state == LifecycleState.DRAFT
+
+
+def test_resource_provider_returns_context_value(stub_resource: StubResource) -> None:
+    """Resource.provider returns the provider name from context."""
+    assert stub_resource.provider == "test"
+
+
+def test_resource_provider_raises_when_context_not_set(stub_resource: StubResource) -> None:
+    """Resource.provider raises RuntimeError when provider name context is not set."""
+    clear_token = _provider_name.set(None)
+    try:
+        with pytest.raises(RuntimeError, match="provider name not set"):
+            stub_resource.provider
+    finally:
+        _provider_name.reset(clear_token)
 
 
 def test_resource_with_field_reference_in_config() -> None:
@@ -579,7 +595,6 @@ def test_resource_custom_upgrade_transforms_data() -> None:
     from pragma_sdk import Resource
 
     class V2Resource(Resource[StubConfig, StubOutputs]):
-        provider: ClassVar[str] = "test"
         resource: ClassVar[str] = "v2"
 
         async def on_create(self) -> StubOutputs:

@@ -91,7 +91,7 @@ Define resources with typed configuration and lifecycle methods:
 ```python
 from pragma_sdk import Provider, Resource, Config, Outputs, Field
 
-gcp = Provider(name="gcp")
+gcp = Provider()
 
 class BucketConfig(Config):
     location: Field[str]
@@ -230,7 +230,7 @@ Both `PragmaClient` (sync) and `AsyncPragmaClient` (async) provide the same meth
 
 | Class | Description |
 |-------|-------------|
-| `Provider(name)` | Provider namespace with `@provider.resource()` decorator |
+| `Provider()` | Resource grouping with `@provider.resource()` decorator |
 | `Resource[ConfigT, OutputsT]` | Base class with `on_create`, `on_update`, `on_delete` |
 | `Config` | Base class for resource configuration (Pydantic model) |
 | `Outputs` | Base class for resource outputs (Pydantic model) |

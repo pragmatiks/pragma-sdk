@@ -28,7 +28,6 @@ class UnregisteredOutputs(Outputs):
 class UnregisteredResource(Resource[UnregisteredConfig, UnregisteredOutputs]):
     """Resource subclass without @provider.resource() decorator."""
 
-    provider: ClassVar[str] = "test"
     resource: ClassVar[str] = "unregistered"
 
     async def on_create(self) -> UnregisteredOutputs:
@@ -41,7 +40,7 @@ class UnregisteredResource(Resource[UnregisteredConfig, UnregisteredOutputs]):
         pass
 
 
-test_provider = Provider(name="discovery_test")
+test_provider = Provider()
 
 
 @test_provider.resource("registered")
@@ -116,5 +115,5 @@ def test_discover_resources_finds_registered_resources(mocker: MockerFixture) ->
     resources = discover_resources("fake_provider")
 
     assert len(resources) == 1
-    assert ("discovery_test", "registered") in resources
-    assert resources[("discovery_test", "registered")] is RegisteredResource
+    assert "registered" in resources
+    assert resources["registered"] is RegisteredResource

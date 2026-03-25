@@ -6,7 +6,7 @@ Example:
     from pragma_sdk import Resource, Config, Outputs
     from pragma_sdk.provider import Provider, ProviderHarness
 
-    postgres = Provider(name="postgres")
+    postgres = Provider()
 
     class DatabaseConfig(Config):
         name: str

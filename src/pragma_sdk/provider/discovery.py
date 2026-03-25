@@ -9,7 +9,7 @@ from pragma_sdk.models import Resource
 from pragma_sdk.provider.provider import RESOURCE_MARKER
 
 
-def discover_resources(package_name: str) -> dict[tuple[str, str], type[Resource]]:
+def discover_resources(package_name: str) -> dict[str, type[Resource]]:
     """Discover all registered Resource classes in a Python package.
 
     Recursively walks all modules and finds Resource classes decorated with
@@ -19,14 +19,14 @@ def discover_resources(package_name: str) -> dict[tuple[str, str], type[Resource
         package_name: Provider package to scan (e.g., "postgres_provider").
 
     Returns:
-        Dictionary mapping (provider, resource) tuples to Resource classes.
+        Dictionary mapping resource names to Resource classes.
 
     Example:
         resources = discover_resources("postgres_provider")
-        for (provider, resource), cls in resources.items():
-            print(f"{provider}/{resource}: {cls.__name__}")
+        for resource_name, cls in resources.items():
+            print(f"{resource_name}: {cls.__name__}")
     """
-    resources: dict[tuple[str, str], type[Resource]] = {}
+    resources: dict[str, type[Resource]] = {}
     _discover_in_module(package_name, resources)
 
     return resources
@@ -49,14 +49,14 @@ def is_registered_resource(cls: type) -> bool:
     )
 
 
-def _discover_in_module(module_name: str, resources: dict[tuple[str, str], type[Resource]]) -> None:
+def _discover_in_module(module_name: str, resources: dict[str, type[Resource]]) -> None:
     """Recursively discover resources in a module and its submodules."""
     module = importlib.import_module(module_name)
 
     for name in dir(module):
         obj = getattr(module, name)
         if is_registered_resource(obj):
-            key = (obj.provider, obj.resource)
+            key = obj.resource
             if key not in resources:
                 resources[key] = obj
 

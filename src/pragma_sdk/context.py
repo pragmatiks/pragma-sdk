@@ -69,6 +69,7 @@ class RuntimeContext(Protocol):
 
 _runtime_context: ContextVar[RuntimeContext | None] = ContextVar("_runtime_context", default=None)
 _current_resource_owner: ContextVar[OwnerReference | None] = ContextVar("_current_resource_owner", default=None)
+_provider_name: ContextVar[str | None] = ContextVar("_provider_name", default=None)
 
 
 def set_runtime_context(ctx: RuntimeContext) -> Any:
@@ -214,3 +215,36 @@ def get_current_resource_owner() -> OwnerReference | None:
         not in a lifecycle handler context.
     """
     return _current_resource_owner.get()
+
+
+def set_provider_name(name: str) -> Any:
+    """Set the provider name for the current async context.
+
+    Called by the runtime before invoking lifecycle methods. Returns a
+    token that must be passed to reset_provider_name() when done.
+
+    Args:
+        name: Catalog name of the provider (e.g., "pragmatiks/gcp").
+
+    Returns:
+        Token for resetting the provider name.
+    """
+    return _provider_name.set(name)
+
+
+def reset_provider_name(token: Any) -> None:
+    """Reset the provider name using the token from set_provider_name().
+
+    Args:
+        token: Token returned by set_provider_name().
+    """
+    _provider_name.reset(token)
+
+
+def get_provider_name() -> str | None:
+    """Get the current provider name, if any.
+
+    Returns:
+        Catalog name of the provider, or None if not in a runtime context.
+    """
+    return _provider_name.get()

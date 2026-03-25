@@ -13,12 +13,17 @@ RESOURCE_MARKER = "__pragma_resource__"
 
 
 class Provider:
-    """Group Resource classes under a provider namespace.
+    """Group Resource classes under a provider.
+
+    Provider identity (the catalog name like ``pragmatiks/gcp``) is an
+    external concern injected at build time and runtime. The Provider
+    class only groups Resource classes and sets their ``resource`` class
+    variable.
 
     Example:
         from pragma_sdk import Provider, Resource, Config, Outputs
 
-        postgres = Provider(name="postgres")
+        postgres = Provider()
 
         @postgres.resource("database")
         class Database(Resource[DatabaseConfig, DatabaseOutputs]):
@@ -30,19 +35,10 @@ class Provider:
 
             async def on_delete(self) -> None:
                 pass
-
-    Attributes:
-        name: Provider namespace (e.g., "postgres", "mysql").
     """
 
-    def __init__(self, name: str) -> None:
-        """Initialize a Provider.
-
-        Args:
-            name: Provider namespace (e.g., "postgres") used as the identifier
-                for all resources registered with this provider.
-        """
-        self.name = name
+    def __init__(self) -> None:
+        """Initialize a Provider."""
         self._resources: dict[str, type[Resource]] = {}
 
     def resource(self, name: str) -> type[ResourceT]:
@@ -62,9 +58,8 @@ class Provider:
 
         def decorator(cls: type[ResourceT]) -> type[ResourceT]:
             if not isinstance(cls, type) or not issubclass(cls, Resource):
-                raise TypeError(f"@{self.name}.resource() can only decorate Resource subclasses, got {cls!r}")
+                raise TypeError(f"@resource() can only decorate Resource subclasses, got {cls!r}")
 
-            cls.provider = self.name
             cls.resource = name
 
             setattr(cls, RESOURCE_MARKER, True)
@@ -72,8 +67,7 @@ class Provider:
             if name in self._resources:
                 existing = self._resources[name]
                 raise ValueError(
-                    f"Resource '{name}' already registered with provider '{self.name}' "
-                    f"(existing: {existing.__name__}, new: {cls.__name__})"
+                    f"Resource '{name}' already registered (existing: {existing.__name__}, new: {cls.__name__})"
                 )
 
             self._resources[name] = cls
@@ -94,6 +88,6 @@ class Provider:
         """Return string representation of this provider.
 
         Returns:
-            String showing provider name and registered resources.
+            String showing registered resources.
         """
-        return f"Provider(name={self.name!r}, resources={list(self._resources.keys())})"
+        return f"Provider(resources={list(self._resources.keys())})"
