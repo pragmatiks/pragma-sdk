@@ -1,3 +1,9 @@
+## v0.32.3 (2026-03-25)
+
+### Refactor
+
+- remove provider identity from Python classes (PRA-269)
+
 ## v0.32.2 (2026-03-19)
 
 ### Fix
