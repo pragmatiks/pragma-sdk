@@ -42,7 +42,7 @@ from uuid import uuid4
 
 from pragma_sdk.context import reset_provider_name, set_provider_name
 from pragma_sdk.models import Config, Outputs, Resource
-from pragma_sdk.types import LifecycleState
+from pragma_sdk.types import CopyContext, CopyResult, LifecycleState, PatchDefinition, PatchResult
 
 
 class EventType(StrEnum):
@@ -51,6 +51,8 @@ class EventType(StrEnum):
     CREATE = "create"
     UPDATE = "update"
     DELETE = "delete"
+    COPY = "copy"
+    PATCH = "patch"
 
 
 @dataclass
@@ -71,11 +73,14 @@ class LifecycleResult:
     """Result of executing a lifecycle method in tests.
 
     Use `.success` or `.failed` to check status, `.outputs` for returned values,
-    and `.error` for any exception raised.
+    and `.error` for any exception raised. For copy and patch operations, use
+    `.copy_result` and `.patch_result` respectively.
     """
 
     success: bool
     outputs: Outputs | None = None
+    copy_result: CopyResult | None = None
+    patch_result: PatchResult | None = None
     error: Exception | None = None
     resource: Resource | None = None
     event: LifecycleEvent | None = None
@@ -306,6 +311,128 @@ class ProviderHarness:
             await resource.on_delete()
             result = LifecycleResult(
                 success=True,
+                resource=resource,
+                event=event,
+            )
+        except Exception as e:
+            result = LifecycleResult(
+                success=False,
+                error=e,
+                resource=resource,
+                event=event,
+            )
+        finally:
+            reset_provider_name(provider_token)
+
+        self._results.append(result)
+        return result
+
+    async def invoke_copy(
+        self,
+        resource_class: type[Resource],
+        name: str,
+        config: Config,
+        context: CopyContext,
+        current_outputs: Outputs | None = None,
+        tags: list[str] | None = None,
+    ) -> LifecycleResult:
+        """Invoke the on_copy lifecycle method.
+
+        Args:
+            resource_class: Resource subclass to test.
+            name: Source resource instance name.
+            config: Configuration of the source resource.
+            context: Copy context with target name, tags, strategy, and metadata.
+            current_outputs: Outputs of the source resource.
+            tags: Tags on the source resource.
+
+        Returns:
+            Result containing success status, copy result as outputs, and any error.
+        """
+        event = LifecycleEvent(
+            event_id=str(uuid4()),
+            event_type=EventType.COPY,
+            resource_class=resource_class,
+            name=name,
+            config=config,
+        )
+        self._events.append(event)
+
+        resource = resource_class(
+            name=name,
+            config=config,
+            lifecycle_state=LifecycleState.PROCESSING,
+            outputs=current_outputs,
+            tags=tags,
+        )
+
+        provider_token = set_provider_name(self._provider_name)
+        try:
+            copy_result = await resource.on_copy(context)
+            result = LifecycleResult(
+                success=True,
+                copy_result=copy_result,
+                resource=resource,
+                event=event,
+            )
+        except Exception as e:
+            result = LifecycleResult(
+                success=False,
+                error=e,
+                resource=resource,
+                event=event,
+            )
+        finally:
+            reset_provider_name(provider_token)
+
+        self._results.append(result)
+        return result
+
+    async def invoke_patch(
+        self,
+        resource_class: type[Resource],
+        name: str,
+        config: Config,
+        patch: PatchDefinition,
+        current_outputs: Outputs | None = None,
+        tags: list[str] | None = None,
+    ) -> LifecycleResult:
+        """Invoke the on_patch lifecycle method.
+
+        Args:
+            resource_class: Resource subclass to test.
+            name: Resource instance name.
+            config: Configuration of the resource.
+            patch: Patch definition to apply.
+            current_outputs: Current outputs of the resource.
+            tags: Tags on the resource.
+
+        Returns:
+            Result containing success status, patch result, and any error.
+        """
+        event = LifecycleEvent(
+            event_id=str(uuid4()),
+            event_type=EventType.PATCH,
+            resource_class=resource_class,
+            name=name,
+            config=config,
+        )
+        self._events.append(event)
+
+        resource = resource_class(
+            name=name,
+            config=config,
+            lifecycle_state=LifecycleState.PROCESSING,
+            outputs=current_outputs,
+            tags=tags,
+        )
+
+        provider_token = set_provider_name(self._provider_name)
+        try:
+            patch_result = await resource.on_patch(patch)
+            result = LifecycleResult(
+                success=True,
+                patch_result=patch_result,
                 resource=resource,
                 event=event,
             )

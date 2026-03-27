@@ -24,7 +24,15 @@ from pragma_sdk.models.references import (
     Sensitive,
     format_resource_id,
 )
-from pragma_sdk.types import HealthStatus, LifecycleState, LogEntry
+from pragma_sdk.types import (
+    CopyContext,
+    CopyResult,
+    HealthStatus,
+    LifecycleState,
+    LogEntry,
+    PatchDefinition,
+    PatchResult,
+)
 
 
 def _is_union_origin(origin: Any) -> bool:
@@ -713,6 +721,70 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
     async def on_delete(self) -> None:
         """Handle resource deletion."""
         raise NotImplementedError(f"{self.__class__.__name__} must implement on_delete()")
+
+    async def on_copy(self, context: CopyContext) -> CopyResult:
+        """Handle resource duplication as part of a subgraph copy operation.
+
+        Override this method to control how the resource duplicates itself.
+        Stateless resources (config-only) can return a modified config directly.
+        Stateful resources (data-bearing) may need to clone underlying data
+        (e.g., create a new database, copy vector indices).
+
+        The default implementation raises NotImplementedError, indicating the
+        resource type does not support copying. Use ``supports_copy()`` to check
+        before calling.
+
+        Args:
+            context: Copy context including tags, target name, strategy, and
+                provider-specific metadata.
+
+        Returns:
+            CopyResult with the configuration for the new copied resource.
+
+        Raises:
+            NotImplementedError: If the resource type does not support copying.
+        """
+        raise NotImplementedError(f"{self.__class__.__name__} does not support on_copy()")
+
+    async def on_patch(self, patch: PatchDefinition) -> PatchResult:
+        """Handle applying a patch (migration script, schema diff) to this resource.
+
+        Override this method to control how patches are applied to the resource.
+        Patches have compatibility constraints that are checked before this method
+        is called -- the resource is guaranteed to satisfy all constraints.
+
+        The default implementation raises NotImplementedError, indicating the
+        resource type does not support patching. Use ``supports_patch()`` to check
+        before calling.
+
+        Args:
+            patch: Patch definition including the payload, constraints, and metadata.
+
+        Returns:
+            PatchResult indicating success/failure and any modified config/outputs.
+
+        Raises:
+            NotImplementedError: If the resource type does not support patching.
+        """
+        raise NotImplementedError(f"{self.__class__.__name__} does not support on_patch()")
+
+    @classmethod
+    def supports_copy(cls) -> bool:
+        """Check if this resource type implements on_copy.
+
+        Returns:
+            True if the resource subclass overrides on_copy from the base Resource.
+        """
+        return cls.on_copy is not Resource.on_copy
+
+    @classmethod
+    def supports_patch(cls) -> bool:
+        """Check if this resource type implements on_patch.
+
+        Returns:
+            True if the resource subclass overrides on_patch from the base Resource.
+        """
+        return cls.on_patch is not Resource.on_patch
 
     @classmethod
     def upgrade(cls, config: dict, outputs: dict | None) -> tuple[dict, dict | None]:
