@@ -1,3 +1,9 @@
+## v0.33.0 (2026-03-27)
+
+### Feat
+
+- add on_copy and on_patch optional lifecycle methods to Resource (PRA-286) (#26)
+
 ## v0.32.4 (2026-03-25)
 
 ### Fix
