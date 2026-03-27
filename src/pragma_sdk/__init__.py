@@ -56,14 +56,28 @@ from pragma_sdk.models import (
 )
 from pragma_sdk.models import Provider as ProviderModel
 from pragma_sdk.provider import Provider
-from pragma_sdk.types import HealthStatus, LifecycleState, LogEntry
+from pragma_sdk.types import (
+    CompatibilityConstraint,
+    CopyContext,
+    CopyResult,
+    CopyStrategy,
+    HealthStatus,
+    LifecycleState,
+    LogEntry,
+    PatchDefinition,
+    PatchResult,
+)
 
 
 __all__ = [
     "AsyncPragmaClient",
     "BuildInfo",
     "BuildStatus",
+    "CompatibilityConstraint",
     "Config",
+    "CopyContext",
+    "CopyResult",
+    "CopyStrategy",
     "Dependency",
     "DeploymentResult",
     "DeploymentStatus",
@@ -80,6 +94,8 @@ __all__ = [
     "OrganizationStatus",
     "Outputs",
     "PaginatedResponse",
+    "PatchDefinition",
+    "PatchResult",
     "PragmaClient",
     "Provider",
     "ProviderAuthor",

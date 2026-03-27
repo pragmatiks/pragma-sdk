@@ -24,11 +24,13 @@ class DeploymentStatus(StrEnum):
 
 
 class EventType(StrEnum):
-    """Resource lifecycle event type: CREATE, UPDATE, or DELETE."""
+    """Resource lifecycle event type."""
 
     CREATE = "CREATE"
     UPDATE = "UPDATE"
     DELETE = "DELETE"
+    COPY = "COPY"
+    PATCH = "PATCH"
     MIGRATE_UP = "MIGRATE_UP"
     MIGRATE_DOWN = "MIGRATE_DOWN"
 
