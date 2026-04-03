@@ -1,3 +1,9 @@
+## v0.34.0 (2026-04-03)
+
+### Feat
+
+- add icon_url parameter to publish_provider
+
 ## v0.33.1 (2026-04-03)
 
 ### Fix
