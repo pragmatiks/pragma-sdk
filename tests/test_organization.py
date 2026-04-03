@@ -32,7 +32,7 @@ ORGANIZATION_FIXTURE_2 = {
 @respx.mock
 def test_list_organizations_returns_typed_list() -> None:
     """Returns list of Organization instances."""
-    route = respx.get("http://localhost:8000/organizations").mock(
+    route = respx.get("https://api.pragmatiks.io/organizations").mock(
         return_value=httpx.Response(
             200,
             json=[ORGANIZATION_FIXTURE, ORGANIZATION_FIXTURE_2],
@@ -56,7 +56,7 @@ def test_list_organizations_returns_typed_list() -> None:
 @respx.mock
 def test_list_organizations_returns_empty_list() -> None:
     """Returns empty list when no organizations exist."""
-    respx.get("http://localhost:8000/organizations").mock(return_value=httpx.Response(200, json=[]))
+    respx.get("https://api.pragmatiks.io/organizations").mock(return_value=httpx.Response(200, json=[]))
 
     with PragmaClient(auth_token=None) as client:
         organizations = client.list_organizations()
@@ -67,7 +67,7 @@ def test_list_organizations_returns_empty_list() -> None:
 @respx.mock
 def test_get_organization_returns_typed_instance() -> None:
     """Returns Organization instance for valid ID."""
-    route = respx.get("http://localhost:8000/organizations/org_123").mock(
+    route = respx.get("https://api.pragmatiks.io/organizations/org_123").mock(
         return_value=httpx.Response(200, json=ORGANIZATION_FIXTURE)
     )
 
@@ -85,7 +85,7 @@ def test_get_organization_returns_typed_instance() -> None:
 @respx.mock
 def test_get_organization_raises_on_not_found() -> None:
     """Raises HTTPStatusError when organization not found."""
-    respx.get("http://localhost:8000/organizations/org_nonexistent").mock(
+    respx.get("https://api.pragmatiks.io/organizations/org_nonexistent").mock(
         return_value=httpx.Response(404, json={"detail": "Not found"})
     )
 
@@ -99,7 +99,7 @@ def test_get_organization_raises_on_not_found() -> None:
 @respx.mock
 def test_cleanup_organization_makes_post_returns_none() -> None:
     """Makes POST request and returns None on success."""
-    route = respx.post("http://localhost:8000/organizations/org_123/cleanup").mock(
+    route = respx.post("https://api.pragmatiks.io/organizations/org_123/cleanup").mock(
         return_value=httpx.Response(202, json={"status": "cleanup initiated"})
     )
 
@@ -113,7 +113,7 @@ def test_cleanup_organization_makes_post_returns_none() -> None:
 @respx.mock
 def test_cleanup_organization_raises_on_not_found() -> None:
     """Raises HTTPStatusError when organization not found."""
-    respx.post("http://localhost:8000/organizations/org_nonexistent/cleanup").mock(
+    respx.post("https://api.pragmatiks.io/organizations/org_nonexistent/cleanup").mock(
         return_value=httpx.Response(404, json={"detail": "Not found"})
     )
 
@@ -127,7 +127,7 @@ def test_cleanup_organization_raises_on_not_found() -> None:
 @respx.mock
 async def test_async_list_organizations_returns_typed_list() -> None:
     """Returns list of Organization instances."""
-    route = respx.get("http://localhost:8000/organizations").mock(
+    route = respx.get("https://api.pragmatiks.io/organizations").mock(
         return_value=httpx.Response(
             200,
             json=[ORGANIZATION_FIXTURE, ORGANIZATION_FIXTURE_2],
@@ -151,7 +151,7 @@ async def test_async_list_organizations_returns_typed_list() -> None:
 @respx.mock
 async def test_async_list_organizations_returns_empty_list() -> None:
     """Returns empty list when no organizations exist."""
-    respx.get("http://localhost:8000/organizations").mock(return_value=httpx.Response(200, json=[]))
+    respx.get("https://api.pragmatiks.io/organizations").mock(return_value=httpx.Response(200, json=[]))
 
     async with AsyncPragmaClient(auth_token=None) as client:
         organizations = await client.list_organizations()
@@ -162,7 +162,7 @@ async def test_async_list_organizations_returns_empty_list() -> None:
 @respx.mock
 async def test_async_get_organization_returns_typed_instance() -> None:
     """Returns Organization instance for valid ID."""
-    route = respx.get("http://localhost:8000/organizations/org_123").mock(
+    route = respx.get("https://api.pragmatiks.io/organizations/org_123").mock(
         return_value=httpx.Response(200, json=ORGANIZATION_FIXTURE)
     )
 
@@ -180,7 +180,7 @@ async def test_async_get_organization_returns_typed_instance() -> None:
 @respx.mock
 async def test_async_get_organization_raises_on_not_found() -> None:
     """Raises HTTPStatusError when organization not found."""
-    respx.get("http://localhost:8000/organizations/org_nonexistent").mock(
+    respx.get("https://api.pragmatiks.io/organizations/org_nonexistent").mock(
         return_value=httpx.Response(404, json={"detail": "Not found"})
     )
 
@@ -194,7 +194,7 @@ async def test_async_get_organization_raises_on_not_found() -> None:
 @respx.mock
 async def test_async_cleanup_organization_makes_post_returns_none() -> None:
     """Makes POST request and returns None on success."""
-    route = respx.post("http://localhost:8000/organizations/org_123/cleanup").mock(
+    route = respx.post("https://api.pragmatiks.io/organizations/org_123/cleanup").mock(
         return_value=httpx.Response(202, json={"status": "cleanup initiated"})
     )
 
@@ -208,7 +208,7 @@ async def test_async_cleanup_organization_makes_post_returns_none() -> None:
 @respx.mock
 async def test_async_cleanup_organization_raises_on_not_found() -> None:
     """Raises HTTPStatusError when organization not found."""
-    respx.post("http://localhost:8000/organizations/org_nonexistent/cleanup").mock(
+    respx.post("https://api.pragmatiks.io/organizations/org_nonexistent/cleanup").mock(
         return_value=httpx.Response(404, json={"detail": "Not found"})
     )
 

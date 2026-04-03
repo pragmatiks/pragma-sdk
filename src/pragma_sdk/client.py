@@ -68,7 +68,7 @@ class BaseClient:
         """Initialize client with automatic token discovery.
 
         Args:
-            base_url: API URL. Defaults to PRAGMA_API_URL env var or localhost:8000.
+            base_url: API URL. Defaults to PRAGMA_API_URL env var or https://api.pragmatiks.io.
             timeout: Request timeout in seconds.
             auth_token: Bearer token. Omit for auto-discovery, pass None to disable auth.
             context: Named context for token lookup (e.g., 'production').
@@ -77,7 +77,7 @@ class BaseClient:
         Raises:
             ValueError: If require_auth is True and no token is found.
         """
-        self.base_url = base_url or os.getenv("PRAGMA_API_URL", "http://localhost:8000")
+        self.base_url = base_url or os.getenv("PRAGMA_API_URL", "https://api.pragmatiks.io")
         self.timeout = timeout
 
         if auth_token is ...:

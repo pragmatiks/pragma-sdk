@@ -71,7 +71,7 @@ INSTALLED_PROVIDER = {
 
 @respx.mock
 def test_list_providers_returns_paginated_response() -> None:
-    respx.get("http://localhost:8000/providers").mock(
+    respx.get("https://api.pragmatiks.io/providers").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -99,7 +99,7 @@ def test_list_providers_returns_paginated_response() -> None:
 
 @respx.mock
 def test_list_providers_passes_query_params() -> None:
-    route = respx.get("http://localhost:8000/providers").mock(
+    route = respx.get("https://api.pragmatiks.io/providers").mock(
         return_value=httpx.Response(
             200,
             json={"items": [], "total": 0, "limit": 10, "offset": 5},
@@ -122,7 +122,7 @@ def test_list_providers_passes_query_params() -> None:
 
 @respx.mock
 def test_get_provider_returns_provider() -> None:
-    respx.get("http://localhost:8000/providers/pragma/qdrant").mock(
+    respx.get("https://api.pragmatiks.io/providers/pragma/qdrant").mock(
         return_value=httpx.Response(200, json=PROVIDER_DATA)
     )
 
@@ -136,7 +136,7 @@ def test_get_provider_returns_provider() -> None:
 
 @respx.mock
 def test_get_provider_raises_on_not_found() -> None:
-    respx.get("http://localhost:8000/providers/pragma/nonexistent").mock(
+    respx.get("https://api.pragmatiks.io/providers/pragma/nonexistent").mock(
         return_value=httpx.Response(404, json={"detail": "Not found"})
     )
 
@@ -158,7 +158,7 @@ def test_get_provider_raises_on_unnamespaced_name() -> None:
 
 @respx.mock
 def test_list_provider_versions_returns_versions() -> None:
-    respx.get("http://localhost:8000/providers/pragma/qdrant/versions").mock(
+    respx.get("https://api.pragmatiks.io/providers/pragma/qdrant/versions").mock(
         return_value=httpx.Response(200, json=[VERSION_DATA])
     )
 
@@ -175,7 +175,7 @@ def test_list_provider_versions_returns_versions() -> None:
 
 @respx.mock
 def test_install_provider_returns_installation() -> None:
-    respx.post("http://localhost:8000/providers/install").mock(
+    respx.post("https://api.pragmatiks.io/providers/install").mock(
         return_value=httpx.Response(201, json=INSTALLED_PROVIDER)
     )
 
@@ -195,7 +195,7 @@ def test_install_provider_sends_config_in_request_body() -> None:
         **INSTALLED_PROVIDER,
         "config": {"API_KEY": "secret-123", "REGION": "eu-west-1"},
     }
-    route = respx.post("http://localhost:8000/providers/install").mock(
+    route = respx.post("https://api.pragmatiks.io/providers/install").mock(
         return_value=httpx.Response(201, json=installed_with_config)
     )
 
@@ -214,7 +214,7 @@ def test_install_provider_sends_config_in_request_body() -> None:
 
 @respx.mock
 def test_install_provider_omits_config_when_none() -> None:
-    route = respx.post("http://localhost:8000/providers/install").mock(
+    route = respx.post("https://api.pragmatiks.io/providers/install").mock(
         return_value=httpx.Response(201, json=INSTALLED_PROVIDER)
     )
 
@@ -228,7 +228,7 @@ def test_install_provider_omits_config_when_none() -> None:
 @respx.mock
 def test_install_provider_sends_empty_config_when_empty_dict() -> None:
     installed_with_empty_config = {**INSTALLED_PROVIDER, "config": {}}
-    route = respx.post("http://localhost:8000/providers/install").mock(
+    route = respx.post("https://api.pragmatiks.io/providers/install").mock(
         return_value=httpx.Response(201, json=installed_with_empty_config)
     )
 
@@ -243,7 +243,7 @@ def test_install_provider_sends_empty_config_when_empty_dict() -> None:
 
 @respx.mock
 def test_install_provider_raises_on_conflict() -> None:
-    respx.post("http://localhost:8000/providers/install").mock(
+    respx.post("https://api.pragmatiks.io/providers/install").mock(
         return_value=httpx.Response(409, json={"detail": "Already installed"})
     )
 
@@ -259,7 +259,7 @@ def test_install_provider_raises_on_conflict() -> None:
 
 @respx.mock
 def test_uninstall_provider_succeeds() -> None:
-    respx.delete("http://localhost:8000/providers/installed/pragma/qdrant").mock(return_value=httpx.Response(204))
+    respx.delete("https://api.pragmatiks.io/providers/installed/pragma/qdrant").mock(return_value=httpx.Response(204))
 
     with PragmaClient(auth_token=None) as client:
         client.uninstall_provider("pragma/qdrant")
@@ -267,7 +267,7 @@ def test_uninstall_provider_succeeds() -> None:
 
 @respx.mock
 def test_uninstall_provider_with_cascade() -> None:
-    route = respx.delete("http://localhost:8000/providers/installed/pragma/qdrant").mock(
+    route = respx.delete("https://api.pragmatiks.io/providers/installed/pragma/qdrant").mock(
         return_value=httpx.Response(204)
     )
 
@@ -283,7 +283,7 @@ def test_uninstall_provider_with_cascade() -> None:
 @respx.mock
 def test_upgrade_provider_returns_installation() -> None:
     upgraded = {**INSTALLED_PROVIDER, "installed_version": "1.3.0"}
-    route = respx.post("http://localhost:8000/providers/installed/pragma/qdrant/upgrade").mock(
+    route = respx.post("https://api.pragmatiks.io/providers/installed/pragma/qdrant/upgrade").mock(
         return_value=httpx.Response(200, json=upgraded)
     )
 
@@ -305,7 +305,7 @@ def test_upgrade_provider_returns_installation() -> None:
 @respx.mock
 def test_downgrade_provider_returns_installation() -> None:
     downgraded = {**INSTALLED_PROVIDER, "installed_version": "1.0.0"}
-    route = respx.post("http://localhost:8000/providers/installed/pragma/qdrant/downgrade").mock(
+    route = respx.post("https://api.pragmatiks.io/providers/installed/pragma/qdrant/downgrade").mock(
         return_value=httpx.Response(200, json=downgraded)
     )
 
@@ -326,7 +326,7 @@ def test_downgrade_provider_returns_installation() -> None:
 
 @respx.mock
 def test_list_installations_returns_installations() -> None:
-    respx.get("http://localhost:8000/providers/installed").mock(
+    respx.get("https://api.pragmatiks.io/providers/installed").mock(
         return_value=httpx.Response(200, json=[INSTALLED_PROVIDER])
     )
 
@@ -344,7 +344,7 @@ def test_list_installations_returns_installations() -> None:
 @respx.mock
 def test_publish_provider_returns_version() -> None:
     building_version = {**VERSION_DATA, "status": "building", "published_at": None}
-    route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
+    route = respx.post("https://api.pragmatiks.io/providers/pragma/qdrant/publish").mock(
         return_value=httpx.Response(202, json=building_version)
     )
 
@@ -361,7 +361,7 @@ def test_publish_provider_returns_version() -> None:
 @respx.mock
 def test_publish_provider_includes_metadata_fields() -> None:
     building_version = {**VERSION_DATA, "status": "building", "published_at": None}
-    route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
+    route = respx.post("https://api.pragmatiks.io/providers/pragma/qdrant/publish").mock(
         return_value=httpx.Response(202, json=building_version)
     )
 
@@ -389,7 +389,7 @@ def test_publish_provider_includes_metadata_fields() -> None:
 @respx.mock
 def test_publish_provider_omits_none_metadata_fields() -> None:
     building_version = {**VERSION_DATA, "status": "building", "published_at": None}
-    route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
+    route = respx.post("https://api.pragmatiks.io/providers/pragma/qdrant/publish").mock(
         return_value=httpx.Response(202, json=building_version)
     )
 
@@ -409,7 +409,7 @@ def test_publish_provider_omits_none_metadata_fields() -> None:
 
 @respx.mock
 def test_get_publish_status_returns_version() -> None:
-    respx.get("http://localhost:8000/providers/pragma/qdrant/versions/1.2.0/status").mock(
+    respx.get("https://api.pragmatiks.io/providers/pragma/qdrant/versions/1.2.0/status").mock(
         return_value=httpx.Response(200, json=VERSION_DATA)
     )
 
@@ -426,7 +426,7 @@ def test_get_publish_status_returns_version() -> None:
 
 @respx.mock
 def test_deploy_provider_returns_result() -> None:
-    respx.post("http://localhost:8000/providers/installed/pragma/qdrant/deploy").mock(
+    respx.post("https://api.pragmatiks.io/providers/installed/pragma/qdrant/deploy").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -456,7 +456,7 @@ def test_deploy_provider_returns_result() -> None:
 
 @respx.mock
 def test_get_deployment_status_returns_result() -> None:
-    respx.get("http://localhost:8000/providers/installed/pragma/qdrant/deployment").mock(
+    respx.get("https://api.pragmatiks.io/providers/installed/pragma/qdrant/deployment").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -485,7 +485,7 @@ def test_get_deployment_status_returns_result() -> None:
 
 @respx.mock
 async def test_async_list_providers_returns_paginated_response() -> None:
-    respx.get("http://localhost:8000/providers").mock(
+    respx.get("https://api.pragmatiks.io/providers").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -510,7 +510,7 @@ async def test_async_list_providers_returns_paginated_response() -> None:
 
 @respx.mock
 async def test_async_list_providers_passes_query_params() -> None:
-    route = respx.get("http://localhost:8000/providers").mock(
+    route = respx.get("https://api.pragmatiks.io/providers").mock(
         return_value=httpx.Response(
             200,
             json={"items": [], "total": 0, "limit": 10, "offset": 5},
@@ -533,7 +533,7 @@ async def test_async_list_providers_passes_query_params() -> None:
 
 @respx.mock
 async def test_async_get_provider_returns_provider() -> None:
-    respx.get("http://localhost:8000/providers/pragma/qdrant").mock(
+    respx.get("https://api.pragmatiks.io/providers/pragma/qdrant").mock(
         return_value=httpx.Response(200, json=PROVIDER_DATA)
     )
 
@@ -546,7 +546,7 @@ async def test_async_get_provider_returns_provider() -> None:
 
 @respx.mock
 async def test_async_get_provider_raises_on_not_found() -> None:
-    respx.get("http://localhost:8000/providers/pragma/nonexistent").mock(
+    respx.get("https://api.pragmatiks.io/providers/pragma/nonexistent").mock(
         return_value=httpx.Response(404, json={"detail": "Not found"})
     )
 
@@ -562,7 +562,7 @@ async def test_async_get_provider_raises_on_not_found() -> None:
 
 @respx.mock
 async def test_async_list_provider_versions_returns_versions() -> None:
-    respx.get("http://localhost:8000/providers/pragma/qdrant/versions").mock(
+    respx.get("https://api.pragmatiks.io/providers/pragma/qdrant/versions").mock(
         return_value=httpx.Response(200, json=[VERSION_DATA])
     )
 
@@ -579,7 +579,7 @@ async def test_async_list_provider_versions_returns_versions() -> None:
 
 @respx.mock
 async def test_async_install_provider_returns_installation() -> None:
-    respx.post("http://localhost:8000/providers/install").mock(
+    respx.post("https://api.pragmatiks.io/providers/install").mock(
         return_value=httpx.Response(201, json=INSTALLED_PROVIDER)
     )
 
@@ -597,7 +597,7 @@ async def test_async_install_provider_sends_config_in_request_body() -> None:
         **INSTALLED_PROVIDER,
         "config": {"API_KEY": "secret-123", "REGION": "eu-west-1"},
     }
-    route = respx.post("http://localhost:8000/providers/install").mock(
+    route = respx.post("https://api.pragmatiks.io/providers/install").mock(
         return_value=httpx.Response(201, json=installed_with_config)
     )
 
@@ -616,7 +616,7 @@ async def test_async_install_provider_sends_config_in_request_body() -> None:
 
 @respx.mock
 async def test_async_install_provider_omits_config_when_none() -> None:
-    route = respx.post("http://localhost:8000/providers/install").mock(
+    route = respx.post("https://api.pragmatiks.io/providers/install").mock(
         return_value=httpx.Response(201, json=INSTALLED_PROVIDER)
     )
 
@@ -630,7 +630,7 @@ async def test_async_install_provider_omits_config_when_none() -> None:
 @respx.mock
 async def test_async_install_provider_sends_empty_config_when_empty_dict() -> None:
     installed_with_empty_config = {**INSTALLED_PROVIDER, "config": {}}
-    route = respx.post("http://localhost:8000/providers/install").mock(
+    route = respx.post("https://api.pragmatiks.io/providers/install").mock(
         return_value=httpx.Response(201, json=installed_with_empty_config)
     )
 
@@ -645,7 +645,7 @@ async def test_async_install_provider_sends_empty_config_when_empty_dict() -> No
 
 @respx.mock
 async def test_async_install_provider_raises_on_conflict() -> None:
-    respx.post("http://localhost:8000/providers/install").mock(
+    respx.post("https://api.pragmatiks.io/providers/install").mock(
         return_value=httpx.Response(409, json={"detail": "Already installed"})
     )
 
@@ -661,7 +661,7 @@ async def test_async_install_provider_raises_on_conflict() -> None:
 
 @respx.mock
 async def test_async_uninstall_provider_succeeds() -> None:
-    respx.delete("http://localhost:8000/providers/installed/pragma/qdrant").mock(return_value=httpx.Response(204))
+    respx.delete("https://api.pragmatiks.io/providers/installed/pragma/qdrant").mock(return_value=httpx.Response(204))
 
     async with AsyncPragmaClient(auth_token=None) as client:
         await client.uninstall_provider("pragma/qdrant")
@@ -669,7 +669,7 @@ async def test_async_uninstall_provider_succeeds() -> None:
 
 @respx.mock
 async def test_async_uninstall_provider_with_cascade() -> None:
-    route = respx.delete("http://localhost:8000/providers/installed/pragma/qdrant").mock(
+    route = respx.delete("https://api.pragmatiks.io/providers/installed/pragma/qdrant").mock(
         return_value=httpx.Response(204)
     )
 
@@ -685,7 +685,7 @@ async def test_async_uninstall_provider_with_cascade() -> None:
 @respx.mock
 async def test_async_upgrade_provider_returns_installation() -> None:
     upgraded = {**INSTALLED_PROVIDER, "installed_version": "1.3.0"}
-    route = respx.post("http://localhost:8000/providers/installed/pragma/qdrant/upgrade").mock(
+    route = respx.post("https://api.pragmatiks.io/providers/installed/pragma/qdrant/upgrade").mock(
         return_value=httpx.Response(200, json=upgraded)
     )
 
@@ -707,7 +707,7 @@ async def test_async_upgrade_provider_returns_installation() -> None:
 @respx.mock
 async def test_async_downgrade_provider_returns_installation() -> None:
     downgraded = {**INSTALLED_PROVIDER, "installed_version": "1.0.0"}
-    route = respx.post("http://localhost:8000/providers/installed/pragma/qdrant/downgrade").mock(
+    route = respx.post("https://api.pragmatiks.io/providers/installed/pragma/qdrant/downgrade").mock(
         return_value=httpx.Response(200, json=downgraded)
     )
 
@@ -728,7 +728,7 @@ async def test_async_downgrade_provider_returns_installation() -> None:
 
 @respx.mock
 async def test_async_list_installations_returns_installations() -> None:
-    respx.get("http://localhost:8000/providers/installed").mock(
+    respx.get("https://api.pragmatiks.io/providers/installed").mock(
         return_value=httpx.Response(200, json=[INSTALLED_PROVIDER])
     )
 
@@ -746,7 +746,7 @@ async def test_async_list_installations_returns_installations() -> None:
 @respx.mock
 async def test_async_publish_provider_returns_version() -> None:
     building_version = {**VERSION_DATA, "status": "building", "published_at": None}
-    route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
+    route = respx.post("https://api.pragmatiks.io/providers/pragma/qdrant/publish").mock(
         return_value=httpx.Response(202, json=building_version)
     )
 
@@ -763,7 +763,7 @@ async def test_async_publish_provider_returns_version() -> None:
 @respx.mock
 async def test_async_publish_provider_includes_metadata_fields() -> None:
     building_version = {**VERSION_DATA, "status": "building", "published_at": None}
-    route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
+    route = respx.post("https://api.pragmatiks.io/providers/pragma/qdrant/publish").mock(
         return_value=httpx.Response(202, json=building_version)
     )
 
@@ -791,7 +791,7 @@ async def test_async_publish_provider_includes_metadata_fields() -> None:
 @respx.mock
 async def test_async_publish_provider_omits_none_metadata_fields() -> None:
     building_version = {**VERSION_DATA, "status": "building", "published_at": None}
-    route = respx.post("http://localhost:8000/providers/pragma/qdrant/publish").mock(
+    route = respx.post("https://api.pragmatiks.io/providers/pragma/qdrant/publish").mock(
         return_value=httpx.Response(202, json=building_version)
     )
 
@@ -811,7 +811,7 @@ async def test_async_publish_provider_omits_none_metadata_fields() -> None:
 
 @respx.mock
 async def test_async_get_publish_status_returns_version() -> None:
-    respx.get("http://localhost:8000/providers/pragma/qdrant/versions/1.2.0/status").mock(
+    respx.get("https://api.pragmatiks.io/providers/pragma/qdrant/versions/1.2.0/status").mock(
         return_value=httpx.Response(200, json=VERSION_DATA)
     )
 
@@ -828,7 +828,7 @@ async def test_async_get_publish_status_returns_version() -> None:
 
 @respx.mock
 async def test_async_deploy_provider_returns_result() -> None:
-    respx.post("http://localhost:8000/providers/installed/pragma/qdrant/deploy").mock(
+    respx.post("https://api.pragmatiks.io/providers/installed/pragma/qdrant/deploy").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -858,7 +858,7 @@ async def test_async_deploy_provider_returns_result() -> None:
 
 @respx.mock
 async def test_async_get_deployment_status_returns_result() -> None:
-    respx.get("http://localhost:8000/providers/installed/pragma/qdrant/deployment").mock(
+    respx.get("https://api.pragmatiks.io/providers/installed/pragma/qdrant/deployment").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -904,7 +904,7 @@ RESOURCE_SCHEMA_MINIMAL = {
 
 @respx.mock
 def test_list_resource_schemas_returns_schemas() -> None:
-    respx.get("http://localhost:8000/resources/schemas").mock(
+    respx.get("https://api.pragmatiks.io/resources/schemas").mock(
         return_value=httpx.Response(200, json=[RESOURCE_SCHEMA_FULL])
     )
 
@@ -939,7 +939,7 @@ def test_list_resource_schemas_with_none_optional_fields() -> None:
         "created_at": None,
         "updated_at": None,
     }
-    respx.get("http://localhost:8000/resources/schemas").mock(return_value=httpx.Response(200, json=[schema_data]))
+    respx.get("https://api.pragmatiks.io/resources/schemas").mock(return_value=httpx.Response(200, json=[schema_data]))
 
     with PragmaClient(auth_token=None) as client:
         result = client.list_resource_schemas()
@@ -953,7 +953,7 @@ def test_list_resource_schemas_with_none_optional_fields() -> None:
 
 @respx.mock
 def test_list_resource_schemas_with_missing_optional_fields() -> None:
-    respx.get("http://localhost:8000/resources/schemas").mock(
+    respx.get("https://api.pragmatiks.io/resources/schemas").mock(
         return_value=httpx.Response(200, json=[RESOURCE_SCHEMA_MINIMAL])
     )
 
@@ -973,7 +973,7 @@ def test_list_resource_schemas_with_missing_optional_fields() -> None:
 
 @respx.mock
 def test_list_resource_schemas_passes_provider_filter() -> None:
-    route = respx.get("http://localhost:8000/resources/schemas").mock(return_value=httpx.Response(200, json=[]))
+    route = respx.get("https://api.pragmatiks.io/resources/schemas").mock(return_value=httpx.Response(200, json=[]))
 
     with PragmaClient(auth_token=None) as client:
         client.list_resource_schemas(provider="pragma/qdrant")
@@ -986,7 +986,7 @@ def test_list_resource_schemas_passes_provider_filter() -> None:
 
 @respx.mock
 async def test_async_list_resource_schemas_returns_schemas() -> None:
-    respx.get("http://localhost:8000/resources/schemas").mock(
+    respx.get("https://api.pragmatiks.io/resources/schemas").mock(
         return_value=httpx.Response(200, json=[RESOURCE_SCHEMA_FULL])
     )
 
@@ -1014,7 +1014,7 @@ async def test_async_list_resource_schemas_with_none_optional_fields() -> None:
         "created_at": None,
         "updated_at": None,
     }
-    respx.get("http://localhost:8000/resources/schemas").mock(return_value=httpx.Response(200, json=[schema_data]))
+    respx.get("https://api.pragmatiks.io/resources/schemas").mock(return_value=httpx.Response(200, json=[schema_data]))
 
     async with AsyncPragmaClient(auth_token=None) as client:
         result = await client.list_resource_schemas()
@@ -1028,7 +1028,7 @@ async def test_async_list_resource_schemas_with_none_optional_fields() -> None:
 
 @respx.mock
 async def test_async_list_resource_schemas_with_missing_optional_fields() -> None:
-    respx.get("http://localhost:8000/resources/schemas").mock(
+    respx.get("https://api.pragmatiks.io/resources/schemas").mock(
         return_value=httpx.Response(200, json=[RESOURCE_SCHEMA_MINIMAL])
     )
 
@@ -1048,7 +1048,7 @@ async def test_async_list_resource_schemas_with_missing_optional_fields() -> Non
 
 @respx.mock
 async def test_async_list_resource_schemas_passes_provider_filter() -> None:
-    route = respx.get("http://localhost:8000/resources/schemas").mock(return_value=httpx.Response(200, json=[]))
+    route = respx.get("https://api.pragmatiks.io/resources/schemas").mock(return_value=httpx.Response(200, json=[]))
 
     async with AsyncPragmaClient(auth_token=None) as client:
         await client.list_resource_schemas(provider="pragma/qdrant")

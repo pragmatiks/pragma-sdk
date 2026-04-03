@@ -20,7 +20,7 @@ def test_pragma_client_raises_when_auth_required_but_no_token() -> None:
 @respx.mock
 def test_pragma_client_is_healthy_returns_true_when_api_ok() -> None:
     """Returns True when API health check succeeds."""
-    respx.get("http://localhost:8000/health").mock(return_value=httpx.Response(200, json={"status": "ok"}))
+    respx.get("https://api.pragmatiks.io/health").mock(return_value=httpx.Response(200, json={"status": "ok"}))
 
     with PragmaClient(auth_token=None) as client:
         assert client.is_healthy() is True
@@ -29,7 +29,7 @@ def test_pragma_client_is_healthy_returns_true_when_api_ok() -> None:
 @respx.mock
 def test_pragma_client_is_healthy_returns_false_on_error() -> None:
     """Returns False when API health check fails."""
-    respx.get("http://localhost:8000/health").mock(return_value=httpx.Response(500, json={"status": "error"}))
+    respx.get("https://api.pragmatiks.io/health").mock(return_value=httpx.Response(500, json={"status": "error"}))
 
     with PragmaClient(auth_token=None) as client:
         assert client.is_healthy() is False
@@ -38,7 +38,7 @@ def test_pragma_client_is_healthy_returns_false_on_error() -> None:
 @respx.mock
 def test_pragma_client_list_resources_returns_dicts_without_model() -> None:
     """Returns list of dicts when no model parameter provided."""
-    respx.get("http://localhost:8000/resources").mock(
+    respx.get("https://api.pragmatiks.io/resources").mock(
         return_value=httpx.Response(
             200,
             json=[
@@ -60,7 +60,7 @@ def test_pragma_client_list_resources_returns_dicts_without_model() -> None:
 @respx.mock
 def test_pragma_client_list_resources_returns_typed_resources_with_model() -> None:
     """Returns list of typed Resource instances when model parameter provided."""
-    respx.get("http://localhost:8000/resources").mock(
+    respx.get("https://api.pragmatiks.io/resources").mock(
         return_value=httpx.Response(
             200,
             json=[
@@ -84,7 +84,7 @@ def test_pragma_client_list_resources_returns_typed_resources_with_model() -> No
 def test_pragma_client_get_resource_returns_dict_without_model() -> None:
     """Returns dict when no model parameter provided."""
     respx.get(
-        "http://localhost:8000/resources/by-name",
+        "https://api.pragmatiks.io/resources/by-name",
         params={"provider": "postgres", "resource": "database", "name": "mydb"},
     ).mock(
         return_value=httpx.Response(
@@ -108,7 +108,7 @@ def test_pragma_client_get_resource_returns_dict_without_model() -> None:
 def test_pragma_client_get_resource_returns_typed_resource_with_model() -> None:
     """Returns typed Resource instance when model parameter provided."""
     respx.get(
-        "http://localhost:8000/resources/by-name",
+        "https://api.pragmatiks.io/resources/by-name",
         params={"provider": "test", "resource": "stub", "name": "mydb"},
     ).mock(
         return_value=httpx.Response(
@@ -132,7 +132,7 @@ def test_pragma_client_get_resource_returns_typed_resource_with_model() -> None:
 @respx.mock
 def test_pragma_client_apply_resource_returns_dict_without_model() -> None:
     """Returns dict when no model parameter provided."""
-    respx.post("http://localhost:8000/resources/apply").mock(
+    respx.post("https://api.pragmatiks.io/resources/apply").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -153,7 +153,7 @@ def test_pragma_client_apply_resource_returns_dict_without_model() -> None:
 @respx.mock
 def test_pragma_client_apply_resource_returns_typed_resource_with_model() -> None:
     """Returns typed Resource instance when model parameter provided."""
-    respx.post("http://localhost:8000/resources/apply").mock(
+    respx.post("https://api.pragmatiks.io/resources/apply").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -176,7 +176,7 @@ def test_pragma_client_apply_resource_returns_typed_resource_with_model() -> Non
 def test_pragma_client_deactivate_resource_returns_dict_without_model() -> None:
     """Returns dict when no model parameter provided."""
     respx.post(
-        "http://localhost:8000/resources/deactivate",
+        "https://api.pragmatiks.io/resources/deactivate",
         params={"provider": "postgres", "resource": "database", "name": "mydb"},
     ).mock(
         return_value=httpx.Response(
@@ -200,7 +200,7 @@ def test_pragma_client_deactivate_resource_returns_dict_without_model() -> None:
 def test_pragma_client_deactivate_resource_returns_typed_resource_with_model() -> None:
     """Returns typed Resource instance when model parameter provided."""
     respx.post(
-        "http://localhost:8000/resources/deactivate",
+        "https://api.pragmatiks.io/resources/deactivate",
         params={"provider": "test", "resource": "stub", "name": "mydb"},
     ).mock(
         return_value=httpx.Response(
@@ -225,7 +225,7 @@ def test_pragma_client_deactivate_resource_returns_typed_resource_with_model() -
 def test_pragma_client_delete_resource_sends_delete_request() -> None:
     """Sends DELETE to /resources/by-name with correct params and returns None."""
     route = respx.delete(
-        "http://localhost:8000/resources/by-name",
+        "https://api.pragmatiks.io/resources/by-name",
         params={"provider": "postgres", "resource": "database", "name": "mydb"},
     ).mock(return_value=httpx.Response(200, json=None))
 
@@ -240,7 +240,7 @@ def test_pragma_client_delete_resource_sends_delete_request() -> None:
 def test_pragma_client_raises_on_not_found() -> None:
     """Raises HTTPStatusError when resource not found."""
     respx.get(
-        "http://localhost:8000/resources/by-name",
+        "https://api.pragmatiks.io/resources/by-name",
         params={"provider": "test", "resource": "db", "name": "notfound"},
     ).mock(return_value=httpx.Response(404, json={"detail": "Not found"}))
 
@@ -280,7 +280,7 @@ def test_async_pragma_client_raises_when_auth_required_but_no_token() -> None:
 @respx.mock
 async def test_async_pragma_client_is_healthy_returns_true_when_api_ok() -> None:
     """Returns True when API health check succeeds."""
-    respx.get("http://localhost:8000/health").mock(return_value=httpx.Response(200, json={"status": "ok"}))
+    respx.get("https://api.pragmatiks.io/health").mock(return_value=httpx.Response(200, json={"status": "ok"}))
 
     async with AsyncPragmaClient(auth_token=None) as client:
         assert await client.is_healthy() is True
@@ -289,7 +289,7 @@ async def test_async_pragma_client_is_healthy_returns_true_when_api_ok() -> None
 @respx.mock
 async def test_async_pragma_client_is_healthy_returns_false_on_error() -> None:
     """Returns False when API health check fails."""
-    respx.get("http://localhost:8000/health").mock(return_value=httpx.Response(500, json={"status": "error"}))
+    respx.get("https://api.pragmatiks.io/health").mock(return_value=httpx.Response(500, json={"status": "error"}))
 
     async with AsyncPragmaClient(auth_token=None) as client:
         assert await client.is_healthy() is False
@@ -298,7 +298,7 @@ async def test_async_pragma_client_is_healthy_returns_false_on_error() -> None:
 @respx.mock
 async def test_async_pragma_client_list_resources_returns_dicts_without_model() -> None:
     """Returns list of dicts when no model parameter provided."""
-    respx.get("http://localhost:8000/resources").mock(
+    respx.get("https://api.pragmatiks.io/resources").mock(
         return_value=httpx.Response(
             200,
             json=[
@@ -320,7 +320,7 @@ async def test_async_pragma_client_list_resources_returns_dicts_without_model() 
 @respx.mock
 async def test_async_pragma_client_list_resources_returns_typed_resources_with_model() -> None:
     """Returns list of typed Resource instances when model parameter provided."""
-    respx.get("http://localhost:8000/resources").mock(
+    respx.get("https://api.pragmatiks.io/resources").mock(
         return_value=httpx.Response(
             200,
             json=[
@@ -344,7 +344,7 @@ async def test_async_pragma_client_list_resources_returns_typed_resources_with_m
 async def test_async_pragma_client_get_resource_returns_dict_without_model() -> None:
     """Returns dict when no model parameter provided."""
     respx.get(
-        "http://localhost:8000/resources/by-name",
+        "https://api.pragmatiks.io/resources/by-name",
         params={"provider": "postgres", "resource": "database", "name": "mydb"},
     ).mock(
         return_value=httpx.Response(
@@ -368,7 +368,7 @@ async def test_async_pragma_client_get_resource_returns_dict_without_model() -> 
 async def test_async_pragma_client_get_resource_returns_typed_resource_with_model() -> None:
     """Returns typed Resource instance when model parameter provided."""
     respx.get(
-        "http://localhost:8000/resources/by-name",
+        "https://api.pragmatiks.io/resources/by-name",
         params={"provider": "test", "resource": "stub", "name": "mydb"},
     ).mock(
         return_value=httpx.Response(
@@ -392,7 +392,7 @@ async def test_async_pragma_client_get_resource_returns_typed_resource_with_mode
 @respx.mock
 async def test_async_pragma_client_apply_resource_returns_dict_without_model() -> None:
     """Returns dict when no model parameter provided."""
-    respx.post("http://localhost:8000/resources/apply").mock(
+    respx.post("https://api.pragmatiks.io/resources/apply").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -413,7 +413,7 @@ async def test_async_pragma_client_apply_resource_returns_dict_without_model() -
 @respx.mock
 async def test_async_pragma_client_apply_resource_returns_typed_resource_with_model() -> None:
     """Returns typed Resource instance when model parameter provided."""
-    respx.post("http://localhost:8000/resources/apply").mock(
+    respx.post("https://api.pragmatiks.io/resources/apply").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -438,7 +438,7 @@ async def test_async_pragma_client_apply_resource_returns_typed_resource_with_mo
 async def test_async_pragma_client_deactivate_resource_returns_dict_without_model() -> None:
     """Returns dict when no model parameter provided."""
     respx.post(
-        "http://localhost:8000/resources/deactivate",
+        "https://api.pragmatiks.io/resources/deactivate",
         params={"provider": "postgres", "resource": "database", "name": "mydb"},
     ).mock(
         return_value=httpx.Response(
@@ -462,7 +462,7 @@ async def test_async_pragma_client_deactivate_resource_returns_dict_without_mode
 async def test_async_pragma_client_deactivate_resource_returns_typed_resource_with_model() -> None:
     """Returns typed Resource instance when model parameter provided."""
     respx.post(
-        "http://localhost:8000/resources/deactivate",
+        "https://api.pragmatiks.io/resources/deactivate",
         params={"provider": "test", "resource": "stub", "name": "mydb"},
     ).mock(
         return_value=httpx.Response(
@@ -487,7 +487,7 @@ async def test_async_pragma_client_deactivate_resource_returns_typed_resource_wi
 async def test_async_pragma_client_delete_resource_sends_delete_request() -> None:
     """Sends DELETE to /resources/by-name with correct params and returns None."""
     route = respx.delete(
-        "http://localhost:8000/resources/by-name",
+        "https://api.pragmatiks.io/resources/by-name",
         params={"provider": "postgres", "resource": "database", "name": "mydb"},
     ).mock(return_value=httpx.Response(200, json=None))
 
@@ -502,7 +502,7 @@ async def test_async_pragma_client_delete_resource_sends_delete_request() -> Non
 async def test_async_pragma_client_raises_on_not_found() -> None:
     """Raises HTTPStatusError when resource not found."""
     respx.get(
-        "http://localhost:8000/resources/by-name",
+        "https://api.pragmatiks.io/resources/by-name",
         params={"provider": "test", "resource": "db", "name": "notfound"},
     ).mock(return_value=httpx.Response(404, json={"detail": "Not found"}))
 

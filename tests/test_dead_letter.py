@@ -12,7 +12,7 @@ from pragma_sdk.client import AsyncPragmaClient, PragmaClient
 @respx.mock
 def test_list_dead_letter_events_without_filter() -> None:
     """Returns list of dead letter events when no filter provided."""
-    route = respx.get("http://localhost:8000/ops/dead-letter").mock(
+    route = respx.get("https://api.pragmatiks.io/ops/dead-letter").mock(
         return_value=httpx.Response(
             200,
             json=[
@@ -34,7 +34,7 @@ def test_list_dead_letter_events_without_filter() -> None:
 @respx.mock
 def test_list_dead_letter_events_with_provider_filter() -> None:
     """Passes provider filter as query parameter."""
-    route = respx.get("http://localhost:8000/ops/dead-letter").mock(
+    route = respx.get("https://api.pragmatiks.io/ops/dead-letter").mock(
         return_value=httpx.Response(
             200,
             json=[{"id": "evt_1", "provider": "postgres", "error": "Connection failed"}],
@@ -53,7 +53,7 @@ def test_list_dead_letter_events_with_provider_filter() -> None:
 @respx.mock
 def test_get_dead_letter_event_returns_event_dict() -> None:
     """Returns dead letter event as dict."""
-    respx.get("http://localhost:8000/ops/dead-letter/evt_123").mock(
+    respx.get("https://api.pragmatiks.io/ops/dead-letter/evt_123").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -76,7 +76,7 @@ def test_get_dead_letter_event_returns_event_dict() -> None:
 @respx.mock
 def test_retry_dead_letter_event_makes_post_returns_none() -> None:
     """Makes POST request and returns None on success."""
-    route = respx.post("http://localhost:8000/ops/dead-letter/evt_123/retry").mock(return_value=httpx.Response(204))
+    route = respx.post("https://api.pragmatiks.io/ops/dead-letter/evt_123/retry").mock(return_value=httpx.Response(204))
 
     with PragmaClient(auth_token=None) as client:
         result = client.retry_dead_letter_event("evt_123")
@@ -88,7 +88,7 @@ def test_retry_dead_letter_event_makes_post_returns_none() -> None:
 @respx.mock
 def test_retry_all_dead_letter_events_returns_count() -> None:
     """Returns retried count from response."""
-    route = respx.post("http://localhost:8000/ops/dead-letter/retry-all").mock(
+    route = respx.post("https://api.pragmatiks.io/ops/dead-letter/retry-all").mock(
         return_value=httpx.Response(200, json={"retried_count": 5})
     )
 
@@ -102,7 +102,7 @@ def test_retry_all_dead_letter_events_returns_count() -> None:
 @respx.mock
 def test_delete_dead_letter_event_makes_delete_returns_none() -> None:
     """Makes DELETE request and returns None on success."""
-    route = respx.delete("http://localhost:8000/ops/dead-letter/evt_123").mock(return_value=httpx.Response(204))
+    route = respx.delete("https://api.pragmatiks.io/ops/dead-letter/evt_123").mock(return_value=httpx.Response(204))
 
     with PragmaClient(auth_token=None) as client:
         result = client.delete_dead_letter_event("evt_123")
@@ -114,7 +114,7 @@ def test_delete_dead_letter_event_makes_delete_returns_none() -> None:
 @respx.mock
 def test_delete_dead_letter_events_with_all_returns_count() -> None:
     """Returns deleted count when all=True."""
-    route = respx.delete("http://localhost:8000/ops/dead-letter").mock(
+    route = respx.delete("https://api.pragmatiks.io/ops/dead-letter").mock(
         return_value=httpx.Response(200, json={"deleted_count": 10})
     )
 
@@ -129,7 +129,7 @@ def test_delete_dead_letter_events_with_all_returns_count() -> None:
 @respx.mock
 def test_delete_dead_letter_events_with_provider_returns_count() -> None:
     """Returns deleted count when provider specified."""
-    route = respx.delete("http://localhost:8000/ops/dead-letter").mock(
+    route = respx.delete("https://api.pragmatiks.io/ops/dead-letter").mock(
         return_value=httpx.Response(200, json={"deleted_count": 3})
     )
 
@@ -151,7 +151,7 @@ def test_delete_dead_letter_events_without_args_raises_value_error() -> None:
 @respx.mock
 async def test_async_list_dead_letter_events_without_filter() -> None:
     """Returns list of dead letter events when no filter provided."""
-    route = respx.get("http://localhost:8000/ops/dead-letter").mock(
+    route = respx.get("https://api.pragmatiks.io/ops/dead-letter").mock(
         return_value=httpx.Response(
             200,
             json=[
@@ -173,7 +173,7 @@ async def test_async_list_dead_letter_events_without_filter() -> None:
 @respx.mock
 async def test_async_list_dead_letter_events_with_provider_filter() -> None:
     """Passes provider filter as query parameter."""
-    route = respx.get("http://localhost:8000/ops/dead-letter").mock(
+    route = respx.get("https://api.pragmatiks.io/ops/dead-letter").mock(
         return_value=httpx.Response(
             200,
             json=[{"id": "evt_1", "provider": "postgres", "error": "Connection failed"}],
@@ -192,7 +192,7 @@ async def test_async_list_dead_letter_events_with_provider_filter() -> None:
 @respx.mock
 async def test_async_get_dead_letter_event_returns_event_dict() -> None:
     """Returns dead letter event as dict."""
-    respx.get("http://localhost:8000/ops/dead-letter/evt_123").mock(
+    respx.get("https://api.pragmatiks.io/ops/dead-letter/evt_123").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -215,7 +215,7 @@ async def test_async_get_dead_letter_event_returns_event_dict() -> None:
 @respx.mock
 async def test_async_retry_dead_letter_event_makes_post_returns_none() -> None:
     """Makes POST request and returns None on success."""
-    route = respx.post("http://localhost:8000/ops/dead-letter/evt_123/retry").mock(return_value=httpx.Response(204))
+    route = respx.post("https://api.pragmatiks.io/ops/dead-letter/evt_123/retry").mock(return_value=httpx.Response(204))
 
     async with AsyncPragmaClient(auth_token=None) as client:
         result = await client.retry_dead_letter_event("evt_123")
@@ -227,7 +227,7 @@ async def test_async_retry_dead_letter_event_makes_post_returns_none() -> None:
 @respx.mock
 async def test_async_retry_all_dead_letter_events_returns_count() -> None:
     """Returns retried count from response."""
-    route = respx.post("http://localhost:8000/ops/dead-letter/retry-all").mock(
+    route = respx.post("https://api.pragmatiks.io/ops/dead-letter/retry-all").mock(
         return_value=httpx.Response(200, json={"retried_count": 5})
     )
 
@@ -241,7 +241,7 @@ async def test_async_retry_all_dead_letter_events_returns_count() -> None:
 @respx.mock
 async def test_async_delete_dead_letter_event_makes_delete_returns_none() -> None:
     """Makes DELETE request and returns None on success."""
-    route = respx.delete("http://localhost:8000/ops/dead-letter/evt_123").mock(return_value=httpx.Response(204))
+    route = respx.delete("https://api.pragmatiks.io/ops/dead-letter/evt_123").mock(return_value=httpx.Response(204))
 
     async with AsyncPragmaClient(auth_token=None) as client:
         result = await client.delete_dead_letter_event("evt_123")
@@ -253,7 +253,7 @@ async def test_async_delete_dead_letter_event_makes_delete_returns_none() -> Non
 @respx.mock
 async def test_async_delete_dead_letter_events_with_all_returns_count() -> None:
     """Returns deleted count when all=True."""
-    route = respx.delete("http://localhost:8000/ops/dead-letter").mock(
+    route = respx.delete("https://api.pragmatiks.io/ops/dead-letter").mock(
         return_value=httpx.Response(200, json={"deleted_count": 10})
     )
 
@@ -268,7 +268,7 @@ async def test_async_delete_dead_letter_events_with_all_returns_count() -> None:
 @respx.mock
 async def test_async_delete_dead_letter_events_with_provider_returns_count() -> None:
     """Returns deleted count when provider specified."""
-    route = respx.delete("http://localhost:8000/ops/dead-letter").mock(
+    route = respx.delete("https://api.pragmatiks.io/ops/dead-letter").mock(
         return_value=httpx.Response(200, json={"deleted_count": 3})
     )
 
