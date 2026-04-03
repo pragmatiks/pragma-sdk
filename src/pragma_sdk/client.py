@@ -577,6 +577,7 @@ class PragmaClient(BaseClient):
         display_name: str | None = None,
         description: str | None = None,
         tags: list[str] | None = None,
+        icon_url: str | None = None,
     ) -> ProviderVersion:
         """Publish a new version of a provider.
 
@@ -588,6 +589,7 @@ class PragmaClient(BaseClient):
             display_name: Human-friendly provider name for the catalog listing.
             description: Provider description for the catalog listing.
             tags: Tags for the catalog listing.
+            icon_url: URL to provider icon image for the catalog listing.
 
         Returns:
             Published version info.
@@ -609,6 +611,9 @@ class PragmaClient(BaseClient):
 
         if tags is not None:
             data["tags"] = json.dumps(tags)
+
+        if icon_url is not None:
+            data["icon_url"] = icon_url
 
         response = self._request(
             "POST",
@@ -1322,6 +1327,7 @@ class AsyncPragmaClient(BaseClient):
         display_name: str | None = None,
         description: str | None = None,
         tags: list[str] | None = None,
+        icon_url: str | None = None,
     ) -> ProviderVersion:
         """Publish a new version of a provider.
 
@@ -1333,6 +1339,7 @@ class AsyncPragmaClient(BaseClient):
             display_name: Human-friendly provider name for the catalog listing.
             description: Provider description for the catalog listing.
             tags: Tags for the catalog listing.
+            icon_url: URL to provider icon image for the catalog listing.
 
         Returns:
             Published version info.
@@ -1354,6 +1361,9 @@ class AsyncPragmaClient(BaseClient):
 
         if tags is not None:
             data["tags"] = json.dumps(tags)
+
+        if icon_url is not None:
+            data["icon_url"] = icon_url
 
         response = await self._request(
             "POST",
