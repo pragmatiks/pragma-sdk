@@ -1,3 +1,9 @@
+## v0.33.1 (2026-04-03)
+
+### Fix
+
+- default API URL to production instead of localhost
+
 ## v0.33.0 (2026-03-27)
 
 ### Feat
