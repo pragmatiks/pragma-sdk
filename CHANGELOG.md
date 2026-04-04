@@ -1,3 +1,9 @@
+## v0.34.1 (2026-04-04)
+
+### Refactor
+
+- remove direct provider cascade from SDK publish
+
 ## v0.34.0 (2026-04-03)
 
 ### Feat
