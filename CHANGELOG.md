@@ -1,3 +1,9 @@
+## v0.35.0 (2026-04-11)
+
+### Feat
+
+- add agent models (AgentType, AgentInstance, Task, enums)
+
 ## v0.34.1 (2026-04-04)
 
 ### Refactor
