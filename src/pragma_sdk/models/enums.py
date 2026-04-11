@@ -87,3 +87,49 @@ class OrganizationStatus(StrEnum):
     ACTIVE = "active"
     DEACTIVATING = "deactivating"
     DELETED = "deleted"
+
+
+class AgentInstanceStatus(StrEnum):
+    """Lifecycle status of an agent instance."""
+
+    STARTING = "starting"
+    RUNNING = "running"
+    WAITING = "waiting"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    ERROR = "error"
+    STOPPED = "stopped"
+
+
+class TaskStatus(StrEnum):
+    """Status of an agent task."""
+
+    BACKLOG = "backlog"
+    ASSIGNED = "assigned"
+    RUNNING = "running"
+    REVIEW = "review"
+    DONE = "done"
+
+
+class TaskSource(StrEnum):
+    """Origin of an agent task."""
+
+    TRIAGE = "triage"
+    CONVERSATION = "conversation"
+    MANUAL = "manual"
+
+
+class AgentLogType(StrEnum):
+    """Type of agent log entry."""
+
+    TOOL_CALL = "tool_call"
+    REASONING = "reasoning"
+    STATE_CHANGE = "state_change"
+    INPUT_REQUESTED = "input_requested"
+    INPUT_RECEIVED = "input_received"
+    ERROR = "error"
+    SUCCESS = "success"
+    PLAN_CREATED = "plan_created"
+    PLAN_UPDATED = "plan_updated"
+    STEP_STARTED = "step_started"
+    STEP_COMPLETED = "step_completed"

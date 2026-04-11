@@ -12,6 +12,11 @@ import httpx
 from pragma_sdk.auth import BearerAuth
 from pragma_sdk.config import get_token_for_context
 from pragma_sdk.models import (
+    AgentInstance,
+    AgentInstanceStatus,
+    AgentType,
+    AgentTypeCreate,
+    AgentTypeUpdate,
     DeploymentResult,
     Organization,
     PaginatedResponse,
@@ -854,6 +859,129 @@ class PragmaClient(BaseClient):
         """  # noqa: DOC502
         self._request("POST", f"/organizations/{organization_id}/cleanup")
 
+    def list_agent_types(self, organization_id: str) -> list[AgentType]:
+        """List agent types for an organization.
+
+        Args:
+            organization_id: Organization to list agent types for.
+
+        Returns:
+            List of agent types.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        params = {"organization_id": organization_id}
+        response = self._request("GET", "/agents/types", params=params)
+        return [AgentType.model_validate(item) for item in response]
+
+    def get_agent_type(self, agent_type_id: str) -> AgentType:
+        """Get an agent type by ID.
+
+        Args:
+            agent_type_id: Unique identifier for the agent type.
+
+        Returns:
+            Agent type details.
+
+        Raises:
+            httpx.HTTPStatusError: If agent type not found or request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", f"/agents/types/{agent_type_id}")
+        return AgentType.model_validate(response)
+
+    def create_agent_type(self, data: AgentTypeCreate) -> AgentType:
+        """Create a new agent type.
+
+        Args:
+            data: Agent type creation data.
+
+        Returns:
+            Created agent type.
+
+        Raises:
+            httpx.HTTPStatusError: If creation fails.
+        """  # noqa: DOC502
+        response = self._request("POST", "/agents/types", json_data=data.model_dump(exclude_none=True))
+        return AgentType.model_validate(response)
+
+    def update_agent_type(self, agent_type_id: str, data: AgentTypeUpdate) -> AgentType:
+        """Update an existing agent type.
+
+        Args:
+            agent_type_id: Unique identifier for the agent type.
+            data: Fields to update.
+
+        Returns:
+            Updated agent type.
+
+        Raises:
+            httpx.HTTPStatusError: If agent type not found or update fails.
+        """  # noqa: DOC502
+        response = self._request(
+            "PATCH",
+            f"/agents/types/{agent_type_id}",
+            json_data=data.model_dump(exclude_unset=True),
+        )
+        return AgentType.model_validate(response)
+
+    def delete_agent_type(self, agent_type_id: str) -> None:
+        """Delete an agent type.
+
+        Args:
+            agent_type_id: Unique identifier for the agent type.
+
+        Raises:
+            httpx.HTTPStatusError: If agent type not found or deletion fails.
+        """  # noqa: DOC502
+        self._request("DELETE", f"/agents/types/{agent_type_id}")
+
+    def list_agent_instances(
+        self,
+        organization_id: str,
+        *,
+        agent_type_id: str | None = None,
+        status: AgentInstanceStatus | None = None,
+    ) -> list[AgentInstance]:
+        """List agent instances for an organization.
+
+        Args:
+            organization_id: Organization to list instances for.
+            agent_type_id: Filter by agent type.
+            status: Filter by instance status.
+
+        Returns:
+            List of agent instances.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        params: dict[str, Any] = {"organization_id": organization_id}
+
+        if agent_type_id is not None:
+            params["agent_type_id"] = agent_type_id
+
+        if status is not None:
+            params["status"] = status
+
+        response = self._request("GET", "/agents/instances", params=params)
+        return [AgentInstance.model_validate(item) for item in response]
+
+    def get_agent_instance(self, instance_id: str) -> AgentInstance:
+        """Get an agent instance by ID.
+
+        Args:
+            instance_id: Unique identifier for the agent instance.
+
+        Returns:
+            Agent instance details.
+
+        Raises:
+            httpx.HTTPStatusError: If instance not found or request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", f"/agents/instances/{instance_id}")
+        return AgentInstance.model_validate(response)
+
 
 class AsyncPragmaClient(BaseClient):
     """Asynchronous client for the Pragma API.
@@ -1603,3 +1731,126 @@ class AsyncPragmaClient(BaseClient):
             httpx.HTTPStatusError: If organization not found or cleanup fails.
         """  # noqa: DOC502
         await self._request("POST", f"/organizations/{organization_id}/cleanup")
+
+    async def list_agent_types(self, organization_id: str) -> list[AgentType]:
+        """List agent types for an organization.
+
+        Args:
+            organization_id: Organization to list agent types for.
+
+        Returns:
+            List of agent types.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        params = {"organization_id": organization_id}
+        response = await self._request("GET", "/agents/types", params=params)
+        return [AgentType.model_validate(item) for item in response]
+
+    async def get_agent_type(self, agent_type_id: str) -> AgentType:
+        """Get an agent type by ID.
+
+        Args:
+            agent_type_id: Unique identifier for the agent type.
+
+        Returns:
+            Agent type details.
+
+        Raises:
+            httpx.HTTPStatusError: If agent type not found or request fails.
+        """  # noqa: DOC502
+        response = await self._request("GET", f"/agents/types/{agent_type_id}")
+        return AgentType.model_validate(response)
+
+    async def create_agent_type(self, data: AgentTypeCreate) -> AgentType:
+        """Create a new agent type.
+
+        Args:
+            data: Agent type creation data.
+
+        Returns:
+            Created agent type.
+
+        Raises:
+            httpx.HTTPStatusError: If creation fails.
+        """  # noqa: DOC502
+        response = await self._request("POST", "/agents/types", json_data=data.model_dump(exclude_none=True))
+        return AgentType.model_validate(response)
+
+    async def update_agent_type(self, agent_type_id: str, data: AgentTypeUpdate) -> AgentType:
+        """Update an existing agent type.
+
+        Args:
+            agent_type_id: Unique identifier for the agent type.
+            data: Fields to update.
+
+        Returns:
+            Updated agent type.
+
+        Raises:
+            httpx.HTTPStatusError: If agent type not found or update fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "PATCH",
+            f"/agents/types/{agent_type_id}",
+            json_data=data.model_dump(exclude_unset=True),
+        )
+        return AgentType.model_validate(response)
+
+    async def delete_agent_type(self, agent_type_id: str) -> None:
+        """Delete an agent type.
+
+        Args:
+            agent_type_id: Unique identifier for the agent type.
+
+        Raises:
+            httpx.HTTPStatusError: If agent type not found or deletion fails.
+        """  # noqa: DOC502
+        await self._request("DELETE", f"/agents/types/{agent_type_id}")
+
+    async def list_agent_instances(
+        self,
+        organization_id: str,
+        *,
+        agent_type_id: str | None = None,
+        status: AgentInstanceStatus | None = None,
+    ) -> list[AgentInstance]:
+        """List agent instances for an organization.
+
+        Args:
+            organization_id: Organization to list instances for.
+            agent_type_id: Filter by agent type.
+            status: Filter by instance status.
+
+        Returns:
+            List of agent instances.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        params: dict[str, Any] = {"organization_id": organization_id}
+
+        if agent_type_id is not None:
+            params["agent_type_id"] = agent_type_id
+
+        if status is not None:
+            params["status"] = status
+
+        response = await self._request("GET", "/agents/instances", params=params)
+        return [AgentInstance.model_validate(item) for item in response]
+
+    async def get_agent_instance(self, instance_id: str) -> AgentInstance:
+        """Get an agent instance by ID.
+
+        Args:
+            instance_id: Unique identifier for the agent instance.
+
+        Returns:
+            Agent instance details.
+
+        Raises:
+            httpx.HTTPStatusError: If instance not found or request fails.
+        """  # noqa: DOC502
+        response = await self._request("GET", f"/agents/instances/{instance_id}")
+        return AgentInstance.model_validate(response)

@@ -1,5 +1,17 @@
 """Pragma SDK data models."""
 
+from pragma_sdk.models.agents import (
+    AgentInstance,
+    AgentType,
+    AgentTypeCreate,
+    AgentTypeUpdate,
+    ConversationRoutingManifest,
+    FleetVitals,
+    ScheduleConfig,
+    Task,
+    TaskCreate,
+    TaskUpdate,
+)
 from pragma_sdk.models.api import (
     BuildInfo,
     DeploymentResult,
@@ -14,6 +26,8 @@ from pragma_sdk.models.api import (
 )
 from pragma_sdk.models.base import Config, Outputs, Resource
 from pragma_sdk.models.enums import (
+    AgentInstanceStatus,
+    AgentLogType,
     BuildStatus,
     DeploymentStatus,
     EventType,
@@ -21,6 +35,8 @@ from pragma_sdk.models.enums import (
     ProviderScope,
     ResourceTier,
     ResponseStatus,
+    TaskSource,
+    TaskStatus,
     TrustTier,
     UpgradePolicy,
     VersionStatus,
@@ -54,15 +70,23 @@ from pragma_sdk.models.references import (
 
 
 __all__ = [
+    "AgentInstance",
+    "AgentInstanceStatus",
+    "AgentLogType",
+    "AgentType",
+    "AgentTypeCreate",
+    "AgentTypeUpdate",
     "BuildInfo",
     "BuildStatus",
     "Config",
+    "ConversationRoutingManifest",
     "Dependency",
     "DeploymentResult",
     "DeploymentStatus",
     "EventType",
     "Field",
     "FieldReference",
+    "FleetVitals",
     "Immutable",
     "ImmutableDependency",
     "ImmutableField",
@@ -87,10 +111,16 @@ __all__ = [
     "ResourceSchema",
     "ResourceTier",
     "ResponseStatus",
+    "ScheduleConfig",
     "Sensitive",
     "SensitiveDependency",
     "SensitiveField",
     "SensitiveOutput",
+    "Task",
+    "TaskCreate",
+    "TaskSource",
+    "TaskStatus",
+    "TaskUpdate",
     "TrustTier",
     "UpgradePolicy",
     "UserInfo",
