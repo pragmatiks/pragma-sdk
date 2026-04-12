@@ -17,9 +17,13 @@ from pragma_sdk.models import (
     AgentType,
     AgentTypeCreate,
     AgentTypeUpdate,
+    CostEstimate,
     DeploymentResult,
+    LLMProviderSummary,
     Organization,
+    OrganizationSettings,
     PaginatedResponse,
+    PerformanceProfile,
     Provider,
     ProviderInstallation,
     ProviderScope,
@@ -982,6 +986,110 @@ class PragmaClient(BaseClient):
         response = self._request("GET", f"/agents/instances/{instance_id}")
         return AgentInstance.model_validate(response)
 
+    def get_organization_settings(self, organization_id: str) -> OrganizationSettings:
+        """Get LLM settings for an organization.
+
+        Args:
+            organization_id: Organization to fetch settings for.
+
+        Returns:
+            Current LLM provider resource and performance profile
+            selection for the organization.
+
+        Raises:
+            httpx.HTTPStatusError: If organization not found or the
+                request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", f"/organizations/{organization_id}/settings")
+        return OrganizationSettings.model_validate(response)
+
+    def update_organization_settings(
+        self,
+        organization_id: str,
+        provider: str,
+        performance_profile: PerformanceProfile,
+    ) -> OrganizationSettings:
+        """Update LLM settings for an organization.
+
+        Args:
+            organization_id: Organization to update settings for.
+            provider: Resource identifier of the LLM provider resource
+                the organization is selecting.
+            performance_profile: Performance profile tier to use for
+                platform agent invocations.
+
+        Returns:
+            Updated organization settings as persisted by the API.
+
+        Raises:
+            httpx.HTTPStatusError: If the organization or referenced
+                provider resource is not found, or if the update fails.
+        """  # noqa: DOC502
+        payload = {"provider": provider, "performance_profile": performance_profile}
+        response = self._request(
+            "PATCH",
+            f"/organizations/{organization_id}/settings",
+            json_data=payload,
+        )
+        return OrganizationSettings.model_validate(response)
+
+    def get_cost_estimate(
+        self,
+        organization_id: str,
+        provider: str,
+        performance_profile: PerformanceProfile,
+    ) -> CostEstimate:
+        """Get a cost estimate for a proposed provider and profile.
+
+        Used by the settings UI to show a live cost preview with a
+        provider comparison row before the user commits to a change.
+
+        Args:
+            organization_id: Organization the estimate is scoped to.
+            provider: Provider slug to estimate costs for (e.g.
+                'anthropic', 'openai', 'google').
+            performance_profile: Performance profile tier to estimate.
+
+        Returns:
+            Cost estimate including monthly and per-call projections plus
+            a comparison row for alternative providers.
+
+        Raises:
+            httpx.HTTPStatusError: If the organization is not found or
+                the request fails.
+        """  # noqa: DOC502
+        params = {"provider": provider, "profile": performance_profile}
+        response = self._request(
+            "GET",
+            f"/organizations/{organization_id}/settings/cost-estimate",
+            params=params,
+        )
+        return CostEstimate.model_validate(response)
+
+    def list_llm_providers(self, organization_id: str) -> list[LLMProviderSummary]:
+        """List LLM providers available to an organization.
+
+        Returns the set of provider options the organization can select
+        in the settings UI, including the shared platform-default entry
+        and any LLM provider resources the organization has connected.
+
+        Args:
+            organization_id: Organization to list providers for.
+
+        Returns:
+            List of provider summaries ordered for display in the
+            settings picker.
+
+        Raises:
+            httpx.HTTPStatusError: If the organization is not found or
+                the request fails.
+        """  # noqa: DOC502
+        response = self._request(
+            "GET",
+            f"/organizations/{organization_id}/settings/available-providers",
+        )
+        return [LLMProviderSummary.model_validate(item) for item in response]
+
 
 class AsyncPragmaClient(BaseClient):
     """Asynchronous client for the Pragma API.
@@ -1854,3 +1962,107 @@ class AsyncPragmaClient(BaseClient):
         """  # noqa: DOC502
         response = await self._request("GET", f"/agents/instances/{instance_id}")
         return AgentInstance.model_validate(response)
+
+    async def get_organization_settings(self, organization_id: str) -> OrganizationSettings:
+        """Get LLM settings for an organization.
+
+        Args:
+            organization_id: Organization to fetch settings for.
+
+        Returns:
+            Current LLM provider resource and performance profile
+            selection for the organization.
+
+        Raises:
+            httpx.HTTPStatusError: If organization not found or the
+                request fails.
+        """  # noqa: DOC502
+        response = await self._request("GET", f"/organizations/{organization_id}/settings")
+        return OrganizationSettings.model_validate(response)
+
+    async def update_organization_settings(
+        self,
+        organization_id: str,
+        provider: str,
+        performance_profile: PerformanceProfile,
+    ) -> OrganizationSettings:
+        """Update LLM settings for an organization.
+
+        Args:
+            organization_id: Organization to update settings for.
+            provider: Resource identifier of the LLM provider resource
+                the organization is selecting.
+            performance_profile: Performance profile tier to use for
+                platform agent invocations.
+
+        Returns:
+            Updated organization settings as persisted by the API.
+
+        Raises:
+            httpx.HTTPStatusError: If the organization or referenced
+                provider resource is not found, or if the update fails.
+        """  # noqa: DOC502
+        payload = {"provider": provider, "performance_profile": performance_profile}
+        response = await self._request(
+            "PATCH",
+            f"/organizations/{organization_id}/settings",
+            json_data=payload,
+        )
+        return OrganizationSettings.model_validate(response)
+
+    async def get_cost_estimate(
+        self,
+        organization_id: str,
+        provider: str,
+        performance_profile: PerformanceProfile,
+    ) -> CostEstimate:
+        """Get a cost estimate for a proposed provider and profile.
+
+        Used by the settings UI to show a live cost preview with a
+        provider comparison row before the user commits to a change.
+
+        Args:
+            organization_id: Organization the estimate is scoped to.
+            provider: Provider slug to estimate costs for (e.g.
+                'anthropic', 'openai', 'google').
+            performance_profile: Performance profile tier to estimate.
+
+        Returns:
+            Cost estimate including monthly and per-call projections plus
+            a comparison row for alternative providers.
+
+        Raises:
+            httpx.HTTPStatusError: If the organization is not found or
+                the request fails.
+        """  # noqa: DOC502
+        params = {"provider": provider, "profile": performance_profile}
+        response = await self._request(
+            "GET",
+            f"/organizations/{organization_id}/settings/cost-estimate",
+            params=params,
+        )
+        return CostEstimate.model_validate(response)
+
+    async def list_llm_providers(self, organization_id: str) -> list[LLMProviderSummary]:
+        """List LLM providers available to an organization.
+
+        Returns the set of provider options the organization can select
+        in the settings UI, including the shared platform-default entry
+        and any LLM provider resources the organization has connected.
+
+        Args:
+            organization_id: Organization to list providers for.
+
+        Returns:
+            List of provider summaries ordered for display in the
+            settings picker.
+
+        Raises:
+            httpx.HTTPStatusError: If the organization is not found or
+                the request fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "GET",
+            f"/organizations/{organization_id}/settings/available-providers",
+        )
+        return [LLMProviderSummary.model_validate(item) for item in response]
