@@ -683,6 +683,17 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
     provider_version: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    managed_by: Literal["user", "platform"] | None = PydanticField(
+        default=None,
+        description=(
+            "Ownership of the resource. 'user' means a human or API-key caller owns this "
+            "resource and controls its lifecycle. 'platform' means pragma-os owns it "
+            "(platform agents, tier resources, platform-default LLM provider) and it is "
+            "off-limits to user write paths -- PATCH, PUT, DELETE, copy, and export are "
+            "rejected by the API. None is the default for unmanaged legacy resources and "
+            "will be backfilled by a future migration."
+        ),
+    )
 
     @property
     def provider(self) -> str:
