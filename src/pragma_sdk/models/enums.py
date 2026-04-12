@@ -133,3 +133,30 @@ class AgentLogType(StrEnum):
     PLAN_UPDATED = "plan_updated"
     STEP_STARTED = "step_started"
     STEP_COMPLETED = "step_completed"
+
+
+class PerformanceProfile(StrEnum):
+    """User-facing LLM performance profile selection.
+
+    Identifies which tier of model an organization wants platform agents to use.
+    The profile is chosen by the user; the API resolves it to a concrete model
+    from the selected provider's catalog entries.
+    """
+
+    FAST = "fast"
+    BALANCED = "balanced"
+    REASONING = "reasoning"
+
+
+class ModelTier(StrEnum):
+    """Classification of a catalog model's capability tier.
+
+    Tier labels a model in the LLM catalog so the API can pick an appropriate
+    concrete model for a requested PerformanceProfile. Tier and
+    PerformanceProfile share the same string values but are semantically
+    distinct: tier describes the model, profile describes the user's selection.
+    """
+
+    FAST = "fast"
+    BALANCED = "balanced"
+    REASONING = "reasoning"
