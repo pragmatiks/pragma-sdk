@@ -1,3 +1,10 @@
+## v0.36.0 (2026-04-12)
+
+### Feat
+
+- **sdk**: add LLM catalog, organization settings, and client methods
+- **sdk**: add managed_by ownership field to Resource base
+
 ## v0.35.0 (2026-04-11)
 
 ### Feat
