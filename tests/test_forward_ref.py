@@ -114,7 +114,7 @@ def test_dependency_direct_reference_passes() -> None:
 
         dep: Dependency[StubResource]
 
-    dep = Dependency[StubResource](provider="test", resource="stub", name="my-db")
+    dep = Dependency[StubResource](project_id="proj-test", provider="test", resource="stub", name="my-db")
     config = GoodConfig(dep=dep)
     assert config.dep.name == "my-db"
 
@@ -127,7 +127,7 @@ def test_immutable_dependency_direct_reference_passes() -> None:
 
         dep: ImmutableDependency[StubResource]
 
-    dep = Dependency[StubResource](provider="test", resource="stub", name="my-db")
+    dep = Dependency[StubResource](project_id="proj-test", provider="test", resource="stub", name="my-db")
     config = GoodConfig(dep=dep)
     assert config.dep.name == "my-db"
 
@@ -140,7 +140,7 @@ def test_sensitive_dependency_direct_reference_passes() -> None:
 
         dep: SensitiveDependency[StubResource]
 
-    dep = Dependency[StubResource](provider="test", resource="stub", name="my-db")
+    dep = Dependency[StubResource](project_id="proj-test", provider="test", resource="stub", name="my-db")
     config = GoodConfig(dep=dep)
     assert config.dep.name == "my-db"
 
@@ -153,7 +153,7 @@ def test_list_dependency_direct_reference_passes() -> None:
 
         deps: list[Dependency[StubResource]]
 
-    dep = Dependency[StubResource](provider="test", resource="stub", name="db1")
+    dep = Dependency[StubResource](project_id="proj-test", provider="test", resource="stub", name="db1")
     config = GoodConfig(deps=[dep])
     assert len(config.deps) == 1
 
@@ -179,7 +179,7 @@ def test_non_dependency_fields_unaffected() -> None:
         name: Field[str]
         dep: Dependency[StubResource]
 
-    dep = Dependency[StubResource](provider="test", resource="stub", name="my-db")
+    dep = Dependency[StubResource](project_id="proj-test", provider="test", resource="stub", name="my-db")
     config = GoodConfig(name="test", dep=dep)
     assert config.name == "test"
 

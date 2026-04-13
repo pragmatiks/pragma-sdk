@@ -726,8 +726,8 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
     @property
     def id(self) -> str:
-        """Unique external resource ID: provider/resource/name."""
-        return format_resource_id(self.provider, self.resource, self.name)
+        """Unique external resource ID: project_id/provider/resource/name."""
+        return format_resource_id(self.project_id, self.provider, self.resource, self.name)
 
     async def on_create(self) -> OutputsT:
         """Handle resource creation."""
@@ -883,6 +883,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
             Self for method chaining.
         """
         ref = OwnerReference(
+            project_id=owner.project_id,
             provider=owner.provider,
             resource=owner.resource,
             name=owner.name,

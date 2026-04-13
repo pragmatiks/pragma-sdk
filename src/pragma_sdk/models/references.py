@@ -12,45 +12,75 @@ if TYPE_CHECKING:
     from pragma_sdk.models.base import Resource
 
 
-def format_resource_id(provider: str, resource: str, name: str) -> str:
+def _validate_project_id_segment(project_id: str) -> None:
+    """Reject project IDs that would break slash-separated resource IDs.
+
+    Args:
+        project_id: Project identifier to validate.
+
+    Raises:
+        ValueError: If the project_id is empty or contains a slash.
+    """
+    if not project_id:
+        raise ValueError("project_id must be a non-empty string")
+
+    if "/" in project_id:
+        raise ValueError(f"project_id must not contain '/': {project_id!r}")
+
+
+def format_resource_id(project_id: str, provider: str, resource: str, name: str) -> str:
     """Format an external user-facing resource ID.
 
-    Uses slash-separated format suitable for display and API paths.
-    Slashes in resource type are replaced with underscores for safety.
+    Uses slash-separated format suitable for display and API paths. The
+    ``project_id`` is the first segment so identities do not collapse when
+    the same provider/resource/name combination exists in multiple projects.
+    Slashes inside the resource type are replaced with underscores for safety.
 
     Args:
+        project_id: Project the resource lives in.
         provider: Provider name.
         resource: Resource type name.
         name: Resource instance name.
 
     Returns:
-        Resource ID as `provider/resource/name`.
+        Resource ID as ``{project_id}/{provider}/{resource}/{name}``.
     """
+    _validate_project_id_segment(project_id)
     resource_normalized = resource.replace("/", "_")
-    return f"{provider}/{resource_normalized}/{name}"
+    return f"{project_id}/{provider}/{resource_normalized}/{name}"
 
 
-def format_internal_resource_id(provider: str, resource: str, name: str) -> str:
+def format_internal_resource_id(project_id: str, provider: str, resource: str, name: str) -> str:
     """Format an internal SurrealDB resource ID.
 
-    Uses underscore-separated format with `resource:` prefix for database keys.
-    Slashes in resource type are replaced with underscores for safety.
+    Uses underscore-separated format with ``resource:`` prefix for database
+    keys. The ``project_id`` is included as the first segment so keys do not
+    collide across projects.
 
     Args:
+        project_id: Project the resource lives in.
         provider: Provider name.
         resource: Resource type name.
         name: Resource instance name.
 
     Returns:
-        Resource ID as `resource:{provider}_{resource}_{name}`.
+        Resource ID as ``resource:{project_id}_{provider}_{resource}_{name}``.
     """
+    _validate_project_id_segment(project_id)
     resource_normalized = resource.replace("/", "_")
-    return f"resource:{provider}_{resource_normalized}_{name}"
+    return f"resource:{project_id}_{provider}_{resource_normalized}_{name}"
 
 
 class ResourceReference(BaseModel):
-    """Reference to another resource for dependency tracking."""
+    """Reference to another resource for dependency tracking.
 
+    References carry the ``project_id`` explicitly so cross-project
+    dependencies are representable. When constructed from a running
+    resource, callers should pass the referring resource's ``project_id``
+    to stay within the same project.
+    """
+
+    project_id: str
     provider: str
     resource: str
     name: str
@@ -58,7 +88,7 @@ class ResourceReference(BaseModel):
     @property
     def id(self) -> str:
         """Unique resource ID for the referenced resource."""
-        return format_resource_id(self.provider, self.resource, self.name)
+        return format_resource_id(self.project_id, self.provider, self.resource, self.name)
 
 
 class OwnerReference(BaseModel):
@@ -68,8 +98,11 @@ class OwnerReference(BaseModel):
     is deleted, owned resources can be automatically cleaned up.
 
     A resource can have multiple owners (rare but valid for shared resources).
+    The ``project_id`` is explicit so owners in a different project from the
+    owned resource can be represented.
     """
 
+    project_id: str
     provider: str
     resource: str
     name: str
@@ -77,7 +110,7 @@ class OwnerReference(BaseModel):
     @property
     def id(self) -> str:
         """Unique resource ID for the owner resource."""
-        return format_resource_id(self.provider, self.resource, self.name)
+        return format_resource_id(self.project_id, self.provider, self.resource, self.name)
 
 
 class FieldReference(ResourceReference):
@@ -107,6 +140,7 @@ class Dependency[ResourceT: "Resource"](BaseModel):
     model_config = {"populate_by_name": True}
 
     dependency_marker: bool = PydanticField(default=True, alias="__dependency__", serialization_alias="__dependency__")
+    project_id: str
     provider: str
     resource: str
     name: str
@@ -116,7 +150,7 @@ class Dependency[ResourceT: "Resource"](BaseModel):
     @property
     def id(self) -> str:
         """Unique resource ID for the referenced resource."""
-        return format_resource_id(self.provider, self.resource, self.name)
+        return format_resource_id(self.project_id, self.provider, self.resource, self.name)
 
     async def resolve(self) -> ResourceT:
         """Get the resolved resource instance.
@@ -190,7 +224,7 @@ def is_dependency_marker(value: Any) -> bool:
     """
     if not isinstance(value, dict):
         return False
-    required = {"__dependency__", "provider", "resource", "name"}
+    required = {"__dependency__", "project_id", "provider", "resource", "name"}
     return required.issubset(value.keys()) and value.get("__dependency__") is True
 
 

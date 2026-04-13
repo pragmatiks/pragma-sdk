@@ -315,7 +315,7 @@ def test_sensitive_dependency_passes_validation() -> None:
 
         secret_db: SensitiveDependency[StubResource]
 
-    dep = Dependency[StubResource](provider="test", resource="stub", name="my-db")
+    dep = Dependency[StubResource](project_id="proj-test", provider="test", resource="stub", name="my-db")
     config = GoodConfig(secret_db=dep)
     assert config.secret_db.name == "my-db"
 
@@ -352,7 +352,13 @@ def test_sensitive_field_accepts_field_reference() -> None:
 
         api_key: SensitiveField[str]
 
-    ref = FieldReference(provider="vault", resource="secret", name="my-key", field="outputs.value")
+    ref = FieldReference(
+        project_id="proj-test",
+        provider="vault",
+        resource="secret",
+        name="my-key",
+        field="outputs.value",
+    )
     config = MyConfig(api_key=ref)
     assert isinstance(config.api_key, FieldReference)
     assert config.api_key.field == "outputs.value"
@@ -378,7 +384,13 @@ def test_immutable_sensitive_field_accepts_field_reference() -> None:
 
         master_key: ImmutableSensitiveField[str]
 
-    ref = FieldReference(provider="vault", resource="secret", name="master", field="outputs.key")
+    ref = FieldReference(
+        project_id="proj-test",
+        provider="vault",
+        resource="secret",
+        name="master",
+        field="outputs.key",
+    )
     config = MyConfig(master_key=ref)
     assert isinstance(config.master_key, FieldReference)
 
