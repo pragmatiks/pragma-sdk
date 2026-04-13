@@ -72,7 +72,7 @@ def provider_context() -> Iterator[None]:
 def stub_resource() -> StubResource:
     """StubResource instance for testing resource methods."""
     config = StubConfig(name="my-resource")
-    return StubResource(name="my-resource", config=config)
+    return StubResource(project_id="proj-test", name="my-resource", config=config)
 
 
 @pytest.fixture

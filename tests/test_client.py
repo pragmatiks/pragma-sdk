@@ -64,8 +64,8 @@ def test_pragma_client_list_resources_returns_typed_resources_with_model() -> No
         return_value=httpx.Response(
             200,
             json=[
-                {"name": "db1", "config": {"name": "db1"}, "lifecycle_state": "ready"},
-                {"name": "db2", "config": {"name": "db2"}, "lifecycle_state": "pending"},
+                {"project_id": "proj-test", "name": "db1", "config": {"name": "db1"}, "lifecycle_state": "ready"},
+                {"project_id": "proj-test", "name": "db2", "config": {"name": "db2"}, "lifecycle_state": "pending"},
             ],
         )
     )
@@ -114,6 +114,7 @@ def test_pragma_client_get_resource_returns_typed_resource_with_model() -> None:
         return_value=httpx.Response(
             200,
             json={
+                "project_id": "proj-test",
                 "name": "mydb",
                 "config": {"name": "mydb"},
                 "lifecycle_state": "ready",
@@ -157,6 +158,7 @@ def test_pragma_client_apply_resource_returns_typed_resource_with_model() -> Non
         return_value=httpx.Response(
             200,
             json={
+                "project_id": "proj-test",
                 "name": "mydb",
                 "config": {"name": "mydb"},
                 "lifecycle_state": "pending",
@@ -165,7 +167,8 @@ def test_pragma_client_apply_resource_returns_typed_resource_with_model() -> Non
     )
 
     with PragmaClient(auth_token=None) as client:
-        result = client.apply_resource(StubResource(name="mydb", config=StubConfig(name="mydb")), model=StubResource)
+        stub = StubResource(project_id="proj-test", name="mydb", config=StubConfig(name="mydb"))
+        result = client.apply_resource(stub, model=StubResource)
 
     assert isinstance(result, StubResource)
     assert result.name == "mydb"
@@ -206,6 +209,7 @@ def test_pragma_client_deactivate_resource_returns_typed_resource_with_model() -
         return_value=httpx.Response(
             200,
             json={
+                "project_id": "proj-test",
                 "name": "mydb",
                 "config": {"name": "mydb"},
                 "lifecycle_state": "deleting",
@@ -324,8 +328,8 @@ async def test_async_pragma_client_list_resources_returns_typed_resources_with_m
         return_value=httpx.Response(
             200,
             json=[
-                {"name": "db1", "config": {"name": "db1"}, "lifecycle_state": "ready"},
-                {"name": "db2", "config": {"name": "db2"}, "lifecycle_state": "pending"},
+                {"project_id": "proj-test", "name": "db1", "config": {"name": "db1"}, "lifecycle_state": "ready"},
+                {"project_id": "proj-test", "name": "db2", "config": {"name": "db2"}, "lifecycle_state": "pending"},
             ],
         )
     )
@@ -374,6 +378,7 @@ async def test_async_pragma_client_get_resource_returns_typed_resource_with_mode
         return_value=httpx.Response(
             200,
             json={
+                "project_id": "proj-test",
                 "name": "mydb",
                 "config": {"name": "mydb"},
                 "lifecycle_state": "ready",
@@ -417,6 +422,7 @@ async def test_async_pragma_client_apply_resource_returns_typed_resource_with_mo
         return_value=httpx.Response(
             200,
             json={
+                "project_id": "proj-test",
                 "name": "mydb",
                 "config": {"name": "mydb"},
                 "lifecycle_state": "pending",
@@ -426,7 +432,7 @@ async def test_async_pragma_client_apply_resource_returns_typed_resource_with_mo
 
     async with AsyncPragmaClient(auth_token=None) as client:
         result = await client.apply_resource(
-            StubResource(name="mydb", config=StubConfig(name="mydb")), model=StubResource
+            StubResource(project_id="proj-test", name="mydb", config=StubConfig(name="mydb")), model=StubResource
         )
 
     assert isinstance(result, StubResource)
@@ -468,6 +474,7 @@ async def test_async_pragma_client_deactivate_resource_returns_typed_resource_wi
         return_value=httpx.Response(
             200,
             json={
+                "project_id": "proj-test",
                 "name": "mydb",
                 "config": {"name": "mydb"},
                 "lifecycle_state": "deleting",

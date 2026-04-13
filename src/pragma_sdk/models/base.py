@@ -672,6 +672,14 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
     resource: ClassVar[str]
 
+    project_id: str = PydanticField(
+        description=(
+            "Identifier of the project this resource belongs to. Every resource "
+            "lives inside exactly one project, which maps to its own SurrealDB "
+            "namespace. This is a required field; callers constructing Resource "
+            "instances must provide it explicitly."
+        ),
+    )
     name: str
     config: ConfigT
     dependencies: list[ResourceReference] = PydanticField(default_factory=list)
@@ -914,6 +922,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         resource_data = {
             "provider": self.provider,
             "resource": self.resource,
+            "project_id": self.project_id,
             "name": self.name,
             "config": self.config.model_dump(),
             "owner_references": [ref.model_dump() for ref in self.owner_references],

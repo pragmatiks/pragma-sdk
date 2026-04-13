@@ -18,12 +18,15 @@ from pragma_sdk.models import (
     AgentTypeCreate,
     AgentTypeUpdate,
     CostEstimate,
+    CreateProjectRequest,
+    DeleteProjectRequest,
     DeploymentResult,
     LLMProviderSummary,
     Organization,
     OrganizationSettings,
     PaginatedResponse,
     PerformanceProfile,
+    Project,
     Provider,
     ProviderInstallation,
     ProviderScope,
@@ -32,6 +35,7 @@ from pragma_sdk.models import (
     ResourceSchema,
     ResourceTier,
     TrustTier,
+    UpdateProjectRequest,
     UpgradePolicy,
     UserInfo,
 )
@@ -862,6 +866,94 @@ class PragmaClient(BaseClient):
             httpx.HTTPStatusError: If organization not found or cleanup fails.
         """  # noqa: DOC502
         self._request("POST", f"/organizations/{organization_id}/cleanup")
+
+    def list_projects(self) -> list[Project]:
+        """List projects for the current organization.
+
+        Private projects (those holding platform-managed resources) are
+        filtered out by the server and never appear in this response.
+
+        Returns:
+            List of user-visible projects.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", "/projects")
+        return [Project.model_validate(item) for item in response]
+
+    def get_project(self, project_id: str) -> Project:
+        """Get a single project by ID.
+
+        Args:
+            project_id: Unique identifier for the project.
+
+        Returns:
+            Project details.
+
+        Raises:
+            httpx.HTTPStatusError: If the project is not found or the request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", f"/projects/{project_id}")
+        return Project.model_validate(response)
+
+    def create_project(self, request: CreateProjectRequest) -> Project:
+        """Create a new project in the current organization.
+
+        Args:
+            request: Name and optional slug for the new project. When the
+                slug is omitted, the server generates one from the name.
+
+        Returns:
+            The newly created project.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails (e.g., duplicate slug).
+        """  # noqa: DOC502
+        response = self._request("POST", "/projects", json_data=request.model_dump(exclude_none=True))
+        return Project.model_validate(response)
+
+    def update_project(self, project_id: str, request: UpdateProjectRequest) -> Project:
+        """Rename an existing project.
+
+        Only the display name can be updated. The slug is immutable.
+
+        Args:
+            project_id: Unique identifier for the project to update.
+            request: Fields to change on the project.
+
+        Returns:
+            The updated project.
+
+        Raises:
+            httpx.HTTPStatusError: If the project is not found or the update fails.
+        """  # noqa: DOC502
+        response = self._request(
+            "PATCH",
+            f"/projects/{project_id}",
+            json_data=request.model_dump(exclude_none=True),
+        )
+        return Project.model_validate(response)
+
+    def delete_project(self, project_id: str, request: DeleteProjectRequest) -> None:
+        """Hard-delete a project and every resource it contains.
+
+        The server rejects the request unless ``request.confirmation`` matches
+        the project's slug exactly.
+
+        Args:
+            project_id: Unique identifier for the project to delete.
+            request: Typed confirmation carrying the project's slug.
+
+        Raises:
+            httpx.HTTPStatusError: If the project is not found, the confirmation
+                does not match, or the delete otherwise fails.
+        """  # noqa: DOC502
+        self._request(
+            "DELETE",
+            f"/projects/{project_id}",
+            json_data=request.model_dump(),
+        )
 
     def list_agent_types(self, organization_id: str) -> list[AgentType]:
         """List agent types for an organization.
@@ -1839,6 +1931,98 @@ class AsyncPragmaClient(BaseClient):
             httpx.HTTPStatusError: If organization not found or cleanup fails.
         """  # noqa: DOC502
         await self._request("POST", f"/organizations/{organization_id}/cleanup")
+
+    async def list_projects(self) -> list[Project]:
+        """List projects for the current organization.
+
+        Private projects (those holding platform-managed resources) are
+        filtered out by the server and never appear in this response.
+
+        Returns:
+            List of user-visible projects.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        response = await self._request("GET", "/projects")
+        return [Project.model_validate(item) for item in response]
+
+    async def get_project(self, project_id: str) -> Project:
+        """Get a single project by ID.
+
+        Args:
+            project_id: Unique identifier for the project.
+
+        Returns:
+            Project details.
+
+        Raises:
+            httpx.HTTPStatusError: If the project is not found or the request fails.
+        """  # noqa: DOC502
+        response = await self._request("GET", f"/projects/{project_id}")
+        return Project.model_validate(response)
+
+    async def create_project(self, request: CreateProjectRequest) -> Project:
+        """Create a new project in the current organization.
+
+        Args:
+            request: Name and optional slug for the new project. When the
+                slug is omitted, the server generates one from the name.
+
+        Returns:
+            The newly created project.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails (e.g., duplicate slug).
+        """  # noqa: DOC502
+        response = await self._request(
+            "POST",
+            "/projects",
+            json_data=request.model_dump(exclude_none=True),
+        )
+        return Project.model_validate(response)
+
+    async def update_project(self, project_id: str, request: UpdateProjectRequest) -> Project:
+        """Rename an existing project.
+
+        Only the display name can be updated. The slug is immutable.
+
+        Args:
+            project_id: Unique identifier for the project to update.
+            request: Fields to change on the project.
+
+        Returns:
+            The updated project.
+
+        Raises:
+            httpx.HTTPStatusError: If the project is not found or the update fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "PATCH",
+            f"/projects/{project_id}",
+            json_data=request.model_dump(exclude_none=True),
+        )
+        return Project.model_validate(response)
+
+    async def delete_project(self, project_id: str, request: DeleteProjectRequest) -> None:
+        """Hard-delete a project and every resource it contains.
+
+        The server rejects the request unless ``request.confirmation`` matches
+        the project's slug exactly.
+
+        Args:
+            project_id: Unique identifier for the project to delete.
+            request: Typed confirmation carrying the project's slug.
+
+        Raises:
+            httpx.HTTPStatusError: If the project is not found, the confirmation
+                does not match, or the delete otherwise fails.
+        """  # noqa: DOC502
+        await self._request(
+            "DELETE",
+            f"/projects/{project_id}",
+            json_data=request.model_dump(),
+        )
 
     async def list_agent_types(self, organization_id: str) -> list[AgentType]:
         """List agent types for an organization.

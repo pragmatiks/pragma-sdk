@@ -345,6 +345,7 @@ async def test_dependency_resolve_returns_cached_value() -> None:
     # Create a resolved resource
     config = StubConfig(name="my-db")
     resource = StubResource(
+        project_id="proj-test",
         name="my-db",
         config=config,
         outputs=StubOutputs(url="https://my-db.example.com"),
@@ -509,6 +510,7 @@ async def test_dependency_resolve_idempotent() -> None:
 
     config = StubConfig(name="my-db")
     resource = StubResource(
+        project_id="proj-test",
         name="my-db",
         config=config,
         outputs=StubOutputs(url="https://my-db.example.com"),
@@ -534,6 +536,7 @@ def test_dependency_serialization_excludes_resolved() -> None:
 
     config = StubConfig(name="my-db")
     resource = StubResource(
+        project_id="proj-test",
         name="my-db",
         config=config,
         outputs=StubOutputs(url="https://my-db.example.com"),
@@ -643,7 +646,7 @@ def test_set_owner_adds_owner_reference(stub_resource: StubResource) -> None:
     """set_owner() adds owner reference to the resource."""
     from conftest import StubConfig, StubResource
 
-    owner = StubResource(name="parent-resource", config=StubConfig(name="parent"))
+    owner = StubResource(project_id="proj-test", name="parent-resource", config=StubConfig(name="parent"))
 
     assert len(stub_resource.owner_references) == 0
 
@@ -660,7 +663,7 @@ def test_set_owner_prevents_duplicates(stub_resource: StubResource) -> None:
     """set_owner() does not add duplicate owner references."""
     from conftest import StubConfig, StubResource
 
-    owner = StubResource(name="parent-resource", config=StubConfig(name="parent"))
+    owner = StubResource(project_id="proj-test", name="parent-resource", config=StubConfig(name="parent"))
 
     stub_resource.set_owner(owner)
     stub_resource.set_owner(owner)
@@ -673,7 +676,7 @@ def test_set_owner_returns_self_for_chaining(stub_resource: StubResource) -> Non
     """set_owner() returns self for method chaining."""
     from conftest import StubConfig, StubResource
 
-    owner = StubResource(name="parent-resource", config=StubConfig(name="parent"))
+    owner = StubResource(project_id="proj-test", name="parent-resource", config=StubConfig(name="parent"))
 
     result = stub_resource.set_owner(owner)
 
@@ -684,8 +687,8 @@ def test_set_owner_allows_multiple_owners(stub_resource: StubResource) -> None:
     """set_owner() allows multiple distinct owners."""
     from conftest import StubConfig, StubResource
 
-    owner1 = StubResource(name="parent-1", config=StubConfig(name="p1"))
-    owner2 = StubResource(name="parent-2", config=StubConfig(name="p2"))
+    owner1 = StubResource(project_id="proj-test", name="parent-1", config=StubConfig(name="p1"))
+    owner2 = StubResource(project_id="proj-test", name="parent-2", config=StubConfig(name="p2"))
 
     stub_resource.set_owner(owner1).set_owner(owner2)
 
@@ -698,7 +701,7 @@ def test_set_owner_creates_correct_owner_reference_type(stub_resource: StubResou
     """set_owner() creates OwnerReference, not ResourceReference."""
     from conftest import StubConfig, StubResource
 
-    owner = StubResource(name="parent-resource", config=StubConfig(name="parent"))
+    owner = StubResource(project_id="proj-test", name="parent-resource", config=StubConfig(name="parent"))
     stub_resource.set_owner(owner)
 
     ref = stub_resource.owner_references[0]
@@ -796,7 +799,7 @@ async def test_apply_includes_owner_references(stub_resource: StubResource) -> N
 
     from pragma_sdk.context import reset_runtime_context, set_runtime_context
 
-    owner = StubResource(name="parent-resource", config=StubConfig(name="parent"))
+    owner = StubResource(project_id="proj-test", name="parent-resource", config=StubConfig(name="parent"))
     stub_resource.set_owner(owner)
 
     ctx = MockRuntimeContextForApply()

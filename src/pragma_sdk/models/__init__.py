@@ -50,6 +50,13 @@ from pragma_sdk.models.llm import (
     OrganizationSettings,
     ProviderComparisonRow,
 )
+from pragma_sdk.models.project import (
+    CreateProjectRequest,
+    DeleteProjectRequest,
+    Project,
+    ProjectDeleteConfirmation,
+    UpdateProjectRequest,
+)
 from pragma_sdk.models.provider import (
     PaginatedResponse,
     Provider,
@@ -91,6 +98,8 @@ __all__ = [
     "Config",
     "ConversationRoutingManifest",
     "CostEstimate",
+    "CreateProjectRequest",
+    "DeleteProjectRequest",
     "Dependency",
     "DeploymentResult",
     "DeploymentStatus",
@@ -111,6 +120,8 @@ __all__ = [
     "OwnerReference",
     "PaginatedResponse",
     "PerformanceProfile",
+    "Project",
+    "ProjectDeleteConfirmation",
     "Provider",
     "ProviderAuthor",
     "ProviderComparisonRow",
@@ -138,6 +149,7 @@ __all__ = [
     "TaskStatus",
     "TaskUpdate",
     "TrustTier",
+    "UpdateProjectRequest",
     "UpgradePolicy",
     "UserInfo",
     "VersionStatus",

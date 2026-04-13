@@ -178,6 +178,7 @@ class ProviderHarness:
         self._events.append(event)
 
         resource = resource_class(
+            project_id="harness-test",
             name=name,
             config=config,
             outputs=None,
@@ -240,6 +241,7 @@ class ProviderHarness:
         self._events.append(event)
 
         resource = resource_class(
+            project_id="harness-test",
             name=name,
             config=config,
             lifecycle_state=LifecycleState.PROCESSING,
@@ -299,6 +301,7 @@ class ProviderHarness:
         self._events.append(event)
 
         resource = resource_class(
+            project_id="harness-test",
             name=name,
             config=config,
             lifecycle_state=LifecycleState.PROCESSING,
@@ -359,6 +362,7 @@ class ProviderHarness:
         self._events.append(event)
 
         resource = resource_class(
+            project_id="harness-test",
             name=name,
             config=config,
             lifecycle_state=LifecycleState.PROCESSING,
@@ -420,6 +424,7 @@ class ProviderHarness:
         self._events.append(event)
 
         resource = resource_class(
+            project_id="harness-test",
             name=name,
             config=config,
             lifecycle_state=LifecycleState.PROCESSING,

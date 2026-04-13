@@ -133,6 +133,7 @@ def test_base_resource_does_not_support_patch():
 
 async def test_on_copy_raises_not_implemented_on_base_resource():
     resource = BasicResource(
+        project_id="proj-test",
         name="test",
         config=DatabaseConfig(name="test"),
     )
@@ -144,6 +145,7 @@ async def test_on_copy_raises_not_implemented_on_base_resource():
 
 async def test_on_patch_raises_not_implemented_on_base_resource():
     resource = BasicResource(
+        project_id="proj-test",
         name="test",
         config=DatabaseConfig(name="test"),
     )
@@ -158,6 +160,7 @@ async def test_on_patch_raises_not_implemented_on_base_resource():
 
 async def test_on_copy_returns_copy_result_with_stateless_strategy():
     resource = CopyableDatabase(
+        project_id="proj-test",
         name="source-db",
         config=DatabaseConfig(name="source-db", size_gb=20),
         outputs=DatabaseOutputs(connection_url="postgres://localhost/source-db"),
@@ -180,6 +183,7 @@ async def test_on_copy_returns_copy_result_with_stateless_strategy():
 
 async def test_on_copy_returns_copy_result_with_stateful_strategy():
     resource = CopyableDatabase(
+        project_id="proj-test",
         name="source-db",
         config=DatabaseConfig(name="source-db"),
         outputs=DatabaseOutputs(connection_url="postgres://localhost/source-db"),
@@ -201,6 +205,7 @@ async def test_on_copy_returns_copy_result_with_stateful_strategy():
 
 async def test_on_patch_succeeds_with_known_action():
     resource = CopyableDatabase(
+        project_id="proj-test",
         name="my-db",
         config=DatabaseConfig(name="my-db", version="15"),
         outputs=DatabaseOutputs(connection_url="postgres://localhost/my-db"),
@@ -224,6 +229,7 @@ async def test_on_patch_succeeds_with_known_action():
 
 async def test_on_patch_fails_with_unknown_action():
     resource = CopyableDatabase(
+        project_id="proj-test",
         name="my-db",
         config=DatabaseConfig(name="my-db"),
     )
