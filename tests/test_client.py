@@ -36,9 +36,9 @@ def test_pragma_client_is_healthy_returns_false_on_error() -> None:
 
 
 @respx.mock
-def test_pragma_client_list_resources_returns_dicts_without_model() -> None:
+def test_pragma_client_project_list_resources_returns_dicts_without_model() -> None:
     """Returns list of dicts when no model parameter provided."""
-    respx.get("https://api.pragmatiks.io/resources").mock(
+    respx.get("https://api.pragmatiks.io/projects/proj-test/resources").mock(
         return_value=httpx.Response(
             200,
             json=[
@@ -49,7 +49,7 @@ def test_pragma_client_list_resources_returns_dicts_without_model() -> None:
     )
 
     with PragmaClient(auth_token=None) as client:
-        resources = client.list_resources()
+        resources = client.project("proj-test").list_resources()
 
     assert len(resources) == 2
     assert resources[0]["name"] == "db1"
@@ -58,9 +58,9 @@ def test_pragma_client_list_resources_returns_dicts_without_model() -> None:
 
 
 @respx.mock
-def test_pragma_client_list_resources_returns_typed_resources_with_model() -> None:
+def test_pragma_client_project_list_resources_returns_typed_resources_with_model() -> None:
     """Returns list of typed Resource instances when model parameter provided."""
-    respx.get("https://api.pragmatiks.io/resources").mock(
+    respx.get("https://api.pragmatiks.io/projects/proj-test/resources").mock(
         return_value=httpx.Response(
             200,
             json=[
@@ -71,7 +71,7 @@ def test_pragma_client_list_resources_returns_typed_resources_with_model() -> No
     )
 
     with PragmaClient(auth_token=None) as client:
-        resources = client.list_resources(model=StubResource)
+        resources = client.project("proj-test").list_resources(model=StubResource)
 
     assert len(resources) == 2
     assert isinstance(resources[0], StubResource)
@@ -81,34 +81,30 @@ def test_pragma_client_list_resources_returns_typed_resources_with_model() -> No
 
 
 @respx.mock
-def test_pragma_client_get_resource_returns_dict_without_model() -> None:
+def test_pragma_client_project_get_resource_returns_dict_without_model() -> None:
     """Returns dict when no model parameter provided."""
     respx.get(
-        "https://api.pragmatiks.io/resources/by-name",
+        "https://api.pragmatiks.io/projects/proj-test/resources/by-name",
         params={"provider": "postgres", "resource": "database", "name": "mydb"},
     ).mock(
         return_value=httpx.Response(
             200,
-            json={
-                "name": "mydb",
-                "config": {},
-                "lifecycle_state": "ready",
-            },
+            json={"name": "mydb", "config": {}, "lifecycle_state": "ready"},
         )
     )
 
     with PragmaClient(auth_token=None) as client:
-        resource = client.get_resource("postgres", "database", "mydb")
+        resource = client.project("proj-test").get_resource("postgres", "database", "mydb")
 
     assert resource["name"] == "mydb"
     assert resource["lifecycle_state"] == "ready"
 
 
 @respx.mock
-def test_pragma_client_get_resource_returns_typed_resource_with_model() -> None:
+def test_pragma_client_project_get_resource_returns_typed_resource_with_model() -> None:
     """Returns typed Resource instance when model parameter provided."""
     respx.get(
-        "https://api.pragmatiks.io/resources/by-name",
+        "https://api.pragmatiks.io/projects/proj-test/resources/by-name",
         params={"provider": "test", "resource": "stub", "name": "mydb"},
     ).mock(
         return_value=httpx.Response(
@@ -123,7 +119,7 @@ def test_pragma_client_get_resource_returns_typed_resource_with_model() -> None:
     )
 
     with PragmaClient(auth_token=None) as client:
-        resource = client.get_resource("test", "stub", "mydb", model=StubResource)
+        resource = client.project("proj-test").get_resource("test", "stub", "mydb", model=StubResource)
 
     assert isinstance(resource, StubResource)
     assert resource.name == "mydb"
@@ -131,30 +127,26 @@ def test_pragma_client_get_resource_returns_typed_resource_with_model() -> None:
 
 
 @respx.mock
-def test_pragma_client_apply_resource_returns_dict_without_model() -> None:
+def test_pragma_client_project_apply_resource_returns_dict_without_model() -> None:
     """Returns dict when no model parameter provided."""
-    respx.post("https://api.pragmatiks.io/resources/apply").mock(
+    respx.post("https://api.pragmatiks.io/projects/proj-test/resources/apply").mock(
         return_value=httpx.Response(
             200,
-            json={
-                "name": "mydb",
-                "config": {},
-                "lifecycle_state": "pending",
-            },
+            json={"name": "mydb", "config": {}, "lifecycle_state": "pending"},
         )
     )
 
     with PragmaClient(auth_token=None) as client:
-        result = client.apply_resource({"name": "mydb", "config": {}})
+        result = client.project("proj-test").apply_resource({"project_id": "proj-test", "name": "mydb", "config": {}})
 
     assert result["name"] == "mydb"
     assert result["lifecycle_state"] == "pending"
 
 
 @respx.mock
-def test_pragma_client_apply_resource_returns_typed_resource_with_model() -> None:
+def test_pragma_client_project_apply_resource_returns_typed_resource_with_model() -> None:
     """Returns typed Resource instance when model parameter provided."""
-    respx.post("https://api.pragmatiks.io/resources/apply").mock(
+    respx.post("https://api.pragmatiks.io/projects/proj-test/resources/apply").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -168,42 +160,47 @@ def test_pragma_client_apply_resource_returns_typed_resource_with_model() -> Non
 
     with PragmaClient(auth_token=None) as client:
         stub = StubResource(project_id="proj-test", name="mydb", config=StubConfig(name="mydb"))
-        result = client.apply_resource(stub, model=StubResource)
+        result = client.project("proj-test").apply_resource(stub, model=StubResource)
 
     assert isinstance(result, StubResource)
     assert result.name == "mydb"
     assert result.lifecycle_state == LifecycleState.PENDING
 
 
+def test_pragma_client_project_apply_resource_rejects_mismatched_project() -> None:
+    """Rejects resources whose project_id does not match the scoped project."""
+    with PragmaClient(auth_token=None) as client:
+        stub = StubResource(project_id="other-proj", name="mydb", config=StubConfig(name="mydb"))
+
+        with pytest.raises(ValueError, match="does not match scoped project"):
+            client.project("proj-test").apply_resource(stub)
+
+
 @respx.mock
-def test_pragma_client_deactivate_resource_returns_dict_without_model() -> None:
+def test_pragma_client_project_deactivate_resource_returns_dict_without_model() -> None:
     """Returns dict when no model parameter provided."""
     respx.post(
-        "https://api.pragmatiks.io/resources/deactivate",
+        "https://api.pragmatiks.io/projects/proj-test/resources/deactivate",
         params={"provider": "postgres", "resource": "database", "name": "mydb"},
     ).mock(
         return_value=httpx.Response(
             200,
-            json={
-                "name": "mydb",
-                "config": {},
-                "lifecycle_state": "deleting",
-            },
+            json={"name": "mydb", "config": {}, "lifecycle_state": "deleting"},
         )
     )
 
     with PragmaClient(auth_token=None) as client:
-        result = client.deactivate_resource("postgres", "database", "mydb")
+        result = client.project("proj-test").deactivate_resource("postgres", "database", "mydb")
 
     assert result["name"] == "mydb"
     assert result["lifecycle_state"] == "deleting"
 
 
 @respx.mock
-def test_pragma_client_deactivate_resource_returns_typed_resource_with_model() -> None:
+def test_pragma_client_project_deactivate_resource_returns_typed_resource_with_model() -> None:
     """Returns typed Resource instance when model parameter provided."""
     respx.post(
-        "https://api.pragmatiks.io/resources/deactivate",
+        "https://api.pragmatiks.io/projects/proj-test/resources/deactivate",
         params={"provider": "test", "resource": "stub", "name": "mydb"},
     ).mock(
         return_value=httpx.Response(
@@ -218,7 +215,7 @@ def test_pragma_client_deactivate_resource_returns_typed_resource_with_model() -
     )
 
     with PragmaClient(auth_token=None) as client:
-        result = client.deactivate_resource("test", "stub", "mydb", model=StubResource)
+        result = client.project("proj-test").deactivate_resource("test", "stub", "mydb", model=StubResource)
 
     assert isinstance(result, StubResource)
     assert result.name == "mydb"
@@ -226,31 +223,31 @@ def test_pragma_client_deactivate_resource_returns_typed_resource_with_model() -
 
 
 @respx.mock
-def test_pragma_client_delete_resource_sends_delete_request() -> None:
-    """Sends DELETE to /resources/by-name with correct params and returns None."""
+def test_pragma_client_project_delete_resource_sends_delete_request() -> None:
+    """Sends DELETE to the scoped by-name path and returns None."""
     route = respx.delete(
-        "https://api.pragmatiks.io/resources/by-name",
+        "https://api.pragmatiks.io/projects/proj-test/resources/by-name",
         params={"provider": "postgres", "resource": "database", "name": "mydb"},
     ).mock(return_value=httpx.Response(200, json=None))
 
     with PragmaClient(auth_token=None) as client:
-        result = client.delete_resource("postgres", "database", "mydb")
+        result = client.project("proj-test").delete_resource("postgres", "database", "mydb")
 
     assert result is None
     assert route.called
 
 
 @respx.mock
-def test_pragma_client_raises_on_not_found() -> None:
-    """Raises HTTPStatusError when resource not found."""
+def test_pragma_client_project_raises_on_not_found() -> None:
+    """Raises HTTPStatusError when a scoped resource is not found."""
     respx.get(
-        "https://api.pragmatiks.io/resources/by-name",
+        "https://api.pragmatiks.io/projects/proj-test/resources/by-name",
         params={"provider": "test", "resource": "db", "name": "notfound"},
     ).mock(return_value=httpx.Response(404, json={"detail": "Not found"}))
 
     with PragmaClient(auth_token=None) as client:
         with pytest.raises(httpx.HTTPStatusError) as exc_info:
-            client.get_resource("test", "db", "notfound")
+            client.project("proj-test").get_resource("test", "db", "notfound")
 
     assert exc_info.value.response.status_code == 404
 
@@ -300,9 +297,9 @@ async def test_async_pragma_client_is_healthy_returns_false_on_error() -> None:
 
 
 @respx.mock
-async def test_async_pragma_client_list_resources_returns_dicts_without_model() -> None:
+async def test_async_pragma_client_project_list_resources_returns_dicts_without_model() -> None:
     """Returns list of dicts when no model parameter provided."""
-    respx.get("https://api.pragmatiks.io/resources").mock(
+    respx.get("https://api.pragmatiks.io/projects/proj-test/resources").mock(
         return_value=httpx.Response(
             200,
             json=[
@@ -313,7 +310,7 @@ async def test_async_pragma_client_list_resources_returns_dicts_without_model() 
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        resources = await client.list_resources()
+        resources = await client.project("proj-test").list_resources()
 
     assert len(resources) == 2
     assert resources[0]["name"] == "db1"
@@ -322,9 +319,9 @@ async def test_async_pragma_client_list_resources_returns_dicts_without_model() 
 
 
 @respx.mock
-async def test_async_pragma_client_list_resources_returns_typed_resources_with_model() -> None:
+async def test_async_pragma_client_project_list_resources_returns_typed_resources_with_model() -> None:
     """Returns list of typed Resource instances when model parameter provided."""
-    respx.get("https://api.pragmatiks.io/resources").mock(
+    respx.get("https://api.pragmatiks.io/projects/proj-test/resources").mock(
         return_value=httpx.Response(
             200,
             json=[
@@ -335,7 +332,7 @@ async def test_async_pragma_client_list_resources_returns_typed_resources_with_m
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        resources = await client.list_resources(model=StubResource)
+        resources = await client.project("proj-test").list_resources(model=StubResource)
 
     assert len(resources) == 2
     assert isinstance(resources[0], StubResource)
@@ -345,34 +342,30 @@ async def test_async_pragma_client_list_resources_returns_typed_resources_with_m
 
 
 @respx.mock
-async def test_async_pragma_client_get_resource_returns_dict_without_model() -> None:
+async def test_async_pragma_client_project_get_resource_returns_dict_without_model() -> None:
     """Returns dict when no model parameter provided."""
     respx.get(
-        "https://api.pragmatiks.io/resources/by-name",
+        "https://api.pragmatiks.io/projects/proj-test/resources/by-name",
         params={"provider": "postgres", "resource": "database", "name": "mydb"},
     ).mock(
         return_value=httpx.Response(
             200,
-            json={
-                "name": "mydb",
-                "config": {},
-                "lifecycle_state": "ready",
-            },
+            json={"name": "mydb", "config": {}, "lifecycle_state": "ready"},
         )
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        resource = await client.get_resource("postgres", "database", "mydb")
+        resource = await client.project("proj-test").get_resource("postgres", "database", "mydb")
 
     assert resource["name"] == "mydb"
     assert resource["lifecycle_state"] == "ready"
 
 
 @respx.mock
-async def test_async_pragma_client_get_resource_returns_typed_resource_with_model() -> None:
+async def test_async_pragma_client_project_get_resource_returns_typed_resource_with_model() -> None:
     """Returns typed Resource instance when model parameter provided."""
     respx.get(
-        "https://api.pragmatiks.io/resources/by-name",
+        "https://api.pragmatiks.io/projects/proj-test/resources/by-name",
         params={"provider": "test", "resource": "stub", "name": "mydb"},
     ).mock(
         return_value=httpx.Response(
@@ -387,7 +380,7 @@ async def test_async_pragma_client_get_resource_returns_typed_resource_with_mode
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        resource = await client.get_resource("test", "stub", "mydb", model=StubResource)
+        resource = await client.project("proj-test").get_resource("test", "stub", "mydb", model=StubResource)
 
     assert isinstance(resource, StubResource)
     assert resource.name == "mydb"
@@ -395,30 +388,30 @@ async def test_async_pragma_client_get_resource_returns_typed_resource_with_mode
 
 
 @respx.mock
-async def test_async_pragma_client_apply_resource_returns_dict_without_model() -> None:
+async def test_async_pragma_client_project_apply_resource_returns_dict_without_model() -> None:
     """Returns dict when no model parameter provided."""
-    respx.post("https://api.pragmatiks.io/resources/apply").mock(
+    respx.post("https://api.pragmatiks.io/projects/proj-test/resources/apply").mock(
         return_value=httpx.Response(
             200,
-            json={
-                "name": "mydb",
-                "config": {},
-                "lifecycle_state": "pending",
-            },
+            json={"name": "mydb", "config": {}, "lifecycle_state": "pending"},
         )
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        result = await client.apply_resource({"name": "mydb", "config": {}})
+        result = await client.project("proj-test").apply_resource({
+            "project_id": "proj-test",
+            "name": "mydb",
+            "config": {},
+        })
 
     assert result["name"] == "mydb"
     assert result["lifecycle_state"] == "pending"
 
 
 @respx.mock
-async def test_async_pragma_client_apply_resource_returns_typed_resource_with_model() -> None:
+async def test_async_pragma_client_project_apply_resource_returns_typed_resource_with_model() -> None:
     """Returns typed Resource instance when model parameter provided."""
-    respx.post("https://api.pragmatiks.io/resources/apply").mock(
+    respx.post("https://api.pragmatiks.io/projects/proj-test/resources/apply").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -431,44 +424,48 @@ async def test_async_pragma_client_apply_resource_returns_typed_resource_with_mo
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        result = await client.apply_resource(
-            StubResource(project_id="proj-test", name="mydb", config=StubConfig(name="mydb")), model=StubResource
-        )
+        stub = StubResource(project_id="proj-test", name="mydb", config=StubConfig(name="mydb"))
+        result = await client.project("proj-test").apply_resource(stub, model=StubResource)
 
     assert isinstance(result, StubResource)
     assert result.name == "mydb"
     assert result.lifecycle_state == LifecycleState.PENDING
 
 
+async def test_async_pragma_client_project_apply_resource_rejects_mismatched_project() -> None:
+    """Rejects resources whose project_id does not match the scoped project."""
+    async with AsyncPragmaClient(auth_token=None) as client:
+        stub = StubResource(project_id="other-proj", name="mydb", config=StubConfig(name="mydb"))
+
+        with pytest.raises(ValueError, match="does not match scoped project"):
+            await client.project("proj-test").apply_resource(stub)
+
+
 @respx.mock
-async def test_async_pragma_client_deactivate_resource_returns_dict_without_model() -> None:
+async def test_async_pragma_client_project_deactivate_resource_returns_dict_without_model() -> None:
     """Returns dict when no model parameter provided."""
     respx.post(
-        "https://api.pragmatiks.io/resources/deactivate",
+        "https://api.pragmatiks.io/projects/proj-test/resources/deactivate",
         params={"provider": "postgres", "resource": "database", "name": "mydb"},
     ).mock(
         return_value=httpx.Response(
             200,
-            json={
-                "name": "mydb",
-                "config": {},
-                "lifecycle_state": "deleting",
-            },
+            json={"name": "mydb", "config": {}, "lifecycle_state": "deleting"},
         )
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        result = await client.deactivate_resource("postgres", "database", "mydb")
+        result = await client.project("proj-test").deactivate_resource("postgres", "database", "mydb")
 
     assert result["name"] == "mydb"
     assert result["lifecycle_state"] == "deleting"
 
 
 @respx.mock
-async def test_async_pragma_client_deactivate_resource_returns_typed_resource_with_model() -> None:
+async def test_async_pragma_client_project_deactivate_resource_returns_typed_resource_with_model() -> None:
     """Returns typed Resource instance when model parameter provided."""
     respx.post(
-        "https://api.pragmatiks.io/resources/deactivate",
+        "https://api.pragmatiks.io/projects/proj-test/resources/deactivate",
         params={"provider": "test", "resource": "stub", "name": "mydb"},
     ).mock(
         return_value=httpx.Response(
@@ -483,7 +480,7 @@ async def test_async_pragma_client_deactivate_resource_returns_typed_resource_wi
     )
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        result = await client.deactivate_resource("test", "stub", "mydb", model=StubResource)
+        result = await client.project("proj-test").deactivate_resource("test", "stub", "mydb", model=StubResource)
 
     assert isinstance(result, StubResource)
     assert result.name == "mydb"
@@ -491,31 +488,31 @@ async def test_async_pragma_client_deactivate_resource_returns_typed_resource_wi
 
 
 @respx.mock
-async def test_async_pragma_client_delete_resource_sends_delete_request() -> None:
-    """Sends DELETE to /resources/by-name with correct params and returns None."""
+async def test_async_pragma_client_project_delete_resource_sends_delete_request() -> None:
+    """Sends DELETE to the scoped by-name path and returns None."""
     route = respx.delete(
-        "https://api.pragmatiks.io/resources/by-name",
+        "https://api.pragmatiks.io/projects/proj-test/resources/by-name",
         params={"provider": "postgres", "resource": "database", "name": "mydb"},
     ).mock(return_value=httpx.Response(200, json=None))
 
     async with AsyncPragmaClient(auth_token=None) as client:
-        result = await client.delete_resource("postgres", "database", "mydb")
+        result = await client.project("proj-test").delete_resource("postgres", "database", "mydb")
 
     assert result is None
     assert route.called
 
 
 @respx.mock
-async def test_async_pragma_client_raises_on_not_found() -> None:
-    """Raises HTTPStatusError when resource not found."""
+async def test_async_pragma_client_project_raises_on_not_found() -> None:
+    """Raises HTTPStatusError when a scoped resource is not found."""
     respx.get(
-        "https://api.pragmatiks.io/resources/by-name",
+        "https://api.pragmatiks.io/projects/proj-test/resources/by-name",
         params={"provider": "test", "resource": "db", "name": "notfound"},
     ).mock(return_value=httpx.Response(404, json={"detail": "Not found"}))
 
     async with AsyncPragmaClient(auth_token=None) as client:
         with pytest.raises(httpx.HTTPStatusError) as exc_info:
-            await client.get_resource("test", "db", "notfound")
+            await client.project("proj-test").get_resource("test", "db", "notfound")
 
     assert exc_info.value.response.status_code == 404
 

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import time
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from typing import Any
 
@@ -39,6 +41,7 @@ from pragma_sdk.models import (
     UpgradePolicy,
     UserInfo,
 )
+from pragma_sdk.types import LifecycleState
 
 
 def _validate_provider_name(provider_name: str) -> str:
@@ -115,8 +118,9 @@ class PragmaClient(BaseClient):
 
     Example:
         >>> with PragmaClient() as client:
-        ...     resources = client.list_resources(provider="example")
-        ...     resource = client.get_resource("example", "database", "my-db")
+        ...     project = client.project("my-project")
+        ...     resources = project.list_resources(provider="example")
+        ...     resource = project.get_resource("example", "database", "my-db")
     """
 
     def __init__(
@@ -202,44 +206,20 @@ class PragmaClient(BaseClient):
         response = self._request("GET", "/auth/me")
         return UserInfo.model_validate(response)
 
-    def list_resources[ResourceT: Resource](
-        self,
-        provider: str | None = None,
-        resource: str | None = None,
-        tags: list[str] | None = None,
-        *,
-        model: type[ResourceT] | None = None,
-        reveal: bool = False,
-    ) -> list[ResourceT] | list[dict[str, Any]]:
-        """List resources with optional filters.
+    def project(self, project_id: str) -> ProjectResources:
+        """Get a resource sub-client scoped to a single project.
+
+        All resource CRUD goes through a scoped sub-client so the
+        ``project_id`` travels in the URL path and the API can route
+        requests to the correct SurrealDB namespace.
 
         Args:
-            provider: Filter by provider name.
-            resource: Filter by resource type.
-            tags: Filter by tags (must match all).
-            model: Resource subclass for typed response; returns raw dicts if None.
-            reveal: Include sensitive field values in the response.
+            project_id: Identifier of the project to scope resource calls to.
 
         Returns:
-            List of resources as typed instances or raw dicts.
-
-        Raises:
-            httpx.HTTPStatusError: If the request fails.
-        """  # noqa: DOC502
-        params: dict[str, Any] = {}
-        if provider:
-            params["provider"] = provider
-        if resource:
-            params["resource"] = resource
-        if tags:
-            params["tags"] = tags
-        if reveal:
-            params["reveal"] = "true"
-
-        response = self._request("GET", "/resources", params=params)
-        if model is not None:
-            return [model.model_validate(item) for item in response]
-        return response
+            Sub-client exposing resource operations bound to the given project.
+        """
+        return ProjectResources(self, project_id)
 
     def list_resource_schemas(self, provider: str | None = None) -> list[ResourceSchema]:
         """List available resource schemas from deployed providers.
@@ -258,113 +238,6 @@ class PragmaClient(BaseClient):
             params["provider"] = provider
         response = self._request("GET", "/resources/schemas", params=params)
         return [ResourceSchema.model_validate(item) for item in response]
-
-    def get_resource[ResourceT: Resource](
-        self,
-        provider: str,
-        resource: str,
-        name: str,
-        *,
-        model: type[ResourceT] | None = None,
-        reveal: bool = False,
-    ) -> ResourceT | dict[str, Any]:
-        """Get a resource by its full identifier.
-
-        Args:
-            provider: Provider that manages the resource.
-            resource: Resource type name.
-            name: Resource instance name.
-            model: Resource subclass for typed response; returns raw dict if None.
-            reveal: Include sensitive field values in the response.
-
-        Returns:
-            Resource as typed instance or raw dict.
-
-        Raises:
-            httpx.HTTPStatusError: If resource not found or request fails.
-        """  # noqa: DOC502
-        params: dict[str, Any] = {"provider": provider, "resource": resource, "name": name}
-
-        if reveal:
-            params["reveal"] = "true"
-
-        response = self._request("GET", "/resources/by-name", params=params)
-
-        if model is not None:
-            return model.model_validate(response)
-
-        return response
-
-    def apply_resource[ResourceT: Resource](
-        self,
-        resource: ResourceT | dict[str, Any],
-        *,
-        model: type[ResourceT] | None = None,
-        reveal: bool = False,
-    ) -> ResourceT | dict[str, Any]:
-        """Apply a resource (create or update).
-
-        Args:
-            resource: Resource to apply as typed instance or raw dict.
-            model: Resource subclass for typed response; returns raw dict if None.
-            reveal: Include sensitive field values in the response.
-
-        Returns:
-            Applied resource as typed instance or raw dict.
-
-        Raises:
-            httpx.HTTPStatusError: If the apply operation fails.
-        """  # noqa: DOC502
-        json_data = resource.model_dump() if isinstance(resource, Resource) else resource
-        params: dict[str, Any] = {}
-        if reveal:
-            params["reveal"] = "true"
-        response = self._request("POST", "/resources/apply", json_data=json_data, params=params)
-        if model is not None:
-            return model.model_validate(response)
-        return response
-
-    def deactivate_resource[ResourceT: Resource](
-        self,
-        provider: str,
-        resource: str,
-        name: str,
-        *,
-        model: type[ResourceT] | None = None,
-    ) -> ResourceT | dict[str, Any]:
-        """Deactivate a resource, triggering provider teardown.
-
-        Soft-deletes the resource by moving it to DELETING state and initiating
-        provider teardown. The resource returns to DRAFT state once teardown completes.
-
-        Args:
-            provider: Provider that manages the resource.
-            resource: Resource type name.
-            name: Resource instance name.
-            model: Resource subclass for typed response; returns raw dict if None.
-
-        Returns:
-            Resource in deleting state as typed instance or raw dict.
-
-        Raises:
-            httpx.HTTPStatusError: If resource not found or deactivation fails.
-        """  # noqa: DOC502
-        params = {"provider": provider, "resource": resource, "name": name}
-        response = self._request("POST", "/resources/deactivate", params=params)
-
-        if model is not None:
-            return model.model_validate(response)
-
-        return response
-
-    def delete_resource(self, provider: str, resource: str, name: str) -> None:
-        """Delete a resource.
-
-        Raises:
-            httpx.HTTPStatusError: If resource not found or deletion fails.
-        """  # noqa: DOC502
-        params = {"provider": provider, "resource": resource, "name": name}
-        self._request("DELETE", "/resources/by-name", params=params)
 
     def list_dead_letter_events(self, provider: str | None = None) -> list[dict[str, Any]]:
         """List dead letter events with optional provider filter.
@@ -1188,8 +1061,9 @@ class AsyncPragmaClient(BaseClient):
 
     Example:
         >>> async with AsyncPragmaClient() as client:
-        ...     resources = await client.list_resources(provider="example")
-        ...     resource = await client.get_resource("example", "database", "my-db")
+        ...     project = client.project("my-project")
+        ...     resources = await project.list_resources(provider="example")
+        ...     resource = await project.get_resource("example", "database", "my-db")
     """
 
     def __init__(
@@ -1267,44 +1141,20 @@ class AsyncPragmaClient(BaseClient):
         except httpx.HTTPError:
             return False
 
-    async def list_resources[ResourceT: Resource](
-        self,
-        provider: str | None = None,
-        resource: str | None = None,
-        tags: list[str] | None = None,
-        *,
-        model: type[ResourceT] | None = None,
-        reveal: bool = False,
-    ) -> list[ResourceT] | list[dict[str, Any]]:
-        """List resources with optional filters.
+    def project(self, project_id: str) -> AsyncProjectResources:
+        """Get an async resource sub-client scoped to a single project.
+
+        All resource CRUD goes through a scoped sub-client so the
+        ``project_id`` travels in the URL path and the API can route
+        requests to the correct SurrealDB namespace.
 
         Args:
-            provider: Filter by provider name.
-            resource: Filter by resource type.
-            tags: Filter by tags (must match all).
-            model: Resource subclass for typed response; returns raw dicts if None.
-            reveal: Include sensitive field values in the response.
+            project_id: Identifier of the project to scope resource calls to.
 
         Returns:
-            List of resources as typed instances or raw dicts.
-
-        Raises:
-            httpx.HTTPStatusError: If the request fails.
-        """  # noqa: DOC502
-        params: dict[str, Any] = {}
-        if provider:
-            params["provider"] = provider
-        if resource:
-            params["resource"] = resource
-        if tags:
-            params["tags"] = tags
-        if reveal:
-            params["reveal"] = "true"
-
-        response = await self._request("GET", "/resources", params=params)
-        if model is not None:
-            return [model.model_validate(item) for item in response]
-        return response
+            Async sub-client exposing resource operations bound to the given project.
+        """
+        return AsyncProjectResources(self, project_id)
 
     async def list_resource_schemas(self, provider: str | None = None) -> list[ResourceSchema]:
         """List available resource schemas from deployed providers.
@@ -1323,113 +1173,6 @@ class AsyncPragmaClient(BaseClient):
             params["provider"] = provider
         response = await self._request("GET", "/resources/schemas", params=params)
         return [ResourceSchema.model_validate(item) for item in response]
-
-    async def get_resource[ResourceT: Resource](
-        self,
-        provider: str,
-        resource: str,
-        name: str,
-        *,
-        model: type[ResourceT] | None = None,
-        reveal: bool = False,
-    ) -> ResourceT | dict[str, Any]:
-        """Get a resource by its full identifier.
-
-        Args:
-            provider: Provider that manages the resource.
-            resource: Resource type name.
-            name: Resource instance name.
-            model: Resource subclass for typed response; returns raw dict if None.
-            reveal: Include sensitive field values in the response.
-
-        Returns:
-            Resource as typed instance or raw dict.
-
-        Raises:
-            httpx.HTTPStatusError: If resource not found or request fails.
-        """  # noqa: DOC502
-        params: dict[str, Any] = {"provider": provider, "resource": resource, "name": name}
-
-        if reveal:
-            params["reveal"] = "true"
-
-        response = await self._request("GET", "/resources/by-name", params=params)
-
-        if model is not None:
-            return model.model_validate(response)
-
-        return response
-
-    async def apply_resource[ResourceT: Resource](
-        self,
-        resource: ResourceT | dict[str, Any],
-        *,
-        model: type[ResourceT] | None = None,
-        reveal: bool = False,
-    ) -> ResourceT | dict[str, Any]:
-        """Apply a resource (create or update).
-
-        Args:
-            resource: Resource to apply as typed instance or raw dict.
-            model: Resource subclass for typed response; returns raw dict if None.
-            reveal: Include sensitive field values in the response.
-
-        Returns:
-            Applied resource as typed instance or raw dict.
-
-        Raises:
-            httpx.HTTPStatusError: If the apply operation fails.
-        """  # noqa: DOC502
-        json_data = resource.model_dump() if isinstance(resource, Resource) else resource
-        params: dict[str, Any] = {}
-        if reveal:
-            params["reveal"] = "true"
-        response = await self._request("POST", "/resources/apply", json_data=json_data, params=params)
-        if model is not None:
-            return model.model_validate(response)
-        return response
-
-    async def deactivate_resource[ResourceT: Resource](
-        self,
-        provider: str,
-        resource: str,
-        name: str,
-        *,
-        model: type[ResourceT] | None = None,
-    ) -> ResourceT | dict[str, Any]:
-        """Deactivate a resource, triggering provider teardown.
-
-        Soft-deletes the resource by moving it to DELETING state and initiating
-        provider teardown. The resource returns to DRAFT state once teardown completes.
-
-        Args:
-            provider: Provider that manages the resource.
-            resource: Resource type name.
-            name: Resource instance name.
-            model: Resource subclass for typed response; returns raw dict if None.
-
-        Returns:
-            Resource in deleting state as typed instance or raw dict.
-
-        Raises:
-            httpx.HTTPStatusError: If resource not found or deactivation fails.
-        """  # noqa: DOC502
-        params = {"provider": provider, "resource": resource, "name": name}
-        response = await self._request("POST", "/resources/deactivate", params=params)
-
-        if model is not None:
-            return model.model_validate(response)
-
-        return response
-
-    async def delete_resource(self, provider: str, resource: str, name: str) -> None:
-        """Delete a resource.
-
-        Raises:
-            httpx.HTTPStatusError: If resource not found or deletion fails.
-        """  # noqa: DOC502
-        params = {"provider": provider, "resource": resource, "name": name}
-        await self._request("DELETE", "/resources/by-name", params=params)
 
     async def list_dead_letter_events(self, provider: str | None = None) -> list[dict[str, Any]]:
         """List dead letter events with optional provider filter.
@@ -2250,3 +1993,530 @@ class AsyncPragmaClient(BaseClient):
             f"/organizations/{organization_id}/settings/available-providers",
         )
         return [LLMProviderSummary.model_validate(item) for item in response]
+
+
+class ProjectResources:
+    """Resource operations scoped to a single project.
+
+    All HTTP paths are rooted under ``/projects/{project_id}/resources`` so
+    the API can route the request to the project's SurrealDB namespace.
+    Resources passed to :meth:`apply` must declare the same ``project_id``
+    as the scope.
+
+    Example:
+        >>> with PragmaClient() as client:
+        ...     project = client.project("my-project")
+        ...     resources = project.list_resources(provider="example")
+    """
+
+    def __init__(self, client: PragmaClient, project_id: str) -> None:
+        """Initialize a project-scoped resource sub-client.
+
+        Args:
+            client: Parent Pragma client used for HTTP transport.
+            project_id: Identifier of the project all operations are bound to.
+        """
+        self._client = client
+        self._project_id = project_id
+
+    @property
+    def project_id(self) -> str:
+        """Project identifier this sub-client is bound to."""
+        return self._project_id
+
+    def _base_path(self) -> str:
+        """Return the resources collection path for this project."""
+        return f"/projects/{self._project_id}/resources"
+
+    def list_resources[ResourceT: Resource](
+        self,
+        provider: str | None = None,
+        resource: str | None = None,
+        tags: list[str] | None = None,
+        *,
+        model: type[ResourceT] | None = None,
+        reveal: bool = False,
+    ) -> list[ResourceT] | list[dict[str, Any]]:
+        """List resources in this project with optional filters.
+
+        Args:
+            provider: Filter by provider name.
+            resource: Filter by resource type.
+            tags: Filter by tags (must match all).
+            model: Resource subclass for typed response; returns raw dicts if None.
+            reveal: Include sensitive field values in the response.
+
+        Returns:
+            List of resources as typed instances or raw dicts.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        params: dict[str, Any] = {}
+
+        if provider:
+            params["provider"] = provider
+
+        if resource:
+            params["resource"] = resource
+
+        if tags:
+            params["tags"] = tags
+
+        if reveal:
+            params["reveal"] = "true"
+
+        response = self._client._request("GET", self._base_path(), params=params)
+
+        if model is not None:
+            return [model.model_validate(item) for item in response]
+
+        return response
+
+    def get_resource[ResourceT: Resource](
+        self,
+        provider: str,
+        resource: str,
+        name: str,
+        *,
+        model: type[ResourceT] | None = None,
+        reveal: bool = False,
+    ) -> ResourceT | dict[str, Any]:
+        """Get a resource in this project by its identifier triple.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+            model: Resource subclass for typed response; returns raw dict if None.
+            reveal: Include sensitive field values in the response.
+
+        Returns:
+            Resource as typed instance or raw dict.
+
+        Raises:
+            httpx.HTTPStatusError: If resource not found or request fails.
+        """  # noqa: DOC502
+        params: dict[str, Any] = {"provider": provider, "resource": resource, "name": name}
+
+        if reveal:
+            params["reveal"] = "true"
+
+        response = self._client._request("GET", f"{self._base_path()}/by-name", params=params)
+
+        if model is not None:
+            return model.model_validate(response)
+
+        return response
+
+    def apply_resource[ResourceT: Resource](
+        self,
+        resource: ResourceT | dict[str, Any],
+        *,
+        model: type[ResourceT] | None = None,
+        reveal: bool = False,
+    ) -> ResourceT | dict[str, Any]:
+        """Apply a resource (create or update) inside this project.
+
+        The resource's ``project_id`` must match the scoped project. Passing
+        a resource bound to a different project raises ValueError.
+
+        Args:
+            resource: Resource to apply as typed instance or raw dict.
+            model: Resource subclass for typed response; returns raw dict if None.
+            reveal: Include sensitive field values in the response.
+
+        Returns:
+            Applied resource as typed instance or raw dict.
+
+        Raises:
+            ValueError: If ``resource.project_id`` does not match the scoped project.
+            httpx.HTTPStatusError: If the apply operation fails.
+        """  # noqa: DOC502
+        self._reject_mismatched_project(resource)
+
+        json_data = resource.model_dump() if isinstance(resource, Resource) else resource
+        params: dict[str, Any] = {}
+
+        if reveal:
+            params["reveal"] = "true"
+
+        response = self._client._request(
+            "POST",
+            f"{self._base_path()}/apply",
+            json_data=json_data,
+            params=params,
+        )
+
+        if model is not None:
+            return model.model_validate(response)
+
+        return response
+
+    def deactivate_resource[ResourceT: Resource](
+        self,
+        provider: str,
+        resource: str,
+        name: str,
+        *,
+        model: type[ResourceT] | None = None,
+    ) -> ResourceT | dict[str, Any]:
+        """Deactivate a resource in this project, triggering provider teardown.
+
+        Soft-deletes the resource by moving it to DELETING state and initiating
+        provider teardown. The resource returns to DRAFT state once teardown
+        completes.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+            model: Resource subclass for typed response; returns raw dict if None.
+
+        Returns:
+            Resource in deleting state as typed instance or raw dict.
+
+        Raises:
+            httpx.HTTPStatusError: If resource not found or deactivation fails.
+        """  # noqa: DOC502
+        params = {"provider": provider, "resource": resource, "name": name}
+        response = self._client._request("POST", f"{self._base_path()}/deactivate", params=params)
+
+        if model is not None:
+            return model.model_validate(response)
+
+        return response
+
+    def delete_resource(self, provider: str, resource: str, name: str) -> None:
+        """Delete a resource from this project.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+
+        Raises:
+            httpx.HTTPStatusError: If resource not found or deletion fails.
+        """  # noqa: DOC502
+        params = {"provider": provider, "resource": resource, "name": name}
+        self._client._request("DELETE", f"{self._base_path()}/by-name", params=params)
+
+    def wait_ready(
+        self,
+        provider: str,
+        resource: str,
+        name: str,
+        *,
+        timeout: float = 60.0,
+        poll_interval: float = 1.0,
+    ) -> dict[str, Any]:
+        """Poll a resource in this project until it reaches READY state.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+            timeout: Maximum seconds to wait before raising TimeoutError.
+            poll_interval: Seconds to sleep between polls.
+
+        Returns:
+            The resource payload as a raw dict once it reaches READY.
+
+        Raises:
+            TimeoutError: If the resource does not reach READY within the timeout.
+            RuntimeError: If the resource transitions to FAILED while waiting.
+            httpx.HTTPStatusError: If a poll request fails.
+        """  # noqa: DOC502
+        deadline = time.monotonic() + timeout
+
+        while True:
+            current = self.get_resource(provider, resource, name)
+            state = current.get("lifecycle_state") if isinstance(current, dict) else None
+
+            if state == LifecycleState.READY.value:
+                return current
+
+            if state == LifecycleState.FAILED.value:
+                raise RuntimeError(f"Resource {provider}/{resource}/{name} transitioned to FAILED")
+
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"Resource {provider}/{resource}/{name} did not reach READY within {timeout}s")
+
+            time.sleep(poll_interval)
+
+    def _reject_mismatched_project(self, resource: Resource | dict[str, Any]) -> None:
+        """Raise ValueError if the resource's project_id does not match this scope.
+
+        Args:
+            resource: The resource (typed or raw dict) about to be applied.
+
+        Raises:
+            ValueError: If the resource carries a different project_id.
+        """
+        if isinstance(resource, Resource):
+            resource_project = resource.project_id
+        else:
+            resource_project = resource.get("project_id")
+
+        if resource_project is not None and resource_project != self._project_id:
+            raise ValueError(
+                f"Resource project_id {resource_project!r} does not match scoped project {self._project_id!r}"
+            )
+
+
+class AsyncProjectResources:
+    """Async resource operations scoped to a single project.
+
+    Mirror of :class:`ProjectResources` for the async client.
+    """
+
+    def __init__(self, client: AsyncPragmaClient, project_id: str) -> None:
+        """Initialize an async project-scoped resource sub-client.
+
+        Args:
+            client: Parent async Pragma client used for HTTP transport.
+            project_id: Identifier of the project all operations are bound to.
+        """
+        self._client = client
+        self._project_id = project_id
+
+    @property
+    def project_id(self) -> str:
+        """Project identifier this sub-client is bound to."""
+        return self._project_id
+
+    def _base_path(self) -> str:
+        """Return the resources collection path for this project."""
+        return f"/projects/{self._project_id}/resources"
+
+    async def list_resources[ResourceT: Resource](
+        self,
+        provider: str | None = None,
+        resource: str | None = None,
+        tags: list[str] | None = None,
+        *,
+        model: type[ResourceT] | None = None,
+        reveal: bool = False,
+    ) -> list[ResourceT] | list[dict[str, Any]]:
+        """List resources in this project with optional filters.
+
+        Args:
+            provider: Filter by provider name.
+            resource: Filter by resource type.
+            tags: Filter by tags (must match all).
+            model: Resource subclass for typed response; returns raw dicts if None.
+            reveal: Include sensitive field values in the response.
+
+        Returns:
+            List of resources as typed instances or raw dicts.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        params: dict[str, Any] = {}
+
+        if provider:
+            params["provider"] = provider
+
+        if resource:
+            params["resource"] = resource
+
+        if tags:
+            params["tags"] = tags
+
+        if reveal:
+            params["reveal"] = "true"
+
+        response = await self._client._request("GET", self._base_path(), params=params)
+
+        if model is not None:
+            return [model.model_validate(item) for item in response]
+
+        return response
+
+    async def get_resource[ResourceT: Resource](
+        self,
+        provider: str,
+        resource: str,
+        name: str,
+        *,
+        model: type[ResourceT] | None = None,
+        reveal: bool = False,
+    ) -> ResourceT | dict[str, Any]:
+        """Get a resource in this project by its identifier triple.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+            model: Resource subclass for typed response; returns raw dict if None.
+            reveal: Include sensitive field values in the response.
+
+        Returns:
+            Resource as typed instance or raw dict.
+
+        Raises:
+            httpx.HTTPStatusError: If resource not found or request fails.
+        """  # noqa: DOC502
+        params: dict[str, Any] = {"provider": provider, "resource": resource, "name": name}
+
+        if reveal:
+            params["reveal"] = "true"
+
+        response = await self._client._request("GET", f"{self._base_path()}/by-name", params=params)
+
+        if model is not None:
+            return model.model_validate(response)
+
+        return response
+
+    async def apply_resource[ResourceT: Resource](
+        self,
+        resource: ResourceT | dict[str, Any],
+        *,
+        model: type[ResourceT] | None = None,
+        reveal: bool = False,
+    ) -> ResourceT | dict[str, Any]:
+        """Apply a resource (create or update) inside this project.
+
+        The resource's ``project_id`` must match the scoped project. Passing
+        a resource bound to a different project raises ValueError.
+
+        Args:
+            resource: Resource to apply as typed instance or raw dict.
+            model: Resource subclass for typed response; returns raw dict if None.
+            reveal: Include sensitive field values in the response.
+
+        Returns:
+            Applied resource as typed instance or raw dict.
+
+        Raises:
+            ValueError: If ``resource.project_id`` does not match the scoped project.
+            httpx.HTTPStatusError: If the apply operation fails.
+        """  # noqa: DOC502
+        self._reject_mismatched_project(resource)
+
+        json_data = resource.model_dump() if isinstance(resource, Resource) else resource
+        params: dict[str, Any] = {}
+
+        if reveal:
+            params["reveal"] = "true"
+
+        response = await self._client._request(
+            "POST",
+            f"{self._base_path()}/apply",
+            json_data=json_data,
+            params=params,
+        )
+
+        if model is not None:
+            return model.model_validate(response)
+
+        return response
+
+    async def deactivate_resource[ResourceT: Resource](
+        self,
+        provider: str,
+        resource: str,
+        name: str,
+        *,
+        model: type[ResourceT] | None = None,
+    ) -> ResourceT | dict[str, Any]:
+        """Deactivate a resource in this project, triggering provider teardown.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+            model: Resource subclass for typed response; returns raw dict if None.
+
+        Returns:
+            Resource in deleting state as typed instance or raw dict.
+
+        Raises:
+            httpx.HTTPStatusError: If resource not found or deactivation fails.
+        """  # noqa: DOC502
+        params = {"provider": provider, "resource": resource, "name": name}
+        response = await self._client._request("POST", f"{self._base_path()}/deactivate", params=params)
+
+        if model is not None:
+            return model.model_validate(response)
+
+        return response
+
+    async def delete_resource(self, provider: str, resource: str, name: str) -> None:
+        """Delete a resource from this project.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+
+        Raises:
+            httpx.HTTPStatusError: If resource not found or deletion fails.
+        """  # noqa: DOC502
+        params = {"provider": provider, "resource": resource, "name": name}
+        await self._client._request("DELETE", f"{self._base_path()}/by-name", params=params)
+
+    async def wait_ready(
+        self,
+        provider: str,
+        resource: str,
+        name: str,
+        *,
+        timeout: float = 60.0,
+        poll_interval: float = 1.0,
+    ) -> dict[str, Any]:
+        """Poll a resource in this project until it reaches READY state.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+            timeout: Maximum seconds to wait before raising TimeoutError.
+            poll_interval: Seconds to sleep between polls.
+
+        Returns:
+            The resource payload as a raw dict once it reaches READY.
+
+        Raises:
+            TimeoutError: If the resource does not reach READY within the timeout.
+            RuntimeError: If the resource transitions to FAILED while waiting.
+            httpx.HTTPStatusError: If a poll request fails.
+        """  # noqa: DOC502
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+
+        while True:
+            current = await self.get_resource(provider, resource, name)
+            state = current.get("lifecycle_state") if isinstance(current, dict) else None
+
+            if state == LifecycleState.READY.value:
+                return current
+
+            if state == LifecycleState.FAILED.value:
+                raise RuntimeError(f"Resource {provider}/{resource}/{name} transitioned to FAILED")
+
+            if loop.time() >= deadline:
+                raise TimeoutError(f"Resource {provider}/{resource}/{name} did not reach READY within {timeout}s")
+
+            await asyncio.sleep(poll_interval)
+
+    def _reject_mismatched_project(self, resource: Resource | dict[str, Any]) -> None:
+        """Raise ValueError if the resource's project_id does not match this scope.
+
+        Args:
+            resource: The resource (typed or raw dict) about to be applied.
+
+        Raises:
+            ValueError: If the resource carries a different project_id.
+        """
+        if isinstance(resource, Resource):
+            resource_project = resource.project_id
+        else:
+            resource_project = resource.get("project_id")
+
+        if resource_project is not None and resource_project != self._project_id:
+            raise ValueError(
+                f"Resource project_id {resource_project!r} does not match scoped project {self._project_id!r}"
+            )
