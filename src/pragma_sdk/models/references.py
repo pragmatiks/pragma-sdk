@@ -1,67 +1,70 @@
-"""Reference types for resource dependencies and ownership."""
+"""Reference types for resource dependencies and ownership.
+
+References carry the four segments of a :class:`ResourceIdentity` directly
+as fields so that wire serialization stays flat, and expose a computed
+:attr:`identity` property plus a ``canonical`` string for consumers that
+want the structured form or a flat key.
+"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated, Any
 
-from pydantic import BaseModel, PrivateAttr
+from pydantic import BaseModel, PrivateAttr, field_validator
 from pydantic import Field as PydanticField
+
+from pragma_sdk.models.identity import ResourceIdentity, _validate_segment
 
 
 if TYPE_CHECKING:
     from pragma_sdk.models.base import Resource
 
 
-def format_resource_id(provider: str, resource: str, name: str) -> str:
-    """Format an external user-facing resource ID.
+class _ResourceIdentityFields(BaseModel):
+    """Mixin that validates the four identity segments on construction.
 
-    Uses slash-separated format suitable for display and API paths.
-    Slashes in resource type are replaced with underscores for safety.
-
-    Args:
-        provider: Provider name.
-        resource: Resource type name.
-        name: Resource instance name.
-
-    Returns:
-        Resource ID as `provider/resource/name`.
+    Reference models carry ``project_id``, ``provider``, ``resource``, and
+    ``name`` as flat fields for wire compatibility. This mixin ensures each
+    reference type enforces the same segment rules as
+    :class:`ResourceIdentity` without duplicating validators.
     """
-    resource_normalized = resource.replace("/", "_")
-    return f"{provider}/{resource_normalized}/{name}"
 
-
-def format_internal_resource_id(provider: str, resource: str, name: str) -> str:
-    """Format an internal SurrealDB resource ID.
-
-    Uses underscore-separated format with `resource:` prefix for database keys.
-    Slashes in resource type are replaced with underscores for safety.
-
-    Args:
-        provider: Provider name.
-        resource: Resource type name.
-        name: Resource instance name.
-
-    Returns:
-        Resource ID as `resource:{provider}_{resource}_{name}`.
-    """
-    resource_normalized = resource.replace("/", "_")
-    return f"resource:{provider}_{resource_normalized}_{name}"
-
-
-class ResourceReference(BaseModel):
-    """Reference to another resource for dependency tracking."""
-
+    project_id: str
     provider: str
     resource: str
     name: str
 
+    @field_validator("project_id", "provider", "resource", "name")
+    @classmethod
+    def _check_segments(cls, value: str, info: Any) -> str:
+        return _validate_segment(value, info.field_name)
+
+    @property
+    def identity(self) -> ResourceIdentity:
+        """Return the structured :class:`ResourceIdentity` for this reference."""
+        return ResourceIdentity(
+            project_id=self.project_id,
+            provider=self.provider,
+            resource=self.resource,
+            name=self.name,
+        )
+
+    @property
+    def canonical(self) -> str:
+        """Return the canonical ``project::provider::resource::name`` string."""
+        return self.identity.canonical
+
+
+class ResourceReference(_ResourceIdentityFields):
+    """Reference to another resource for dependency tracking."""
+
     @property
     def id(self) -> str:
-        """Unique resource ID for the referenced resource."""
-        return format_resource_id(self.provider, self.resource, self.name)
+        """Canonical identifier for the referenced resource."""
+        return self.canonical
 
 
-class OwnerReference(BaseModel):
+class OwnerReference(_ResourceIdentityFields):
     """Reference to a resource that owns this resource for lifecycle coordination.
 
     Used for cascading deletes and ownership tracking. When an owner resource
@@ -70,14 +73,10 @@ class OwnerReference(BaseModel):
     A resource can have multiple owners (rare but valid for shared resources).
     """
 
-    provider: str
-    resource: str
-    name: str
-
     @property
     def id(self) -> str:
-        """Unique resource ID for the owner resource."""
-        return format_resource_id(self.provider, self.resource, self.name)
+        """Canonical identifier for the owner resource."""
+        return self.canonical
 
 
 class FieldReference(ResourceReference):
@@ -86,7 +85,7 @@ class FieldReference(ResourceReference):
     field: str
 
 
-class Dependency[ResourceT: "Resource"](BaseModel):
+class Dependency[ResourceT: "Resource"](_ResourceIdentityFields):
     """Typed dependency on another resource for whole-instance access.
 
     Use this when you need access to the full resource object (config, outputs,
@@ -106,17 +105,18 @@ class Dependency[ResourceT: "Resource"](BaseModel):
 
     model_config = {"populate_by_name": True}
 
-    dependency_marker: bool = PydanticField(default=True, alias="__dependency__", serialization_alias="__dependency__")
-    provider: str
-    resource: str
-    name: str
+    dependency_marker: bool = PydanticField(
+        default=True,
+        alias="__dependency__",
+        serialization_alias="__dependency__",
+    )
 
     _resolved: ResourceT | None = PrivateAttr(default=None)
 
     @property
     def id(self) -> str:
-        """Unique resource ID for the referenced resource."""
-        return format_resource_id(self.provider, self.resource, self.name)
+        """Canonical identifier for the referenced resource."""
+        return self.canonical
 
     async def resolve(self) -> ResourceT:
         """Get the resolved resource instance.
@@ -179,8 +179,8 @@ def is_dependency_marker(value: Any) -> bool:
     """Check if a value is a serialized Dependency marker.
 
     When Dependency[T] is serialized (e.g., sent via API), it becomes a dict
-    with __dependency__=True and provider/resource/name keys. This function
-    detects such markers regardless of whether they've been resolved.
+    with __dependency__=True and project_id/provider/resource/name keys. This
+    function detects such markers regardless of whether they've been resolved.
 
     Args:
         value: Any value to check.
@@ -190,7 +190,7 @@ def is_dependency_marker(value: Any) -> bool:
     """
     if not isinstance(value, dict):
         return False
-    required = {"__dependency__", "provider", "resource", "name"}
+    required = {"__dependency__", "project_id", "provider", "resource", "name"}
     return required.issubset(value.keys()) and value.get("__dependency__") is True
 
 

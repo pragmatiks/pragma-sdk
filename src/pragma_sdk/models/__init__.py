@@ -43,12 +43,19 @@ from pragma_sdk.models.enums import (
     UpgradePolicy,
     VersionStatus,
 )
+from pragma_sdk.models.identity import InvalidResourceIdentityError, ResourceIdentity
 from pragma_sdk.models.llm import (
     CatalogEntry,
     CostEstimate,
     LLMProviderSummary,
     OrganizationSettings,
     ProviderComparisonRow,
+)
+from pragma_sdk.models.project import (
+    CreateProjectRequest,
+    DeleteProjectRequest,
+    Project,
+    UpdateProjectRequest,
 )
 from pragma_sdk.models.provider import (
     PaginatedResponse,
@@ -71,8 +78,6 @@ from pragma_sdk.models.references import (
     SensitiveDependency,
     SensitiveField,
     SensitiveOutput,
-    format_internal_resource_id,
-    format_resource_id,
     is_dependency_marker,
     is_field_ref_marker,
 )
@@ -91,6 +96,8 @@ __all__ = [
     "Config",
     "ConversationRoutingManifest",
     "CostEstimate",
+    "CreateProjectRequest",
+    "DeleteProjectRequest",
     "Dependency",
     "DeploymentResult",
     "DeploymentStatus",
@@ -102,6 +109,7 @@ __all__ = [
     "ImmutableDependency",
     "ImmutableField",
     "ImmutableSensitiveField",
+    "InvalidResourceIdentityError",
     "LLMProviderSummary",
     "ModelTier",
     "Organization",
@@ -111,6 +119,7 @@ __all__ = [
     "OwnerReference",
     "PaginatedResponse",
     "PerformanceProfile",
+    "Project",
     "Provider",
     "ProviderAuthor",
     "ProviderComparisonRow",
@@ -123,6 +132,7 @@ __all__ = [
     "ProviderVersion",
     "PushResult",
     "Resource",
+    "ResourceIdentity",
     "ResourceReference",
     "ResourceSchema",
     "ResourceTier",
@@ -138,11 +148,10 @@ __all__ = [
     "TaskStatus",
     "TaskUpdate",
     "TrustTier",
+    "UpdateProjectRequest",
     "UpgradePolicy",
     "UserInfo",
     "VersionStatus",
-    "format_internal_resource_id",
-    "format_resource_id",
     "is_dependency_marker",
     "is_field_ref_marker",
 ]

@@ -15,6 +15,7 @@ from pydantic import Field as PydanticField
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode
 
 from pragma_sdk.context import apply_resource, get_current_resource_owner, get_provider_name, wait_for_resource_state
+from pragma_sdk.models.identity import ResourceIdentity
 from pragma_sdk.models.references import (
     Dependency,
     FieldReference,
@@ -22,7 +23,6 @@ from pragma_sdk.models.references import (
     OwnerReference,
     ResourceReference,
     Sensitive,
-    format_resource_id,
 )
 from pragma_sdk.types import (
     CopyContext,
@@ -672,6 +672,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
     resource: ClassVar[str]
 
+    project_id: str
     name: str
     config: ConfigT
     dependencies: list[ResourceReference] = PydanticField(default_factory=list)
@@ -717,9 +718,24 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         return name
 
     @property
+    def identity(self) -> ResourceIdentity:
+        """Return the structured identity for this resource.
+
+        Returns:
+            :class:`ResourceIdentity` composed from ``project_id``, ``provider``,
+            ``resource``, and ``name``.
+        """
+        return ResourceIdentity(
+            project_id=self.project_id,
+            provider=self.provider,
+            resource=self.resource,
+            name=self.name,
+        )
+
+    @property
     def id(self) -> str:
-        """Unique external resource ID: provider/resource/name."""
-        return format_resource_id(self.provider, self.resource, self.name)
+        """Canonical ``project::provider::resource::name`` identifier."""
+        return self.identity.canonical
 
     async def on_create(self) -> OutputsT:
         """Handle resource creation."""
@@ -875,6 +891,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
             Self for method chaining.
         """
         ref = OwnerReference(
+            project_id=owner.project_id,
             provider=owner.provider,
             resource=owner.resource,
             name=owner.name,
@@ -912,6 +929,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
             self.owner_references.append(current_owner)
 
         resource_data = {
+            "project_id": self.project_id,
             "provider": self.provider,
             "resource": self.resource,
             "name": self.name,
