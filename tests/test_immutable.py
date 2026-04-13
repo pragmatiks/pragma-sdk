@@ -256,7 +256,7 @@ def test_dependency_passes_validation() -> None:
 
         db: Dependency[StubResource]
 
-    dep = Dependency[StubResource](provider="test", resource="stub", name="my-db")
+    dep = Dependency[StubResource](project_id="test-project", provider="test", resource="stub", name="my-db")
     config = GoodConfig(db=dep)
     assert config.db.name == "my-db"
 
@@ -269,7 +269,7 @@ def test_immutable_dependency_passes_validation() -> None:
 
         db: ImmutableDependency[StubResource]
 
-    dep = Dependency[StubResource](provider="test", resource="stub", name="my-db")
+    dep = Dependency[StubResource](project_id="test-project", provider="test", resource="stub", name="my-db")
     config = GoodConfig(db=dep)
     assert config.db.name == "my-db"
 
@@ -318,7 +318,7 @@ def test_list_dependency_passes_validation() -> None:
 
         dbs: list[Dependency[StubResource]]
 
-    dep = Dependency[StubResource](provider="test", resource="stub", name="db1")
+    dep = Dependency[StubResource](project_id="test-project", provider="test", resource="stub", name="db1")
     config = GoodConfig(dbs=[dep])
     assert len(config.dbs) == 1
 
@@ -376,7 +376,13 @@ def test_immutable_field_accepts_field_reference() -> None:
 
         region: ImmutableField[str]
 
-    ref = FieldReference(provider="gcp", resource="project", name="my-proj", field="outputs.region")
+    ref = FieldReference(
+        project_id="test-project",
+        provider="gcp",
+        resource="project",
+        name="my-proj",
+        field="outputs.region",
+    )
     config = MyConfig(region=ref)
     assert isinstance(config.region, FieldReference)
     assert config.region.field == "outputs.region"

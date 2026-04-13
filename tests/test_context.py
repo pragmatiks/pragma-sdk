@@ -115,7 +115,7 @@ def test_get_current_resource_owner_returns_none_when_not_set():
 
 def test_set_current_resource_owner_returns_token():
     """set_current_resource_owner() returns a token for resetting."""
-    owner = OwnerReference(provider="test", resource="database", name="my-db")
+    owner = OwnerReference(project_id="test-project", provider="test", resource="database", name="my-db")
     token = set_current_resource_owner(owner)
     assert token is not None
     reset_current_resource_owner(token)
@@ -123,7 +123,7 @@ def test_set_current_resource_owner_returns_token():
 
 def test_get_current_resource_owner_returns_set_owner():
     """get_current_resource_owner() returns the owner that was set."""
-    owner = OwnerReference(provider="test", resource="database", name="my-db")
+    owner = OwnerReference(project_id="test-project", provider="test", resource="database", name="my-db")
     token = set_current_resource_owner(owner)
     try:
         assert get_current_resource_owner() is owner
@@ -133,7 +133,7 @@ def test_get_current_resource_owner_returns_set_owner():
 
 def test_reset_current_resource_owner_clears_owner():
     """reset_current_resource_owner() clears the owner."""
-    owner = OwnerReference(provider="test", resource="database", name="my-db")
+    owner = OwnerReference(project_id="test-project", provider="test", resource="database", name="my-db")
     token = set_current_resource_owner(owner)
     reset_current_resource_owner(token)
     assert get_current_resource_owner() is None

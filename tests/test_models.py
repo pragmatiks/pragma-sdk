@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from conftest import TEST_PROJECT_ID
 from pydantic import ValidationError
 
 from pragma_sdk import Config, Dependency, Field, FieldReference, LifecycleState
@@ -17,8 +18,6 @@ from pragma_sdk.models import (
     OwnerReference,
     PushResult,
     ResourceReference,
-    format_internal_resource_id,
-    format_resource_id,
     is_dependency_marker,
 )
 
@@ -38,33 +37,21 @@ def test_lifecycle_state_values() -> None:
     assert LifecycleState.FAILED == "failed"
 
 
-def test_format_resource_id() -> None:
-    """format_resource_id creates external format ID."""
-    result = format_resource_id("postgres", "database", "my-db")
-    assert result == "postgres/database/my-db"
-
-
-def test_format_internal_resource_id() -> None:
-    """format_internal_resource_id creates internal SurrealDB format ID."""
-    result = format_internal_resource_id("postgres", "database", "analytics")
-    assert result == "resource:postgres_database_analytics"
-
-
-def test_format_internal_resource_id_slash_normalization() -> None:
-    """format_internal_resource_id normalizes slashes in resource type."""
-    result = format_internal_resource_id("gcp", "cloudsql/instance", "my-db")
-    assert result == "resource:gcp_cloudsql_instance_my-db"
-
-
 def test_resource_reference_id_property() -> None:
-    """ResourceReference.id returns formatted resource ID."""
-    ref = ResourceReference(provider="postgres", resource="database", name="my-db")
-    assert ref.id == "postgres/database/my-db"
+    """ResourceReference.id returns the canonical identifier."""
+    ref = ResourceReference(
+        project_id=TEST_PROJECT_ID,
+        provider="postgres",
+        resource="database",
+        name="my-db",
+    )
+    assert ref.id == f"{TEST_PROJECT_ID}::postgres::database::my-db"
 
 
 def test_field_reference_extends_resource_reference() -> None:
     """FieldReference has field attribute on top of ResourceReference."""
     ref = FieldReference(
+        project_id=TEST_PROJECT_ID,
         provider="postgres",
         resource="database",
         name="my-db",
@@ -74,53 +61,68 @@ def test_field_reference_extends_resource_reference() -> None:
     assert ref.resource == "database"
     assert ref.name == "my-db"
     assert ref.field == "outputs.connection_url"
-    assert ref.id == "postgres/database/my-db"
-
-
-# --- OwnerReference tests ---
+    assert ref.id == f"{TEST_PROJECT_ID}::postgres::database::my-db"
 
 
 def test_owner_reference_initialization() -> None:
-    """OwnerReference accepts provider, resource, name fields."""
-    ref = OwnerReference(provider="app", resource="server", name="my-server")
+    """OwnerReference accepts the four identity segments."""
+    ref = OwnerReference(
+        project_id=TEST_PROJECT_ID,
+        provider="app",
+        resource="server",
+        name="my-server",
+    )
     assert ref.provider == "app"
     assert ref.resource == "server"
     assert ref.name == "my-server"
 
 
 def test_owner_reference_id_property() -> None:
-    """OwnerReference.id returns formatted resource ID."""
-    ref = OwnerReference(provider="app", resource="server", name="my-server")
-    assert ref.id == "app/server/my-server"
+    """OwnerReference.id returns the canonical identifier."""
+    ref = OwnerReference(
+        project_id=TEST_PROJECT_ID,
+        provider="app",
+        resource="server",
+        name="my-server",
+    )
+    assert ref.id == f"{TEST_PROJECT_ID}::app::server::my-server"
 
 
 def test_owner_reference_validation_requires_all_fields() -> None:
-    """OwnerReference requires provider, resource, and name."""
+    """OwnerReference requires project_id, provider, resource, and name."""
     with pytest.raises(ValidationError):
-        OwnerReference(provider="app")  # type: ignore[call-arg]
+        OwnerReference(project_id=TEST_PROJECT_ID, provider="app")  # type: ignore[call-arg]
 
     with pytest.raises(ValidationError):
-        OwnerReference(provider="app", resource="server")  # type: ignore[call-arg]
+        OwnerReference(project_id=TEST_PROJECT_ID, provider="app", resource="server")  # type: ignore[call-arg]
 
 
 def test_owner_reference_equality() -> None:
     """OwnerReference instances with same fields are equal."""
-    ref1 = OwnerReference(provider="app", resource="server", name="my-server")
-    ref2 = OwnerReference(provider="app", resource="server", name="my-server")
-    ref3 = OwnerReference(provider="app", resource="server", name="other-server")
+    ref1 = OwnerReference(project_id=TEST_PROJECT_ID, provider="app", resource="server", name="my-server")
+    ref2 = OwnerReference(project_id=TEST_PROJECT_ID, provider="app", resource="server", name="my-server")
+    ref3 = OwnerReference(project_id=TEST_PROJECT_ID, provider="app", resource="server", name="other-server")
 
     assert ref1 == ref2
     assert ref1 != ref3
 
 
 def test_owner_reference_not_equal_to_resource_reference() -> None:
-    """OwnerReference and ResourceReference are distinct types."""
-    owner_ref = OwnerReference(provider="app", resource="server", name="my-server")
-    resource_ref = ResourceReference(provider="app", resource="server", name="my-server")
+    """OwnerReference and ResourceReference are distinct types but share canonical ID."""
+    owner_ref = OwnerReference(
+        project_id=TEST_PROJECT_ID,
+        provider="app",
+        resource="server",
+        name="my-server",
+    )
+    resource_ref = ResourceReference(
+        project_id=TEST_PROJECT_ID,
+        provider="app",
+        resource="server",
+        name="my-server",
+    )
 
-    # Different types even with same data
     assert type(owner_ref) is not type(resource_ref)
-    # But they have the same id since both use format_resource_id
     assert owner_ref.id == resource_ref.id
 
 
@@ -131,8 +133,8 @@ def test_config_forbids_extra_fields() -> None:
 
 
 def test_resource_id_property(stub_resource: StubResource) -> None:
-    """Resource.id returns formatted resource ID."""
-    assert stub_resource.id == "test/stub/my-resource"
+    """Resource.id returns the canonical identity string."""
+    assert stub_resource.id == f"{TEST_PROJECT_ID}::test::stub::my-resource"
 
 
 def test_resource_default_lifecycle_state(stub_resource: StubResource) -> None:
@@ -158,6 +160,7 @@ def test_resource_provider_raises_when_context_not_set(stub_resource: StubResour
 def test_resource_with_field_reference_in_config() -> None:
     """Config field can be a FieldReference instead of direct value."""
     ref = FieldReference(
+        project_id=TEST_PROJECT_ID,
         provider="postgres",
         resource="database",
         name="my-db",
@@ -274,6 +277,7 @@ def test_dependency_fields() -> None:
     from conftest import StubResource
 
     dep = Dependency[StubResource](
+        project_id=TEST_PROJECT_ID,
         provider="postgres",
         resource="database",
         name="my-db",
@@ -288,11 +292,12 @@ def test_dependency_id_property() -> None:
     from conftest import StubResource
 
     dep = Dependency[StubResource](
+        project_id=TEST_PROJECT_ID,
         provider="postgres",
         resource="database",
         name="my-db",
     )
-    assert dep.id == "postgres/database/my-db"
+    assert dep.id == f"{TEST_PROJECT_ID}::postgres::database::my-db"
 
 
 def test_dependency_serialization_includes_marker() -> None:
@@ -300,6 +305,7 @@ def test_dependency_serialization_includes_marker() -> None:
     from conftest import StubResource
 
     dep = Dependency[StubResource](
+        project_id=TEST_PROJECT_ID,
         provider="postgres",
         resource="database",
         name="my-db",
@@ -328,6 +334,7 @@ def test_dependency_type_extractable_at_runtime() -> None:
 
     # Also verify it works on an instance's type
     dep = Dependency[StubResource](
+        project_id=TEST_PROJECT_ID,
         provider="test",
         resource="stub",
         name="my-db",
@@ -345,6 +352,7 @@ async def test_dependency_resolve_returns_cached_value() -> None:
     # Create a resolved resource
     config = StubConfig(name="my-db")
     resource = StubResource(
+        project_id=TEST_PROJECT_ID,
         name="my-db",
         config=config,
         outputs=StubOutputs(url="https://my-db.example.com"),
@@ -352,6 +360,7 @@ async def test_dependency_resolve_returns_cached_value() -> None:
 
     # Create dependency and populate _resolved
     dep = Dependency[StubResource](
+        project_id=TEST_PROJECT_ID,
         provider="test",
         resource="stub",
         name="my-db",
@@ -371,6 +380,7 @@ async def test_dependency_resolve_raises_when_not_resolved() -> None:
     from conftest import StubResource
 
     dep = Dependency[StubResource](
+        project_id=TEST_PROJECT_ID,
         provider="postgres",
         resource="database",
         name="my-db",
@@ -390,6 +400,7 @@ def test_dependency_in_config() -> None:
         database: Dependency[StubResource]
 
     dep = Dependency[StubResource](
+        project_id=TEST_PROJECT_ID,
         provider="test",
         resource="stub",
         name="my-db",
@@ -398,7 +409,7 @@ def test_dependency_in_config() -> None:
 
     assert isinstance(config.database, Dependency)
     assert config.database.name == "my-db"
-    assert config.database.id == "test/stub/my-db"
+    assert config.database.id == f"{TEST_PROJECT_ID}::test::stub::my-db"
 
 
 # --- is_dependency_marker tests ---
@@ -408,6 +419,7 @@ def test_is_dependency_marker_valid() -> None:
     """is_dependency_marker returns True for valid dependency marker."""
     marker = {
         "__dependency__": True,
+        "project_id": TEST_PROJECT_ID,
         "provider": "test",
         "resource": "database",
         "name": "my-db",
@@ -419,6 +431,7 @@ def test_is_dependency_marker_with_extra_keys() -> None:
     """is_dependency_marker returns True even with extra keys like 'ref'."""
     marker = {
         "__dependency__": True,
+        "project_id": TEST_PROJECT_ID,
         "provider": "test",
         "resource": "database",
         "name": "my-db",
@@ -431,6 +444,7 @@ def test_is_dependency_marker_false_marker() -> None:
     """is_dependency_marker returns False when __dependency__ is False."""
     marker = {
         "__dependency__": False,
+        "project_id": TEST_PROJECT_ID,
         "provider": "test",
         "resource": "database",
         "name": "my-db",
@@ -509,12 +523,14 @@ async def test_dependency_resolve_idempotent() -> None:
 
     config = StubConfig(name="my-db")
     resource = StubResource(
+        project_id=TEST_PROJECT_ID,
         name="my-db",
         config=config,
         outputs=StubOutputs(url="https://my-db.example.com"),
     )
 
     dep = Dependency[StubResource](
+        project_id=TEST_PROJECT_ID,
         provider="test",
         resource="stub",
         name="my-db",
@@ -534,12 +550,14 @@ def test_dependency_serialization_excludes_resolved() -> None:
 
     config = StubConfig(name="my-db")
     resource = StubResource(
+        project_id=TEST_PROJECT_ID,
         name="my-db",
         config=config,
         outputs=StubOutputs(url="https://my-db.example.com"),
     )
 
     dep = Dependency[StubResource](
+        project_id=TEST_PROJECT_ID,
         provider="test",
         resource="stub",
         name="my-db",
@@ -551,6 +569,7 @@ def test_dependency_serialization_excludes_resolved() -> None:
     assert "resolved" not in data
     assert data == {
         "__dependency__": True,
+        "project_id": TEST_PROJECT_ID,
         "provider": "test",
         "resource": "stub",
         "name": "my-db",
@@ -643,7 +662,7 @@ def test_set_owner_adds_owner_reference(stub_resource: StubResource) -> None:
     """set_owner() adds owner reference to the resource."""
     from conftest import StubConfig, StubResource
 
-    owner = StubResource(name="parent-resource", config=StubConfig(name="parent"))
+    owner = StubResource(project_id=TEST_PROJECT_ID, name="parent-resource", config=StubConfig(name="parent"))
 
     assert len(stub_resource.owner_references) == 0
 
@@ -660,7 +679,7 @@ def test_set_owner_prevents_duplicates(stub_resource: StubResource) -> None:
     """set_owner() does not add duplicate owner references."""
     from conftest import StubConfig, StubResource
 
-    owner = StubResource(name="parent-resource", config=StubConfig(name="parent"))
+    owner = StubResource(project_id=TEST_PROJECT_ID, name="parent-resource", config=StubConfig(name="parent"))
 
     stub_resource.set_owner(owner)
     stub_resource.set_owner(owner)
@@ -673,7 +692,7 @@ def test_set_owner_returns_self_for_chaining(stub_resource: StubResource) -> Non
     """set_owner() returns self for method chaining."""
     from conftest import StubConfig, StubResource
 
-    owner = StubResource(name="parent-resource", config=StubConfig(name="parent"))
+    owner = StubResource(project_id=TEST_PROJECT_ID, name="parent-resource", config=StubConfig(name="parent"))
 
     result = stub_resource.set_owner(owner)
 
@@ -684,8 +703,8 @@ def test_set_owner_allows_multiple_owners(stub_resource: StubResource) -> None:
     """set_owner() allows multiple distinct owners."""
     from conftest import StubConfig, StubResource
 
-    owner1 = StubResource(name="parent-1", config=StubConfig(name="p1"))
-    owner2 = StubResource(name="parent-2", config=StubConfig(name="p2"))
+    owner1 = StubResource(project_id=TEST_PROJECT_ID, name="parent-1", config=StubConfig(name="p1"))
+    owner2 = StubResource(project_id=TEST_PROJECT_ID, name="parent-2", config=StubConfig(name="p2"))
 
     stub_resource.set_owner(owner1).set_owner(owner2)
 
@@ -698,7 +717,7 @@ def test_set_owner_creates_correct_owner_reference_type(stub_resource: StubResou
     """set_owner() creates OwnerReference, not ResourceReference."""
     from conftest import StubConfig, StubResource
 
-    owner = StubResource(name="parent-resource", config=StubConfig(name="parent"))
+    owner = StubResource(project_id=TEST_PROJECT_ID, name="parent-resource", config=StubConfig(name="parent"))
     stub_resource.set_owner(owner)
 
     ref = stub_resource.owner_references[0]
@@ -796,7 +815,7 @@ async def test_apply_includes_owner_references(stub_resource: StubResource) -> N
 
     from pragma_sdk.context import reset_runtime_context, set_runtime_context
 
-    owner = StubResource(name="parent-resource", config=StubConfig(name="parent"))
+    owner = StubResource(project_id=TEST_PROJECT_ID, name="parent-resource", config=StubConfig(name="parent"))
     stub_resource.set_owner(owner)
 
     ctx = MockRuntimeContextForApply()
@@ -855,7 +874,12 @@ async def test_apply_auto_sets_owner_from_context(stub_resource: StubResource) -
         set_runtime_context,
     )
 
-    parent_owner = OwnerReference(provider="test", resource="parent", name="my-parent")
+    parent_owner = OwnerReference(
+        project_id=TEST_PROJECT_ID,
+        provider="test",
+        resource="parent",
+        name="my-parent",
+    )
 
     ctx = MockRuntimeContextForApply()
     runtime_token = set_runtime_context(ctx)
@@ -888,7 +912,12 @@ async def test_apply_does_not_duplicate_owner_from_context(stub_resource: StubRe
         set_runtime_context,
     )
 
-    parent_owner = OwnerReference(provider="test", resource="parent", name="my-parent")
+    parent_owner = OwnerReference(
+        project_id=TEST_PROJECT_ID,
+        provider="test",
+        resource="parent",
+        name="my-parent",
+    )
 
     stub_resource.owner_references.append(parent_owner)
 

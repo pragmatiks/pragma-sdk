@@ -68,17 +68,20 @@ def provider_context() -> Iterator[None]:
     reset_provider_name(token)
 
 
+TEST_PROJECT_ID = "test-project"
+
+
 @pytest.fixture
 def stub_resource() -> StubResource:
     """StubResource instance for testing resource methods."""
     config = StubConfig(name="my-resource")
-    return StubResource(name="my-resource", config=config)
+    return StubResource(project_id=TEST_PROJECT_ID, name="my-resource", config=config)
 
 
 @pytest.fixture
 def harness() -> ProviderHarness:
     """ProviderHarness instance for testing lifecycle methods."""
-    return ProviderHarness()
+    return ProviderHarness(project_id=TEST_PROJECT_ID)
 
 
 @pytest.fixture(autouse=True)
