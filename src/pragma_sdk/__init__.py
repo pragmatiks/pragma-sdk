@@ -18,7 +18,13 @@ Additional imports available from submodules:
     pragma_sdk.platform: Platform resource types (SecretConfig, etc.)
 """
 
-from pragma_sdk.client import AsyncPragmaClient, PragmaClient
+from pragma_sdk.client import (
+    AsyncPragmaClient,
+    AsyncProjectResources,
+    PragmaClient,
+    ProjectResources,
+)
+from pragma_sdk.exceptions import ProjectMismatchError, ResourceFailedError
 from pragma_sdk.models import (
     AgentInstance,
     AgentInstanceStatus,
@@ -32,6 +38,8 @@ from pragma_sdk.models import (
     Config,
     ConversationRoutingManifest,
     CostEstimate,
+    CreateProjectRequest,
+    DeleteProjectRequest,
     Dependency,
     DeploymentResult,
     DeploymentStatus,
@@ -42,6 +50,7 @@ from pragma_sdk.models import (
     ImmutableDependency,
     ImmutableField,
     ImmutableSensitiveField,
+    InvalidResourceIdentityError,
     LLMProviderSummary,
     ModelTier,
     Organization,
@@ -50,6 +59,7 @@ from pragma_sdk.models import (
     Outputs,
     PaginatedResponse,
     PerformanceProfile,
+    Project,
     ProviderAuthor,
     ProviderComparisonRow,
     ProviderDeleteResult,
@@ -59,6 +69,7 @@ from pragma_sdk.models import (
     ProviderVersion,
     PushResult,
     Resource,
+    ResourceIdentity,
     ResourceSchema,
     ResourceTier,
     ScheduleConfig,
@@ -72,6 +83,7 @@ from pragma_sdk.models import (
     TaskStatus,
     TaskUpdate,
     TrustTier,
+    UpdateProjectRequest,
     UpgradePolicy,
     VersionStatus,
 )
@@ -98,6 +110,7 @@ __all__ = [
     "AgentTypeCreate",
     "AgentTypeUpdate",
     "AsyncPragmaClient",
+    "AsyncProjectResources",
     "BuildInfo",
     "BuildStatus",
     "CatalogEntry",
@@ -108,6 +121,8 @@ __all__ = [
     "CopyResult",
     "CopyStrategy",
     "CostEstimate",
+    "CreateProjectRequest",
+    "DeleteProjectRequest",
     "Dependency",
     "DeploymentResult",
     "DeploymentStatus",
@@ -119,6 +134,7 @@ __all__ = [
     "ImmutableDependency",
     "ImmutableField",
     "ImmutableSensitiveField",
+    "InvalidResourceIdentityError",
     "LLMProviderSummary",
     "LifecycleState",
     "LogEntry",
@@ -132,6 +148,9 @@ __all__ = [
     "PatchResult",
     "PerformanceProfile",
     "PragmaClient",
+    "Project",
+    "ProjectMismatchError",
+    "ProjectResources",
     "Provider",
     "ProviderAuthor",
     "ProviderComparisonRow",
@@ -143,6 +162,8 @@ __all__ = [
     "ProviderVersion",
     "PushResult",
     "Resource",
+    "ResourceFailedError",
+    "ResourceIdentity",
     "ResourceSchema",
     "ResourceTier",
     "ScheduleConfig",
@@ -156,6 +177,7 @@ __all__ = [
     "TaskStatus",
     "TaskUpdate",
     "TrustTier",
+    "UpdateProjectRequest",
     "UpgradePolicy",
     "VersionStatus",
 ]

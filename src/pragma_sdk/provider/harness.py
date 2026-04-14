@@ -124,16 +124,28 @@ class ProviderHarness:
         assert delete_result.success
     """
 
-    def __init__(self, provider_name: str = "test/local") -> None:
+    def __init__(
+        self,
+        provider_name: str = "test/local",
+        project_id: str = "harness-test",
+    ) -> None:
         """Initialize harness for testing.
 
         Args:
             provider_name: Provider name to set in context during lifecycle
                 calls. Defaults to "test/local".
+            project_id: Project identifier stamped on all resources
+                constructed inside the harness. Defaults to ``"harness-test"``.
         """
         self._provider_name = provider_name
+        self._project_id = project_id
         self._events: list[LifecycleEvent] = []
         self._results: list[LifecycleResult] = []
+
+    @property
+    def project_id(self) -> str:
+        """Project identifier stamped on resources built by this harness."""
+        return self._project_id
 
     @property
     def events(self) -> list[LifecycleEvent]:
@@ -178,6 +190,7 @@ class ProviderHarness:
         self._events.append(event)
 
         resource = resource_class(
+            project_id=self._project_id,
             name=name,
             config=config,
             outputs=None,
@@ -240,6 +253,7 @@ class ProviderHarness:
         self._events.append(event)
 
         resource = resource_class(
+            project_id=self._project_id,
             name=name,
             config=config,
             lifecycle_state=LifecycleState.PROCESSING,
@@ -299,6 +313,7 @@ class ProviderHarness:
         self._events.append(event)
 
         resource = resource_class(
+            project_id=self._project_id,
             name=name,
             config=config,
             lifecycle_state=LifecycleState.PROCESSING,
@@ -359,6 +374,7 @@ class ProviderHarness:
         self._events.append(event)
 
         resource = resource_class(
+            project_id=self._project_id,
             name=name,
             config=config,
             lifecycle_state=LifecycleState.PROCESSING,
@@ -420,6 +436,7 @@ class ProviderHarness:
         self._events.append(event)
 
         resource = resource_class(
+            project_id=self._project_id,
             name=name,
             config=config,
             lifecycle_state=LifecycleState.PROCESSING,
