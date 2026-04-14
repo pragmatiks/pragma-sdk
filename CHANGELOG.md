@@ -1,3 +1,9 @@
+## v1.1.0 (2026-04-14)
+
+### Feat
+
+- **sdk**: add orphan_resources field and ProjectHasResourcesError
+
 ## v1.0.0 (2026-04-14)
 
 ### BREAKING CHANGE
