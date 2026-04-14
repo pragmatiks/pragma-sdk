@@ -71,10 +71,21 @@ class DeleteProjectRequest(BaseModel):
 
     Project deletion is a hard delete and cannot be undone. The caller
     must pass the project's current ``slug`` in ``confirmation``; the
-    server rejects the request if the values do not match.
+    server rejects the request if the values do not match. By default
+    the server also refuses to delete a project that still contains
+    resources; set ``orphan_resources`` to opt out of that safety check.
 
     Attributes:
         confirmation: Must equal the target project's slug.
+        orphan_resources: If True, delete the project without requiring
+            it to be empty. Any resources still attached to the project
+            are removed from Pragma's tracking WITHOUT triggering
+            provider lifecycle events — no cloud infrastructure is torn
+            down and the caller becomes responsible for the orphaned
+            infrastructure afterwards. Defaults to False, which preserves
+            the safety check and causes the server to return 409 when
+            resources remain.
     """
 
     confirmation: str
+    orphan_resources: bool = False

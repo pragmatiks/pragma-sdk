@@ -14,7 +14,11 @@ import httpx
 
 from pragma_sdk.auth import BearerAuth
 from pragma_sdk.config import get_token_for_context
-from pragma_sdk.exceptions import ProjectMismatchError, ResourceFailedError
+from pragma_sdk.exceptions import (
+    ProjectHasResourcesError,
+    ProjectMismatchError,
+    ResourceFailedError,
+)
 from pragma_sdk.models import (
     AgentInstance,
     AgentInstanceStatus,
@@ -70,6 +74,53 @@ def _validate_provider_name(provider_name: str) -> str:
         raise ValueError(f"Provider name must be namespaced as 'org/name', got: {provider_name!r}")
 
     return provider_name
+
+
+def _raise_project_has_resources(error: httpx.HTTPStatusError) -> None:
+    """Translate a project-has-resources 409 into a typed SDK exception.
+
+    Inspects ``error.response`` for the structured body the API emits
+    when a project delete is refused because resources remain. When all
+    expected fields are present the helper raises
+    :class:`ProjectHasResourcesError`; otherwise it re-raises the original
+    :class:`httpx.HTTPStatusError` unchanged so callers still see the raw
+    response.
+
+    Args:
+        error: The HTTP error raised by ``response.raise_for_status()``
+            for a DELETE /projects/{id} call that returned 409.
+
+    Raises:
+        ProjectHasResourcesError: If the 409 body matches the expected
+            shape for a project-has-resources rejection.
+        httpx.HTTPStatusError: Re-raised unchanged if the body does not
+            match the expected shape, is not valid JSON, or is missing
+            any of the required fields.
+    """  # noqa: DOC502
+    response = error.response
+
+    try:
+        body = response.json()
+    except ValueError as json_error:
+        raise error from json_error
+
+    detail = body.get("detail") if isinstance(body, dict) else None
+
+    if not isinstance(detail, dict):
+        raise error
+
+    project_id = detail.get("project_id")
+    resource_count = detail.get("resource_count")
+    resources = detail.get("resources")
+
+    if not isinstance(project_id, str) or not isinstance(resource_count, int) or not isinstance(resources, list):
+        raise error
+
+    raise ProjectHasResourcesError(
+        project_id=project_id,
+        resource_count=resource_count,
+        resources=list(resources),
+    ) from error
 
 
 class BaseClient:
@@ -296,21 +347,36 @@ class PragmaClient(BaseClient):
         """Hard-delete a project with typed confirmation.
 
         The caller must pass the project's slug in ``request.confirmation``;
-        the server rejects the request if the value does not match.
+        the server rejects the request if the value does not match. By
+        default the server also refuses to delete a project that still
+        holds resources. Set ``request.orphan_resources`` to ``True`` to
+        bypass that safety check and orphan the resources.
 
         Args:
             project_id: Project identifier to delete.
-            request: Confirmation payload carrying the project's slug.
+            request: Confirmation payload carrying the project's slug and
+                optional ``orphan_resources`` flag.
 
         Raises:
-            httpx.HTTPStatusError: If confirmation fails, the project is not
-                found, or the request fails.
+            ProjectHasResourcesError: If the server returns 409 with a
+                project-has-resources body, typically because the project
+                still contains resources and ``orphan_resources`` was not
+                set.
+            httpx.HTTPStatusError: If confirmation fails, the project is
+                not found, the 409 body does not match the expected
+                project-has-resources shape, or the request otherwise
+                fails.
         """  # noqa: DOC502
-        self._request(
-            "DELETE",
-            f"/projects/{quote(project_id, safe='')}",
-            json_data=request.model_dump(),
-        )
+        try:
+            self._request(
+                "DELETE",
+                f"/projects/{quote(project_id, safe='')}",
+                json_data=request.model_dump(),
+            )
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code == 409:
+                _raise_project_has_resources(error)
+            raise
 
     def list_resource_schemas(self, provider: str | None = None) -> list[ResourceSchema]:
         """List available resource schemas from deployed providers.
@@ -1224,19 +1290,37 @@ class AsyncPragmaClient(BaseClient):
     async def delete_project(self, project_id: str, request: DeleteProjectRequest) -> None:
         """Hard-delete a project with typed confirmation.
 
+        The caller must pass the project's slug in ``request.confirmation``;
+        the server rejects the request if the value does not match. By
+        default the server also refuses to delete a project that still
+        holds resources. Set ``request.orphan_resources`` to ``True`` to
+        bypass that safety check and orphan the resources.
+
         Args:
             project_id: Project identifier to delete.
-            request: Confirmation payload carrying the project's slug.
+            request: Confirmation payload carrying the project's slug and
+                optional ``orphan_resources`` flag.
 
         Raises:
-            httpx.HTTPStatusError: If confirmation fails, the project is not
-                found, or the request fails.
+            ProjectHasResourcesError: If the server returns 409 with a
+                project-has-resources body, typically because the project
+                still contains resources and ``orphan_resources`` was not
+                set.
+            httpx.HTTPStatusError: If confirmation fails, the project is
+                not found, the 409 body does not match the expected
+                project-has-resources shape, or the request otherwise
+                fails.
         """  # noqa: DOC502
-        await self._request(
-            "DELETE",
-            f"/projects/{quote(project_id, safe='')}",
-            json_data=request.model_dump(),
-        )
+        try:
+            await self._request(
+                "DELETE",
+                f"/projects/{quote(project_id, safe='')}",
+                json_data=request.model_dump(),
+            )
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code == 409:
+                _raise_project_has_resources(error)
+            raise
 
     async def list_resource_schemas(self, provider: str | None = None) -> list[ResourceSchema]:
         """List available resource schemas from deployed providers.

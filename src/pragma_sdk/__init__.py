@@ -24,7 +24,11 @@ from pragma_sdk.client import (
     PragmaClient,
     ProjectResources,
 )
-from pragma_sdk.exceptions import ProjectMismatchError, ResourceFailedError
+from pragma_sdk.exceptions import (
+    ProjectHasResourcesError,
+    ProjectMismatchError,
+    ResourceFailedError,
+)
 from pragma_sdk.models import (
     AgentInstance,
     AgentInstanceStatus,
@@ -149,6 +153,7 @@ __all__ = [
     "PerformanceProfile",
     "PragmaClient",
     "Project",
+    "ProjectHasResourcesError",
     "ProjectMismatchError",
     "ProjectResources",
     "Provider",

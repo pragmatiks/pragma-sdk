@@ -48,3 +48,30 @@ class ResourceFailedError(Exception):
             message += f": {error}"
 
         super().__init__(message)
+
+
+class ProjectHasResourcesError(Exception):
+    """Raised when deleting a non-empty project without orphan_resources=True.
+
+    The server rejects the delete with HTTP 409 when the target project
+    still contains resources and the caller did not opt into orphaning.
+    Pass ``orphan_resources=True`` on :class:`DeleteProjectRequest` to
+    bypass this safety check, or delete the resources first.
+
+    Attributes:
+        project_id: ID of the project whose deletion was rejected.
+        resource_count: Authoritative count of resources still in the
+            project at the moment the server refused the delete.
+        resources: Bounded sample of resource IDs (up to 20). Not the
+            complete list — use the count for totals.
+    """
+
+    def __init__(self, project_id: str, resource_count: int, resources: list[str]) -> None:
+        """Initialize ProjectHasResourcesError with rejected project details."""
+        self.project_id = project_id
+        self.resource_count = resource_count
+        self.resources = resources
+        super().__init__(
+            f"Project {project_id!r} still contains {resource_count} resource(s); "
+            "delete them first or pass orphan_resources=True."
+        )
