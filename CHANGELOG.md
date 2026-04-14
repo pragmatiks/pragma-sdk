@@ -1,3 +1,19 @@
+## v1.0.0 (2026-04-14)
+
+### BREAKING CHANGE
+
+- Resources now require project_id at construction time.
+The flat slash-based identifier format is gone -- use
+ResourceIdentity.canonical / ResourceIdentity.parse. Top-level resource
+methods on PragmaClient / AsyncPragmaClient are removed; route resource
+operations through `client.project(project_id)`. All downstream
+consumers (pragma-os API, pragma-cli, pragma-providers, and the web
+TypeScript mirror) must update to the new surface before upgrading.
+
+### Feat
+
+- **sdk**: canonical resource identity and project foundation (#29)
+
 ## v0.36.0 (2026-04-12)
 
 ### Feat
