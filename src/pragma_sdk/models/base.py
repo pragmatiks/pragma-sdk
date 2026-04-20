@@ -900,7 +900,12 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
             self.owner_references.append(ref)
         return self
 
-    async def apply(self) -> Resource[ConfigT, OutputsT]:
+    async def apply(
+        self,
+        *,
+        wait: bool = False,
+        timeout: float = 60.0,
+    ) -> Resource[ConfigT, OutputsT]:
         """Apply this resource through the API.
 
         Sends the resource to the API for creation or update. The API will
@@ -909,17 +914,41 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
         Call this from within provider lifecycle handlers to create subresources.
         The owner is automatically set from the current runtime context (the
-        resource whose lifecycle handler is executing). After apply(), call
-        wait_ready() to wait for the resource to be processed.
+        resource whose lifecycle handler is executing).
+
+        When ``wait=True``, apply() also waits for the resource to reach the
+        READY state before returning, combining the publish and wait steps
+        into a single call. When ``wait=False`` (default), callers must invoke
+        ``wait_ready()`` separately if they need to block until the resource
+        is healthy.
+
+        Args:
+            wait: If True, block until the resource reaches READY state
+                after applying. If False, return immediately after the API
+                accepts the apply request.
+            timeout: Maximum seconds to wait for READY when ``wait=True``.
+                Ignored when ``wait=False``.
 
         Returns:
             Self for method chaining.
 
         Example:
+            Apply and wait in a single call:
+
             ```python
             async def on_create(self):
                 db = DatabaseResource(name=f"{self.name}-db", config=DbConfig(...))
-                await db.apply()  # Owner automatically set from context
+                await db.apply(wait=True, timeout=120.0)
+                return AppOutputs(db_url=db.outputs.connection_url)
+            ```
+
+            Apply and wait separately when the caller needs to interleave
+            other work between publishing and waiting:
+
+            ```python
+            async def on_create(self):
+                db = DatabaseResource(name=f"{self.name}-db", config=DbConfig(...))
+                await db.apply()
                 await db.wait_ready(timeout=120.0)
                 return AppOutputs(db_url=db.outputs.connection_url)
             ```
@@ -941,6 +970,10 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
         await apply_resource(resource_data)
         self.lifecycle_state = LifecycleState.PENDING
+
+        if wait:
+            await self.wait_ready(timeout)
+
         return self
 
     async def wait_ready(self, timeout: float = 60.0) -> Resource[ConfigT, OutputsT]:
