@@ -1,3 +1,9 @@
+## v1.2.0 (2026-04-20)
+
+### Feat
+
+- **sdk**: add wait/timeout kwargs to Resource.apply() (#30)
+
 ## v1.1.0 (2026-04-14)
 
 ### Feat
