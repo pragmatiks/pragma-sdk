@@ -1,3 +1,9 @@
+## v1.3.0 (2026-04-22)
+
+### Feat
+
+- **sdk**: allow ProviderAuthor.organization_id to be None for platform-owned providers (PRA-361) (#31)
+
 ## v1.2.0 (2026-04-20)
 
 ### Feat
