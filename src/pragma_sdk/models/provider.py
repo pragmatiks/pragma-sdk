@@ -11,9 +11,14 @@ from pragma_sdk.models.enums import ProviderScope, ResourceTier, TrustTier, Upgr
 
 
 class ProviderAuthor(BaseModel):
-    """Author information for a provider."""
+    """Author information for a provider.
 
-    organization_id: str
+    When ``organization_id`` is ``None``, the provider is platform-owned
+    (not attributed to a specific customer organization). ``org_name``
+    remains required as a display label.
+    """
+
+    organization_id: str | None = None
     org_name: str
 
 
