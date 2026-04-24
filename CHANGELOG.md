@@ -1,11 +1,3 @@
-## v1.4.0 (2026-04-24)
-
-### Feat
-
-- remove TrustTier system entirely (PRA-369)
-- **models**: add ProviderAuthor.kind discriminator + rename org_name → display_name (PRA-369)
-- **models**: split Provider canonical into prefix + name (PRA-369)
-
 ## v1.3.0 (2026-04-22)
 
 ### Feat
