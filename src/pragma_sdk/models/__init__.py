@@ -39,7 +39,6 @@ from pragma_sdk.models.enums import (
     ResponseStatus,
     TaskSource,
     TaskStatus,
-    TrustTier,
     UpgradePolicy,
     VersionStatus,
 )
@@ -147,7 +146,6 @@ __all__ = [
     "TaskSource",
     "TaskStatus",
     "TaskUpdate",
-    "TrustTier",
     "UpdateProjectRequest",
     "UpgradePolicy",
     "UserInfo",

@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, computed_field
 
-from pragma_sdk.models.enums import ProviderScope, ResourceTier, TrustTier, UpgradePolicy, VersionStatus
+from pragma_sdk.models.enums import ProviderScope, ResourceTier, UpgradePolicy, VersionStatus
 
 
 class ProviderAuthor(BaseModel):
@@ -42,7 +42,6 @@ class Provider(BaseModel):
     display_name: str
     description: str
     author: ProviderAuthor
-    trust_tier: TrustTier
     scope: ProviderScope = ProviderScope.PUBLIC
     icon_url: str | None = None
     readme: str | None = None

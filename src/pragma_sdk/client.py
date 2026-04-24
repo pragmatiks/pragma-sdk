@@ -39,7 +39,6 @@ from pragma_sdk.models import (
     Resource,
     ResourceSchema,
     ResourceTier,
-    TrustTier,
     UpgradePolicy,
     UserInfo,
 )
@@ -511,7 +510,6 @@ class PragmaClient(BaseClient):
         self,
         query: str | None = None,
         scope: ProviderScope | str | None = None,
-        trust_tier: TrustTier | str | None = None,
         tags: list[str] | None = None,
         limit: int = 20,
         offset: int = 0,
@@ -521,7 +519,6 @@ class PragmaClient(BaseClient):
         Args:
             query: Search query string.
             scope: Filter by provider scope (e.g. 'public', 'tenant').
-            trust_tier: Filter by trust tier.
             tags: Filter by tags.
             limit: Maximum number of results.
             offset: Pagination offset.
@@ -539,9 +536,6 @@ class PragmaClient(BaseClient):
 
         if scope is not None:
             params["scope"] = scope
-
-        if trust_tier is not None:
-            params["trust_tier"] = trust_tier
 
         if tags is not None:
             params["tags"] = tags
@@ -1455,7 +1449,6 @@ class AsyncPragmaClient(BaseClient):
         self,
         query: str | None = None,
         scope: ProviderScope | str | None = None,
-        trust_tier: TrustTier | str | None = None,
         tags: list[str] | None = None,
         limit: int = 20,
         offset: int = 0,
@@ -1465,7 +1458,6 @@ class AsyncPragmaClient(BaseClient):
         Args:
             query: Search query string.
             scope: Filter by provider scope (e.g. 'public', 'tenant').
-            trust_tier: Filter by trust tier.
             tags: Filter by tags.
             limit: Maximum number of results.
             offset: Pagination offset.
@@ -1483,9 +1475,6 @@ class AsyncPragmaClient(BaseClient):
 
         if scope is not None:
             params["scope"] = scope
-
-        if trust_tier is not None:
-            params["trust_tier"] = trust_tier
 
         if tags is not None:
             params["tags"] = tags

@@ -42,14 +42,6 @@ class ResponseStatus(StrEnum):
     FAILURE = "failure"
 
 
-class TrustTier(StrEnum):
-    """Trust level for providers."""
-
-    OFFICIAL = "official"
-    VERIFIED = "verified"
-    COMMUNITY = "community"
-
-
 class VersionStatus(StrEnum):
     """Build/publish status for a provider version."""
 
