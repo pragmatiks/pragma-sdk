@@ -1,3 +1,9 @@
+## v1.4.0 (2026-04-24)
+
+### Feat
+
+- kind-based ProviderAuthor + prefix/name split + delete TrustTier (PRA-369) (#32)
+
 ## v1.3.0 (2026-04-22)
 
 ### Feat
