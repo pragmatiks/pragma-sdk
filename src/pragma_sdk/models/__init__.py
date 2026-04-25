@@ -8,9 +8,6 @@ from pragma_sdk.models.agents import (
     ConversationRoutingManifest,
     FleetVitals,
     ScheduleConfig,
-    Task,
-    TaskCreate,
-    TaskUpdate,
 )
 from pragma_sdk.models.api import (
     BuildInfo,
@@ -80,6 +77,30 @@ from pragma_sdk.models.references import (
     is_dependency_marker,
     is_field_ref_marker,
 )
+from pragma_sdk.models.task import (
+    BoardSummary,
+    Task,
+    TaskAssign,
+    TaskCreate,
+    TaskTransition,
+    TaskUpdate,
+)
+from pragma_sdk.models.task_activity import TaskActivityEntry, TaskActivityKind
+from pragma_sdk.models.task_comment import (
+    CommentAuthorType,
+    TaskComment,
+    TaskCommentCreate,
+    TaskCommentUpdate,
+)
+from pragma_sdk.models.task_graph_diff import (
+    GraphDiff,
+    MutationActorType,
+    MutationOperation,
+    ResourceFieldDiff,
+    ResourceMutation,
+    ResourceNetDelta,
+    TaskMutationPage,
+)
 
 
 __all__ = [
@@ -89,9 +110,11 @@ __all__ = [
     "AgentType",
     "AgentTypeCreate",
     "AgentTypeUpdate",
+    "BoardSummary",
     "BuildInfo",
     "BuildStatus",
     "CatalogEntry",
+    "CommentAuthorType",
     "Config",
     "ConversationRoutingManifest",
     "CostEstimate",
@@ -104,6 +127,7 @@ __all__ = [
     "Field",
     "FieldReference",
     "FleetVitals",
+    "GraphDiff",
     "Immutable",
     "ImmutableDependency",
     "ImmutableField",
@@ -111,6 +135,8 @@ __all__ = [
     "InvalidResourceIdentityError",
     "LLMProviderSummary",
     "ModelTier",
+    "MutationActorType",
+    "MutationOperation",
     "Organization",
     "OrganizationSettings",
     "OrganizationStatus",
@@ -131,7 +157,10 @@ __all__ = [
     "ProviderVersion",
     "PushResult",
     "Resource",
+    "ResourceFieldDiff",
     "ResourceIdentity",
+    "ResourceMutation",
+    "ResourceNetDelta",
     "ResourceReference",
     "ResourceSchema",
     "ResourceTier",
@@ -142,9 +171,17 @@ __all__ = [
     "SensitiveField",
     "SensitiveOutput",
     "Task",
+    "TaskActivityEntry",
+    "TaskActivityKind",
+    "TaskAssign",
+    "TaskComment",
+    "TaskCommentCreate",
+    "TaskCommentUpdate",
     "TaskCreate",
+    "TaskMutationPage",
     "TaskSource",
     "TaskStatus",
+    "TaskTransition",
     "TaskUpdate",
     "UpdateProjectRequest",
     "UpgradePolicy",
