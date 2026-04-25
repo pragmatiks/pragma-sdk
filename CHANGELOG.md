@@ -1,3 +1,9 @@
+## v1.4.1 (2026-04-25)
+
+### Fix
+
+- **ci**: detect new commitizen no-commits output (#34)
+
 ## v1.4.0 (2026-04-24)
 
 ### Feat
