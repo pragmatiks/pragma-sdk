@@ -25,8 +25,10 @@ from pragma_sdk.models import (
     AgentType,
     AgentTypeCreate,
     AgentTypeUpdate,
+    BoardSummary,
     CostEstimate,
     DeploymentResult,
+    GraphDiff,
     LLMProviderSummary,
     Organization,
     OrganizationSettings,
@@ -39,6 +41,17 @@ from pragma_sdk.models import (
     Resource,
     ResourceSchema,
     ResourceTier,
+    Task,
+    TaskActivityEntry,
+    TaskAssign,
+    TaskComment,
+    TaskCommentCreate,
+    TaskCommentUpdate,
+    TaskCreate,
+    TaskMutationPage,
+    TaskStatus,
+    TaskTransition,
+    TaskUpdate,
     UpgradePolicy,
     UserInfo,
 )
@@ -1118,6 +1131,481 @@ class PragmaClient(BaseClient):
         )
         return [LLMProviderSummary.model_validate(item) for item in response]
 
+    def get_task_board(self) -> BoardSummary:
+        """Fetch the board summary with task counts per status.
+
+        Calls ``GET /agents/tasks/board``.
+
+        Returns:
+            Board summary with per-status counts and the total.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", "/agents/tasks/board")
+        return BoardSummary.model_validate(response)
+
+    def list_tasks(
+        self,
+        *,
+        status: TaskStatus | str | None = None,
+        assigned_to_instance_id: str | None = None,
+    ) -> list[Task]:
+        """List tasks for the authenticated organization.
+
+        Calls ``GET /agents/tasks/``.
+
+        Args:
+            status: Filter by task status.
+            assigned_to_instance_id: Filter by assigned agent instance.
+
+        Returns:
+            Tasks matching the filters.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        params: dict[str, Any] = {}
+
+        if status is not None:
+            params["status"] = status.value if isinstance(status, TaskStatus) else status
+
+        if assigned_to_instance_id is not None:
+            params["assigned_to_instance_id"] = assigned_to_instance_id
+
+        response = self._request("GET", "/agents/tasks/", params=params or None)
+        return [Task.model_validate(item) for item in response]
+
+    def get_task(self, task_id: str) -> Task:
+        """Fetch a single task by ID.
+
+        Calls ``GET /agents/tasks/{task_id}``.
+
+        Args:
+            task_id: Task identifier.
+
+        Returns:
+            The requested task.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", f"/agents/tasks/{quote(task_id, safe='')}")
+        return Task.model_validate(response)
+
+    def create_task(self, data: TaskCreate) -> Task:
+        """Create a new task.
+
+        Calls ``POST /agents/tasks/``. The owning organization and creator
+        are taken from the authenticated request context.
+
+        Args:
+            data: Task creation payload.
+
+        Returns:
+            The created task with server-populated fields.
+
+        Raises:
+            httpx.HTTPStatusError: If creation fails.
+        """  # noqa: DOC502
+        response = self._request(
+            "POST",
+            "/agents/tasks/",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return Task.model_validate(response)
+
+    def update_task(self, task_id: str, data: TaskUpdate) -> Task:
+        """Update an existing task.
+
+        Calls ``PATCH /agents/tasks/{task_id}``. Only the provided fields
+        are updated. Status changes are not allowed here — use
+        :meth:`transition_task` instead.
+
+        Args:
+            task_id: Task identifier.
+            data: Fields to update.
+
+        Returns:
+            Updated task.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the update fails.
+        """  # noqa: DOC502
+        response = self._request(
+            "PATCH",
+            f"/agents/tasks/{quote(task_id, safe='')}",
+            json_data=data.model_dump(exclude_unset=True),
+        )
+        return Task.model_validate(response)
+
+    def delete_task(self, task_id: str) -> None:
+        """Delete a task.
+
+        Calls ``DELETE /agents/tasks/{task_id}``.
+
+        Args:
+            task_id: Task identifier.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or deletion fails.
+        """  # noqa: DOC502
+        self._request("DELETE", f"/agents/tasks/{quote(task_id, safe='')}")
+
+    def assign_task(self, task_id: str, data: TaskAssign) -> Task:
+        """Assign a task to an agent instance, user, or agent type.
+
+        Calls ``POST /agents/tasks/{task_id}/assign``. Exactly one of
+        ``instance_id``, ``user_id``, or ``type_id`` should be provided
+        on ``data``.
+
+        Args:
+            task_id: Task identifier.
+            data: Assignment payload.
+
+        Returns:
+            Updated task with the new assignment.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or assignment fails.
+        """  # noqa: DOC502
+        response = self._request(
+            "POST",
+            f"/agents/tasks/{quote(task_id, safe='')}/assign",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return Task.model_validate(response)
+
+    def transition_task(self, task_id: str, data: TaskTransition) -> Task:
+        """Transition a task to a new status.
+
+        Calls ``POST /agents/tasks/{task_id}/transition``. The transition
+        is validated against the allowed status graph on the server;
+        invalid transitions return ``InvalidLifecycleTransitionError``.
+
+        Args:
+            task_id: Task identifier.
+            data: Transition payload carrying the target status.
+
+        Returns:
+            Updated task with the new status.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the transition is rejected.
+        """  # noqa: DOC502
+        response = self._request(
+            "POST",
+            f"/agents/tasks/{quote(task_id, safe='')}/transition",
+            json_data=data.model_dump(),
+        )
+        return Task.model_validate(response)
+
+    def list_subtasks(self, task_id: str) -> list[Task]:
+        """List direct subtasks of a task.
+
+        Calls ``GET /agents/tasks/{task_id}/subtasks``. Subtask
+        relationships are graph edges, so this method traverses the
+        ``has_subtask`` edges starting at ``task_id``.
+
+        Args:
+            task_id: Parent task identifier.
+
+        Returns:
+            Direct child tasks ordered by priority then creation time.
+
+        Raises:
+            httpx.HTTPStatusError: If the parent task is not found or the request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", f"/agents/tasks/{quote(task_id, safe='')}/subtasks")
+        return [Task.model_validate(item) for item in response]
+
+    def create_subtask(self, task_id: str, data: TaskCreate) -> Task:
+        """Create a new subtask under an existing task.
+
+        Calls ``POST /agents/tasks/{task_id}/subtasks``. The new task
+        inherits priority and assignee fields from the parent when the
+        request body leaves them at their defaults; the ``has_subtask``
+        edge is created server-side as part of the same operation.
+
+        Args:
+            task_id: Parent task identifier.
+            data: Subtask creation payload.
+
+        Returns:
+            The created subtask.
+
+        Raises:
+            httpx.HTTPStatusError: If the parent task is not found or creation fails.
+        """  # noqa: DOC502
+        response = self._request(
+            "POST",
+            f"/agents/tasks/{quote(task_id, safe='')}/subtasks",
+            json_data=data.model_dump(exclude_unset=True),
+        )
+        return Task.model_validate(response)
+
+    def link_subtask(self, task_id: str, child_id: str) -> None:
+        """Link an existing task as a subtask of another task.
+
+        Calls ``POST /agents/tasks/{task_id}/subtasks/link``. The server
+        rejects links that would create a cycle in the subtask graph.
+
+        Args:
+            task_id: Parent task identifier.
+            child_id: Existing task to attach as a subtask.
+
+        Raises:
+            httpx.HTTPStatusError: If either task is not found or the
+                link would create a cycle.
+        """  # noqa: DOC502
+        self._request(
+            "POST",
+            f"/agents/tasks/{quote(task_id, safe='')}/subtasks/link",
+            json_data={"child_id": child_id},
+        )
+
+    def unlink_subtask(self, task_id: str, child_id: str) -> None:
+        """Remove the ``has_subtask`` edge between two tasks.
+
+        Calls ``DELETE /agents/tasks/{task_id}/subtasks/{child_id}``. The
+        child task is not deleted; only the link is removed.
+
+        Args:
+            task_id: Parent task identifier.
+            child_id: Subtask identifier to unlink.
+
+        Raises:
+            httpx.HTTPStatusError: If either task is not found or the
+                request fails.
+        """  # noqa: DOC502
+        self._request(
+            "DELETE",
+            f"/agents/tasks/{quote(task_id, safe='')}/subtasks/{quote(child_id, safe='')}",
+        )
+
+    def list_task_comments(
+        self,
+        task_id: str,
+        *,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> list[TaskComment]:
+        """List comments on a task, oldest first.
+
+        Calls ``GET /agents/tasks/{task_id}/comments``.
+
+        Args:
+            task_id: Task identifier.
+            limit: Maximum comments to return (1-200, default 50).
+            cursor: Composite cursor ``"<iso-created_at>|<comment-id>"``
+                returned by a previous call. Returns comments strictly
+                after this point in ``(created_at ASC, id ASC)`` order.
+
+        Returns:
+            Comments for the requested page, oldest first.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the request fails.
+        """  # noqa: DOC502
+        params: dict[str, Any] = {"limit": limit}
+
+        if cursor is not None:
+            params["cursor"] = cursor
+
+        response = self._request(
+            "GET",
+            f"/agents/tasks/{quote(task_id, safe='')}/comments",
+            params=params,
+        )
+        return [TaskComment.model_validate(item) for item in response]
+
+    def create_task_comment(self, task_id: str, data: TaskCommentCreate) -> TaskComment:
+        """Create a comment on a task.
+
+        Calls ``POST /agents/tasks/{task_id}/comments``. Authorship is
+        taken from the authenticated user — agent comments are written
+        by the runtime through a separate code path and are not
+        creatable via this method.
+
+        Args:
+            task_id: Task identifier.
+            data: Comment creation payload.
+
+        Returns:
+            Persisted comment with the server-populated id.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or creation fails.
+        """  # noqa: DOC502
+        response = self._request(
+            "POST",
+            f"/agents/tasks/{quote(task_id, safe='')}/comments",
+            json_data=data.model_dump(),
+        )
+        return TaskComment.model_validate(response)
+
+    def update_task_comment(
+        self,
+        comment_id: str,
+        data: TaskCommentUpdate,
+    ) -> TaskComment:
+        """Edit a task comment. Only the original author may edit.
+
+        Calls ``PATCH /agents/tasks/comments/{comment_id}``.
+
+        Args:
+            comment_id: Comment identifier.
+            data: New body to replace the existing one.
+
+        Returns:
+            Updated comment with ``edited=True``.
+
+        Raises:
+            httpx.HTTPStatusError: If the comment is not found or the
+                actor is not the author.
+        """  # noqa: DOC502
+        response = self._request(
+            "PATCH",
+            f"/agents/tasks/comments/{quote(comment_id, safe='')}",
+            json_data=data.model_dump(),
+        )
+        return TaskComment.model_validate(response)
+
+    def delete_task_comment(self, comment_id: str) -> None:
+        """Delete a task comment. Only the original author may delete.
+
+        Calls ``DELETE /agents/tasks/comments/{comment_id}``.
+
+        Args:
+            comment_id: Comment identifier.
+
+        Raises:
+            httpx.HTTPStatusError: If the comment is not found or the
+                actor is not the author.
+        """  # noqa: DOC502
+        self._request("DELETE", f"/agents/tasks/comments/{quote(comment_id, safe='')}")
+
+    def list_task_activity(
+        self,
+        task_id: str,
+        *,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> list[TaskActivityEntry]:
+        """List the activity timeline for a task, newest first.
+
+        Calls ``GET /agents/tasks/{task_id}/activity``. Combines status
+        transitions, assignments, comments, agent start events, and
+        resource mutation summaries into a single newest-first stream.
+        Mutation entries surface only the operation and changed field
+        names; full before/after snapshots live on the mutation log.
+
+        Args:
+            task_id: Task identifier.
+            limit: Maximum entries to return (1-200, default 50).
+            cursor: Composite cursor ``"<iso-timestamp>|<edge-id>"``
+                returned by a previous call. Returns entries strictly
+                older than this point in
+                ``(timestamp DESC, edge_id DESC)`` order.
+
+        Returns:
+            Activity entries for the requested page, newest first.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the request fails.
+        """  # noqa: DOC502
+        params: dict[str, Any] = {"limit": limit}
+
+        if cursor is not None:
+            params["cursor"] = cursor
+
+        response = self._request(
+            "GET",
+            f"/agents/tasks/{quote(task_id, safe='')}/activity",
+            params=params,
+        )
+        return [TaskActivityEntry.model_validate(item) for item in response]
+
+    def list_task_mutations(
+        self,
+        task_id: str,
+        *,
+        limit: int = 50,
+        cursor: str | None = None,
+        reveal: bool = False,
+    ) -> TaskMutationPage:
+        """Return the paginated mutation log for a task.
+
+        Calls ``GET /agents/tasks/{task_id}/mutations``. Each entry
+        carries a full before/after snapshot plus the list of fields
+        that changed. Sensitive fields are masked by default — pass
+        ``reveal=True`` to receive actual values.
+
+        Args:
+            task_id: Task identifier.
+            limit: Maximum mutations per page (1-200, default 50).
+            cursor: Composite cursor ``"<iso-timestamp>|<edge-id>"``
+                returned by a previous call. Returns mutations strictly
+                older than this point in
+                ``(timestamp DESC, edge_id DESC)`` order.
+            reveal: When True, return actual values for sensitive
+                fields on the before/after snapshots.
+
+        Returns:
+            One page of the mutation log plus a ``next_cursor`` for the
+            next page (``None`` when there are no more entries).
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found, the cursor
+                is malformed, or the request fails.
+        """  # noqa: DOC502
+        params: dict[str, Any] = {"limit": limit, "reveal": reveal}
+
+        if cursor is not None:
+            params["cursor"] = cursor
+
+        response = self._request(
+            "GET",
+            f"/agents/tasks/{quote(task_id, safe='')}/mutations",
+            params=params,
+        )
+        return TaskMutationPage.model_validate(response)
+
+    def get_task_graph_diff(self, task_id: str, *, reveal: bool = False) -> GraphDiff:
+        """Return the net delta per resource for a task.
+
+        Calls ``GET /agents/tasks/{task_id}/graph-diff``. The server
+        rolls every ``task->mutated->resource`` edge into a per-resource
+        net delta — a create + many updates collapse to a single
+        ``create``, a create + delete collapses to ``noop``, etc.
+
+        The endpoint scans up to a server-configured cap of mutations
+        per request. Tasks that exceed the cap return a partial rollup
+        with ``GraphDiff.truncated=True`` and ``GraphDiff.has_more=True``;
+        callers should direct users to :meth:`list_task_mutations` for
+        the full audit trail. Sensitive fields on the snapshots are
+        masked by default — pass ``reveal=True`` for actual values.
+
+        Args:
+            task_id: Task identifier.
+            reveal: When True, return actual values for sensitive fields
+                on the before/after snapshots.
+
+        Returns:
+            Per-resource net deltas plus the truncation flag and
+            scanned-mutation count.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the request fails.
+        """  # noqa: DOC502
+        params: dict[str, Any] = {"reveal": reveal}
+        response = self._request(
+            "GET",
+            f"/agents/tasks/{quote(task_id, safe='')}/graph-diff",
+            params=params,
+        )
+        return GraphDiff.model_validate(response)
+
 
 class AsyncPragmaClient(BaseClient):
     """Asynchronous client for the Pragma API.
@@ -2056,6 +2544,485 @@ class AsyncPragmaClient(BaseClient):
             f"/organizations/{organization_id}/settings/available-providers",
         )
         return [LLMProviderSummary.model_validate(item) for item in response]
+
+    async def get_task_board(self) -> BoardSummary:
+        """Fetch the board summary with task counts per status.
+
+        Calls ``GET /agents/tasks/board``.
+
+        Returns:
+            Board summary with per-status counts and the total.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        response = await self._request("GET", "/agents/tasks/board")
+        return BoardSummary.model_validate(response)
+
+    async def list_tasks(
+        self,
+        *,
+        status: TaskStatus | str | None = None,
+        assigned_to_instance_id: str | None = None,
+    ) -> list[Task]:
+        """List tasks for the authenticated organization.
+
+        Calls ``GET /agents/tasks/``.
+
+        Args:
+            status: Filter by task status.
+            assigned_to_instance_id: Filter by assigned agent instance.
+
+        Returns:
+            Tasks matching the filters.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        params: dict[str, Any] = {}
+
+        if status is not None:
+            params["status"] = status.value if isinstance(status, TaskStatus) else status
+
+        if assigned_to_instance_id is not None:
+            params["assigned_to_instance_id"] = assigned_to_instance_id
+
+        response = await self._request("GET", "/agents/tasks/", params=params or None)
+        return [Task.model_validate(item) for item in response]
+
+    async def get_task(self, task_id: str) -> Task:
+        """Fetch a single task by ID.
+
+        Calls ``GET /agents/tasks/{task_id}``.
+
+        Args:
+            task_id: Task identifier.
+
+        Returns:
+            The requested task.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the request fails.
+        """  # noqa: DOC502
+        response = await self._request("GET", f"/agents/tasks/{quote(task_id, safe='')}")
+        return Task.model_validate(response)
+
+    async def create_task(self, data: TaskCreate) -> Task:
+        """Create a new task.
+
+        Calls ``POST /agents/tasks/``. The owning organization and creator
+        are taken from the authenticated request context.
+
+        Args:
+            data: Task creation payload.
+
+        Returns:
+            The created task with server-populated fields.
+
+        Raises:
+            httpx.HTTPStatusError: If creation fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "POST",
+            "/agents/tasks/",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return Task.model_validate(response)
+
+    async def update_task(self, task_id: str, data: TaskUpdate) -> Task:
+        """Update an existing task.
+
+        Calls ``PATCH /agents/tasks/{task_id}``. Only the provided fields
+        are updated. Status changes are not allowed here — use
+        :meth:`transition_task` instead.
+
+        Args:
+            task_id: Task identifier.
+            data: Fields to update.
+
+        Returns:
+            Updated task.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the update fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "PATCH",
+            f"/agents/tasks/{quote(task_id, safe='')}",
+            json_data=data.model_dump(exclude_unset=True),
+        )
+        return Task.model_validate(response)
+
+    async def delete_task(self, task_id: str) -> None:
+        """Delete a task.
+
+        Calls ``DELETE /agents/tasks/{task_id}``.
+
+        Args:
+            task_id: Task identifier.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or deletion fails.
+        """  # noqa: DOC502
+        await self._request("DELETE", f"/agents/tasks/{quote(task_id, safe='')}")
+
+    async def assign_task(self, task_id: str, data: TaskAssign) -> Task:
+        """Assign a task to an agent instance, user, or agent type.
+
+        Calls ``POST /agents/tasks/{task_id}/assign``. Exactly one of
+        ``instance_id``, ``user_id``, or ``type_id`` should be provided
+        on ``data``.
+
+        Args:
+            task_id: Task identifier.
+            data: Assignment payload.
+
+        Returns:
+            Updated task with the new assignment.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or assignment fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "POST",
+            f"/agents/tasks/{quote(task_id, safe='')}/assign",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return Task.model_validate(response)
+
+    async def transition_task(self, task_id: str, data: TaskTransition) -> Task:
+        """Transition a task to a new status.
+
+        Calls ``POST /agents/tasks/{task_id}/transition``. The transition
+        is validated against the allowed status graph on the server;
+        invalid transitions return ``InvalidLifecycleTransitionError``.
+
+        Args:
+            task_id: Task identifier.
+            data: Transition payload carrying the target status.
+
+        Returns:
+            Updated task with the new status.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the transition is rejected.
+        """  # noqa: DOC502
+        response = await self._request(
+            "POST",
+            f"/agents/tasks/{quote(task_id, safe='')}/transition",
+            json_data=data.model_dump(),
+        )
+        return Task.model_validate(response)
+
+    async def list_subtasks(self, task_id: str) -> list[Task]:
+        """List direct subtasks of a task.
+
+        Calls ``GET /agents/tasks/{task_id}/subtasks``. Subtask
+        relationships are graph edges, so this method traverses the
+        ``has_subtask`` edges starting at ``task_id``.
+
+        Args:
+            task_id: Parent task identifier.
+
+        Returns:
+            Direct child tasks ordered by priority then creation time.
+
+        Raises:
+            httpx.HTTPStatusError: If the parent task is not found or the request fails.
+        """  # noqa: DOC502
+        response = await self._request("GET", f"/agents/tasks/{quote(task_id, safe='')}/subtasks")
+        return [Task.model_validate(item) for item in response]
+
+    async def create_subtask(self, task_id: str, data: TaskCreate) -> Task:
+        """Create a new subtask under an existing task.
+
+        Calls ``POST /agents/tasks/{task_id}/subtasks``. The new task
+        inherits priority and assignee fields from the parent when the
+        request body leaves them at their defaults; the ``has_subtask``
+        edge is created server-side as part of the same operation.
+
+        Args:
+            task_id: Parent task identifier.
+            data: Subtask creation payload.
+
+        Returns:
+            The created subtask.
+
+        Raises:
+            httpx.HTTPStatusError: If the parent task is not found or creation fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "POST",
+            f"/agents/tasks/{quote(task_id, safe='')}/subtasks",
+            json_data=data.model_dump(exclude_unset=True),
+        )
+        return Task.model_validate(response)
+
+    async def link_subtask(self, task_id: str, child_id: str) -> None:
+        """Link an existing task as a subtask of another task.
+
+        Calls ``POST /agents/tasks/{task_id}/subtasks/link``. The server
+        rejects links that would create a cycle in the subtask graph.
+
+        Args:
+            task_id: Parent task identifier.
+            child_id: Existing task to attach as a subtask.
+
+        Raises:
+            httpx.HTTPStatusError: If either task is not found or the
+                link would create a cycle.
+        """  # noqa: DOC502
+        await self._request(
+            "POST",
+            f"/agents/tasks/{quote(task_id, safe='')}/subtasks/link",
+            json_data={"child_id": child_id},
+        )
+
+    async def unlink_subtask(self, task_id: str, child_id: str) -> None:
+        """Remove the ``has_subtask`` edge between two tasks.
+
+        Calls ``DELETE /agents/tasks/{task_id}/subtasks/{child_id}``. The
+        child task is not deleted; only the link is removed.
+
+        Args:
+            task_id: Parent task identifier.
+            child_id: Subtask identifier to unlink.
+
+        Raises:
+            httpx.HTTPStatusError: If either task is not found or the
+                request fails.
+        """  # noqa: DOC502
+        await self._request(
+            "DELETE",
+            f"/agents/tasks/{quote(task_id, safe='')}/subtasks/{quote(child_id, safe='')}",
+        )
+
+    async def list_task_comments(
+        self,
+        task_id: str,
+        *,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> list[TaskComment]:
+        """List comments on a task, oldest first.
+
+        Calls ``GET /agents/tasks/{task_id}/comments``.
+
+        Args:
+            task_id: Task identifier.
+            limit: Maximum comments to return (1-200, default 50).
+            cursor: Composite cursor ``"<iso-created_at>|<comment-id>"``
+                returned by a previous call. Returns comments strictly
+                after this point in ``(created_at ASC, id ASC)`` order.
+
+        Returns:
+            Comments for the requested page, oldest first.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the request fails.
+        """  # noqa: DOC502
+        params: dict[str, Any] = {"limit": limit}
+
+        if cursor is not None:
+            params["cursor"] = cursor
+
+        response = await self._request(
+            "GET",
+            f"/agents/tasks/{quote(task_id, safe='')}/comments",
+            params=params,
+        )
+        return [TaskComment.model_validate(item) for item in response]
+
+    async def create_task_comment(
+        self,
+        task_id: str,
+        data: TaskCommentCreate,
+    ) -> TaskComment:
+        """Create a comment on a task.
+
+        Calls ``POST /agents/tasks/{task_id}/comments``. Authorship is
+        taken from the authenticated user — agent comments are written
+        by the runtime through a separate code path and are not
+        creatable via this method.
+
+        Args:
+            task_id: Task identifier.
+            data: Comment creation payload.
+
+        Returns:
+            Persisted comment with the server-populated id.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or creation fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "POST",
+            f"/agents/tasks/{quote(task_id, safe='')}/comments",
+            json_data=data.model_dump(),
+        )
+        return TaskComment.model_validate(response)
+
+    async def update_task_comment(
+        self,
+        comment_id: str,
+        data: TaskCommentUpdate,
+    ) -> TaskComment:
+        """Edit a task comment. Only the original author may edit.
+
+        Calls ``PATCH /agents/tasks/comments/{comment_id}``.
+
+        Args:
+            comment_id: Comment identifier.
+            data: New body to replace the existing one.
+
+        Returns:
+            Updated comment with ``edited=True``.
+
+        Raises:
+            httpx.HTTPStatusError: If the comment is not found or the
+                actor is not the author.
+        """  # noqa: DOC502
+        response = await self._request(
+            "PATCH",
+            f"/agents/tasks/comments/{quote(comment_id, safe='')}",
+            json_data=data.model_dump(),
+        )
+        return TaskComment.model_validate(response)
+
+    async def delete_task_comment(self, comment_id: str) -> None:
+        """Delete a task comment. Only the original author may delete.
+
+        Calls ``DELETE /agents/tasks/comments/{comment_id}``.
+
+        Args:
+            comment_id: Comment identifier.
+
+        Raises:
+            httpx.HTTPStatusError: If the comment is not found or the
+                actor is not the author.
+        """  # noqa: DOC502
+        await self._request("DELETE", f"/agents/tasks/comments/{quote(comment_id, safe='')}")
+
+    async def list_task_activity(
+        self,
+        task_id: str,
+        *,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> list[TaskActivityEntry]:
+        """List the activity timeline for a task, newest first.
+
+        Calls ``GET /agents/tasks/{task_id}/activity``. Combines status
+        transitions, assignments, comments, agent start events, and
+        resource mutation summaries into a single newest-first stream.
+        Mutation entries surface only the operation and changed field
+        names; full before/after snapshots live on the mutation log.
+
+        Args:
+            task_id: Task identifier.
+            limit: Maximum entries to return (1-200, default 50).
+            cursor: Composite cursor ``"<iso-timestamp>|<edge-id>"``
+                returned by a previous call. Returns entries strictly
+                older than this point in
+                ``(timestamp DESC, edge_id DESC)`` order.
+
+        Returns:
+            Activity entries for the requested page, newest first.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the request fails.
+        """  # noqa: DOC502
+        params: dict[str, Any] = {"limit": limit}
+
+        if cursor is not None:
+            params["cursor"] = cursor
+
+        response = await self._request(
+            "GET",
+            f"/agents/tasks/{quote(task_id, safe='')}/activity",
+            params=params,
+        )
+        return [TaskActivityEntry.model_validate(item) for item in response]
+
+    async def list_task_mutations(
+        self,
+        task_id: str,
+        *,
+        limit: int = 50,
+        cursor: str | None = None,
+        reveal: bool = False,
+    ) -> TaskMutationPage:
+        """Return the paginated mutation log for a task.
+
+        Calls ``GET /agents/tasks/{task_id}/mutations``. Each entry
+        carries a full before/after snapshot plus the list of fields
+        that changed. Sensitive fields are masked by default — pass
+        ``reveal=True`` to receive actual values.
+
+        Args:
+            task_id: Task identifier.
+            limit: Maximum mutations per page (1-200, default 50).
+            cursor: Composite cursor ``"<iso-timestamp>|<edge-id>"``
+                returned by a previous call. Returns mutations strictly
+                older than this point in
+                ``(timestamp DESC, edge_id DESC)`` order.
+            reveal: When True, return actual values for sensitive
+                fields on the before/after snapshots.
+
+        Returns:
+            One page of the mutation log plus a ``next_cursor`` for the
+            next page (``None`` when there are no more entries).
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found, the cursor
+                is malformed, or the request fails.
+        """  # noqa: DOC502
+        params: dict[str, Any] = {"limit": limit, "reveal": reveal}
+
+        if cursor is not None:
+            params["cursor"] = cursor
+
+        response = await self._request(
+            "GET",
+            f"/agents/tasks/{quote(task_id, safe='')}/mutations",
+            params=params,
+        )
+        return TaskMutationPage.model_validate(response)
+
+    async def get_task_graph_diff(self, task_id: str, *, reveal: bool = False) -> GraphDiff:
+        """Return the net delta per resource for a task.
+
+        Calls ``GET /agents/tasks/{task_id}/graph-diff``. The server
+        rolls every ``task->mutated->resource`` edge into a per-resource
+        net delta — a create + many updates collapse to a single
+        ``create``, a create + delete collapses to ``noop``, etc.
+
+        The endpoint scans up to a server-configured cap of mutations
+        per request. Tasks that exceed the cap return a partial rollup
+        with ``GraphDiff.truncated=True`` and ``GraphDiff.has_more=True``;
+        callers should direct users to :meth:`list_task_mutations` for
+        the full audit trail. Sensitive fields on the snapshots are
+        masked by default — pass ``reveal=True`` for actual values.
+
+        Args:
+            task_id: Task identifier.
+            reveal: When True, return actual values for sensitive fields
+                on the before/after snapshots.
+
+        Returns:
+            Per-resource net deltas plus the truncation flag and
+            scanned-mutation count.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the request fails.
+        """  # noqa: DOC502
+        params: dict[str, Any] = {"reveal": reveal}
+        response = await self._request(
+            "GET",
+            f"/agents/tasks/{quote(task_id, safe='')}/graph-diff",
+            params=params,
+        )
+        return GraphDiff.model_validate(response)
 
 
 def _scoped_path(project_id: str, *suffix: str) -> str:

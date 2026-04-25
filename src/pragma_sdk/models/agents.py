@@ -7,7 +7,7 @@ from datetime import datetime
 from pydantic import BaseModel
 from pydantic import Field as PydanticField
 
-from pragma_sdk.models.enums import AgentInstanceStatus, TaskSource, TaskStatus
+from pragma_sdk.models.enums import AgentInstanceStatus
 
 
 class ConversationRoutingManifest(BaseModel):
@@ -212,104 +212,6 @@ class AgentInstance(BaseModel):
     current_step: str | None = None
     last_action_at: datetime | None = None
     session_id: str | None = None
-
-
-class Task(BaseModel):
-    """An agent task representing a unit of work.
-
-    Attributes:
-        id: Unique identifier.
-        organization_id: Owning organization.
-        title: Short description of the task.
-        description: Detailed description.
-        status: Current task status.
-        priority: Priority level (1=highest, 5=lowest).
-        assigned_to_type_id: Agent type assigned to this task.
-        assigned_to_instance_id: Agent instance working on this task.
-        assigned_to_user_id: User assigned to this task.
-        parent_task_id: Parent task for subtask relationships.
-        correlation_bucket_id: Correlation bucket for related events.
-        created_by: User ID of the creator.
-        source: How this task was created.
-        created_at: Creation timestamp.
-        updated_at: Last update timestamp.
-    """
-
-    id: str
-    organization_id: str
-    title: str
-    description: str | None = None
-    status: TaskStatus = TaskStatus.BACKLOG
-    priority: int = 3
-    assigned_to_type_id: str | None = None
-    assigned_to_instance_id: str | None = None
-    assigned_to_user_id: str | None = None
-    parent_task_id: str | None = None
-    correlation_bucket_id: str | None = None
-    created_by: str | None = None
-    source: TaskSource = TaskSource.MANUAL
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-
-
-class TaskCreate(BaseModel):
-    """Request body for creating a task.
-
-    Attributes:
-        organization_id: Owning organization.
-        title: Short description of the task.
-        description: Detailed description.
-        status: Initial task status.
-        priority: Priority level (1=highest, 5=lowest).
-        assigned_to_type_id: Agent type to assign.
-        assigned_to_instance_id: Agent instance to assign.
-        assigned_to_user_id: User to assign.
-        parent_task_id: Parent task for subtask relationships.
-        correlation_bucket_id: Correlation bucket for related events.
-        created_by: User ID of the creator.
-        source: How this task was created.
-    """
-
-    organization_id: str
-    title: str
-    description: str | None = None
-    status: TaskStatus = TaskStatus.BACKLOG
-    priority: int = 3
-    assigned_to_type_id: str | None = None
-    assigned_to_instance_id: str | None = None
-    assigned_to_user_id: str | None = None
-    parent_task_id: str | None = None
-    correlation_bucket_id: str | None = None
-    created_by: str | None = None
-    source: TaskSource = TaskSource.MANUAL
-
-
-class TaskUpdate(BaseModel):
-    """Request body for updating a task. All fields optional.
-
-    Attributes:
-        title: Short description of the task.
-        description: Detailed description.
-        status: Task status.
-        priority: Priority level (1=highest, 5=lowest).
-        assigned_to_type_id: Agent type to assign.
-        assigned_to_instance_id: Agent instance to assign.
-        assigned_to_user_id: User to assign.
-        parent_task_id: Parent task for subtask relationships.
-        correlation_bucket_id: Correlation bucket for related events.
-        source: How this task was created.
-    """
-
-    title: str | None = None
-    description: str | None = None
-    status: TaskStatus | None = None
-    priority: int | None = None
-    assigned_to_type_id: str | None = None
-    assigned_to_instance_id: str | None = None
-    assigned_to_user_id: str | None = None
-    parent_task_id: str | None = None
-    correlation_bucket_id: str | None = None
-    source: TaskSource | None = None
 
 
 class FleetVitals(BaseModel):
