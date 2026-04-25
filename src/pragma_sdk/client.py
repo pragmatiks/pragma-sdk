@@ -1340,7 +1340,7 @@ class PragmaClient(BaseClient):
         response = self._request(
             "POST",
             f"/agents/tasks/{quote(task_id, safe='')}/subtasks",
-            json_data=data.model_dump(exclude_none=True),
+            json_data=data.model_dump(exclude_unset=True),
         )
         return Task.model_validate(response)
 
@@ -2754,7 +2754,7 @@ class AsyncPragmaClient(BaseClient):
         response = await self._request(
             "POST",
             f"/agents/tasks/{quote(task_id, safe='')}/subtasks",
-            json_data=data.model_dump(exclude_none=True),
+            json_data=data.model_dump(exclude_unset=True),
         )
         return Task.model_validate(response)
 
