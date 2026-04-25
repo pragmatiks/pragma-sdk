@@ -1,3 +1,9 @@
+## v1.5.0 (2026-04-25)
+
+### Feat
+
+- add task graph models and client methods
+
 ## v1.4.1 (2026-04-25)
 
 ### Fix
