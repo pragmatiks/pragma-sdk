@@ -27,8 +27,16 @@ from pragma_sdk.models import (
     AgentTypeUpdate,
     BoardSummary,
     CostEstimate,
+    DeepAnalysisRequest,
+    DeepAnalysisResponse,
     DeploymentResult,
+    ExplainTaskRequest,
+    ExplainTaskResponse,
+    GenerateSubtasksRequest,
+    GenerateSubtasksResponse,
     GraphDiff,
+    ImproveTaskRequest,
+    ImproveTaskResponse,
     LLMProviderSummary,
     Organization,
     OrganizationSettings,
@@ -41,6 +49,12 @@ from pragma_sdk.models import (
     Resource,
     ResourceSchema,
     ResourceTier,
+    ReviewSummaryRequest,
+    ReviewSummaryResponse,
+    SuggestAssigneeRequest,
+    SuggestAssigneeResponse,
+    SummarizeThreadRequest,
+    SummarizeThreadResponse,
     Task,
     TaskActivityEntry,
     TaskAssign,
@@ -1606,6 +1620,194 @@ class PragmaClient(BaseClient):
         )
         return GraphDiff.model_validate(response)
 
+    def improve_task(self, data: ImproveTaskRequest) -> ImproveTaskResponse:
+        """Run the ``improve-task`` AI assist on a draft task.
+
+        Calls ``POST /agents/assists/improve-task``. Returns a refined
+        title, description, and a short rationale explaining the change.
+        Dispatched server-side via ``AgentInvoker.invoke_platform_agent()``
+        on the ``fast`` model tier.
+
+        Args:
+            data: Existing title and (optional) description to refine.
+
+        Returns:
+            Suggested replacement title, description, and rationale.
+
+        Raises:
+            httpx.HTTPStatusError: If the assist invocation fails.
+        """  # noqa: DOC502
+        response = self._request(
+            "POST",
+            "/agents/assists/improve-task",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return ImproveTaskResponse.model_validate(response)
+
+    def explain_task(self, data: ExplainTaskRequest) -> ExplainTaskResponse:
+        """Run the ``explain-task`` AI assist for a task.
+
+        Calls ``POST /agents/assists/explain-task``. The server fetches
+        the task referenced by ``task_id`` and, when provided, the
+        correlation bucket, then returns a plain-language summary, key
+        points, and a suggested next action. Dispatched server-side via
+        ``AgentInvoker.invoke_platform_agent()`` on the ``fast`` model
+        tier.
+
+        Args:
+            data: Task identifier and optional correlation bucket
+                providing richer context.
+
+        Returns:
+            Summary, key points, and suggested next action for the task.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the assist
+                invocation fails.
+        """  # noqa: DOC502
+        response = self._request(
+            "POST",
+            "/agents/assists/explain-task",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return ExplainTaskResponse.model_validate(response)
+
+    def summarize_thread(self, data: SummarizeThreadRequest) -> SummarizeThreadResponse:
+        """Run the ``summarize-thread`` AI assist on a task's comments.
+
+        Calls ``POST /agents/assists/summarize-thread``. The server
+        pulls the comment thread for ``task_id`` and returns a summary
+        plus structured decisions, open questions, and action items.
+        Dispatched server-side via ``AgentInvoker.invoke_platform_agent()``
+        on the ``fast`` model tier.
+
+        Args:
+            data: Task whose comment thread should be summarized.
+
+        Returns:
+            Summary, decisions, open questions, and action items.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the assist
+                invocation fails.
+        """  # noqa: DOC502
+        response = self._request(
+            "POST",
+            "/agents/assists/summarize-thread",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return SummarizeThreadResponse.model_validate(response)
+
+    def suggest_assignee(self, data: SuggestAssigneeRequest) -> SuggestAssigneeResponse:
+        """Run the ``suggest-assignee`` AI assist for a task.
+
+        Calls ``POST /agents/assists/suggest-assignee``. Ranks the
+        provided candidates and returns the best fit with a rationale
+        and confidence score in ``[0.0, 1.0]``. Dispatched server-side
+        via ``AgentInvoker.invoke_platform_agent()`` on the ``fast``
+        model tier.
+
+        Args:
+            data: Task identifier and the candidate agent instances to
+                consider.
+
+        Returns:
+            The recommended candidate's instance ID, the rationale for
+            the pick, and the model's confidence.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the assist
+                invocation fails.
+        """  # noqa: DOC502
+        response = self._request(
+            "POST",
+            "/agents/assists/suggest-assignee",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return SuggestAssigneeResponse.model_validate(response)
+
+    def generate_subtasks(self, data: GenerateSubtasksRequest) -> GenerateSubtasksResponse:
+        """Run the ``generate-subtasks`` AI assist.
+
+        Calls ``POST /agents/assists/generate-subtasks``. Returns a list
+        of proposed subtasks for the caller to review before persisting.
+        Dispatched server-side via ``AgentInvoker.invoke_platform_agent()``
+        on the ``balanced`` model tier.
+
+        Args:
+            data: Title and description of the parent task, or
+                ``parent_context`` when generating subtasks under an
+                already-created task.
+
+        Returns:
+            Ordered list of proposed subtasks.
+
+        Raises:
+            httpx.HTTPStatusError: If the assist invocation fails.
+        """  # noqa: DOC502
+        response = self._request(
+            "POST",
+            "/agents/assists/generate-subtasks",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return GenerateSubtasksResponse.model_validate(response)
+
+    def review_summary(self, data: ReviewSummaryRequest) -> ReviewSummaryResponse:
+        """Run the ``review-summary`` AI assist on a task's changes.
+
+        Calls ``POST /agents/assists/review-summary``. The server pulls
+        the task's graph diff, affected resources, and risk signals,
+        and returns a summary, a risk classification, and a reviewer
+        checklist. Dispatched server-side via
+        ``AgentInvoker.invoke_platform_agent()`` on the ``balanced``
+        model tier.
+
+        Args:
+            data: Task identifier whose proposed changes should be
+                reviewed.
+
+        Returns:
+            Summary, risk level (``low``/``medium``/``high``), and
+            review checklist.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the assist
+                invocation fails.
+        """  # noqa: DOC502
+        response = self._request(
+            "POST",
+            "/agents/assists/review-summary",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return ReviewSummaryResponse.model_validate(response)
+
+    def deep_analysis(self, data: DeepAnalysisRequest) -> DeepAnalysisResponse:
+        """Run the ``deep-analysis`` AI assist for a task.
+
+        Calls ``POST /agents/assists/deep-analysis``. Answers a free-form
+        question grounded in the referenced task, returning analysis,
+        concerns, and recommendations. Dispatched server-side via
+        ``AgentInvoker.invoke_platform_agent()`` on the ``reasoning``
+        model tier.
+
+        Args:
+            data: Task identifier anchoring the analysis and the
+                free-form question to answer.
+
+        Returns:
+            Detailed analysis, surfaced concerns, and recommendations.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the assist
+                invocation fails.
+        """  # noqa: DOC502
+        response = self._request(
+            "POST",
+            "/agents/assists/deep-analysis",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return DeepAnalysisResponse.model_validate(response)
+
 
 class AsyncPragmaClient(BaseClient):
     """Asynchronous client for the Pragma API.
@@ -3023,6 +3225,194 @@ class AsyncPragmaClient(BaseClient):
             params=params,
         )
         return GraphDiff.model_validate(response)
+
+    async def improve_task(self, data: ImproveTaskRequest) -> ImproveTaskResponse:
+        """Run the ``improve-task`` AI assist on a draft task.
+
+        Calls ``POST /agents/assists/improve-task``. Returns a refined
+        title, description, and a short rationale explaining the change.
+        Dispatched server-side via ``AgentInvoker.invoke_platform_agent()``
+        on the ``fast`` model tier.
+
+        Args:
+            data: Existing title and (optional) description to refine.
+
+        Returns:
+            Suggested replacement title, description, and rationale.
+
+        Raises:
+            httpx.HTTPStatusError: If the assist invocation fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "POST",
+            "/agents/assists/improve-task",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return ImproveTaskResponse.model_validate(response)
+
+    async def explain_task(self, data: ExplainTaskRequest) -> ExplainTaskResponse:
+        """Run the ``explain-task`` AI assist for a task.
+
+        Calls ``POST /agents/assists/explain-task``. The server fetches
+        the task referenced by ``task_id`` and, when provided, the
+        correlation bucket, then returns a plain-language summary, key
+        points, and a suggested next action. Dispatched server-side via
+        ``AgentInvoker.invoke_platform_agent()`` on the ``fast`` model
+        tier.
+
+        Args:
+            data: Task identifier and optional correlation bucket
+                providing richer context.
+
+        Returns:
+            Summary, key points, and suggested next action for the task.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the assist
+                invocation fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "POST",
+            "/agents/assists/explain-task",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return ExplainTaskResponse.model_validate(response)
+
+    async def summarize_thread(self, data: SummarizeThreadRequest) -> SummarizeThreadResponse:
+        """Run the ``summarize-thread`` AI assist on a task's comments.
+
+        Calls ``POST /agents/assists/summarize-thread``. The server
+        pulls the comment thread for ``task_id`` and returns a summary
+        plus structured decisions, open questions, and action items.
+        Dispatched server-side via ``AgentInvoker.invoke_platform_agent()``
+        on the ``fast`` model tier.
+
+        Args:
+            data: Task whose comment thread should be summarized.
+
+        Returns:
+            Summary, decisions, open questions, and action items.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the assist
+                invocation fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "POST",
+            "/agents/assists/summarize-thread",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return SummarizeThreadResponse.model_validate(response)
+
+    async def suggest_assignee(self, data: SuggestAssigneeRequest) -> SuggestAssigneeResponse:
+        """Run the ``suggest-assignee`` AI assist for a task.
+
+        Calls ``POST /agents/assists/suggest-assignee``. Ranks the
+        provided candidates and returns the best fit with a rationale
+        and confidence score in ``[0.0, 1.0]``. Dispatched server-side
+        via ``AgentInvoker.invoke_platform_agent()`` on the ``fast``
+        model tier.
+
+        Args:
+            data: Task identifier and the candidate agent instances to
+                consider.
+
+        Returns:
+            The recommended candidate's instance ID, the rationale for
+            the pick, and the model's confidence.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the assist
+                invocation fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "POST",
+            "/agents/assists/suggest-assignee",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return SuggestAssigneeResponse.model_validate(response)
+
+    async def generate_subtasks(self, data: GenerateSubtasksRequest) -> GenerateSubtasksResponse:
+        """Run the ``generate-subtasks`` AI assist.
+
+        Calls ``POST /agents/assists/generate-subtasks``. Returns a list
+        of proposed subtasks for the caller to review before persisting.
+        Dispatched server-side via ``AgentInvoker.invoke_platform_agent()``
+        on the ``balanced`` model tier.
+
+        Args:
+            data: Title and description of the parent task, or
+                ``parent_context`` when generating subtasks under an
+                already-created task.
+
+        Returns:
+            Ordered list of proposed subtasks.
+
+        Raises:
+            httpx.HTTPStatusError: If the assist invocation fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "POST",
+            "/agents/assists/generate-subtasks",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return GenerateSubtasksResponse.model_validate(response)
+
+    async def review_summary(self, data: ReviewSummaryRequest) -> ReviewSummaryResponse:
+        """Run the ``review-summary`` AI assist on a task's changes.
+
+        Calls ``POST /agents/assists/review-summary``. The server pulls
+        the task's graph diff, affected resources, and risk signals,
+        and returns a summary, a risk classification, and a reviewer
+        checklist. Dispatched server-side via
+        ``AgentInvoker.invoke_platform_agent()`` on the ``balanced``
+        model tier.
+
+        Args:
+            data: Task identifier whose proposed changes should be
+                reviewed.
+
+        Returns:
+            Summary, risk level (``low``/``medium``/``high``), and
+            review checklist.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the assist
+                invocation fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "POST",
+            "/agents/assists/review-summary",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return ReviewSummaryResponse.model_validate(response)
+
+    async def deep_analysis(self, data: DeepAnalysisRequest) -> DeepAnalysisResponse:
+        """Run the ``deep-analysis`` AI assist for a task.
+
+        Calls ``POST /agents/assists/deep-analysis``. Answers a free-form
+        question grounded in the referenced task, returning analysis,
+        concerns, and recommendations. Dispatched server-side via
+        ``AgentInvoker.invoke_platform_agent()`` on the ``reasoning``
+        model tier.
+
+        Args:
+            data: Task identifier anchoring the analysis and the
+                free-form question to answer.
+
+        Returns:
+            Detailed analysis, surfaced concerns, and recommendations.
+
+        Raises:
+            httpx.HTTPStatusError: If the task is not found or the assist
+                invocation fails.
+        """  # noqa: DOC502
+        response = await self._request(
+            "POST",
+            "/agents/assists/deep-analysis",
+            json_data=data.model_dump(exclude_none=True),
+        )
+        return DeepAnalysisResponse.model_validate(response)
 
 
 def _scoped_path(project_id: str, *suffix: str) -> str:
