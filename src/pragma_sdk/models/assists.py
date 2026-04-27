@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ImproveTaskRequest(BaseModel):
@@ -147,20 +147,52 @@ class SuggestAssigneeResponse(BaseModel):
 class GenerateSubtasksRequest(BaseModel):
     """Request body for the ``generate-subtasks`` assist.
 
-    Either pass ``title`` and ``description`` for a brand-new task, or
-    pass ``parent_context`` to seed the assist from an existing task's
-    body when generating subtasks for it.
+    Two mutually exclusive modes are supported:
+
+    * **New task mode** — supply ``title`` (with optional ``description``)
+      to generate subtasks for a proposed work item that does not yet
+      exist on the board.
+    * **Existing task mode** — supply ``parent_context`` (the body of
+      an already-created parent task) to generate subtasks beneath it.
+
+    Exactly one mode must be used per request: omit both fields and
+    there is nothing to seed the assist with; provide both and the
+    intended parent is ambiguous.
 
     Attributes:
-        title: Title of the parent task or proposed work item.
-        description: Detailed description of the parent task.
-        parent_context: Existing parent task body, when generating
-            subtasks under an already-created task.
+        title: Title of the proposed work item, for new-task mode.
+        description: Detailed description of the proposed work item,
+            paired with ``title`` in new-task mode.
+        parent_context: Body of an already-created parent task, for
+            existing-task mode.
     """
 
-    title: str
+    title: str | None = None
     description: str | None = None
     parent_context: str | None = None
+
+    @model_validator(mode="after")
+    def _require_exactly_one_mode(self) -> GenerateSubtasksRequest:
+        """Enforce that exactly one of the two input modes is supplied.
+
+        Returns:
+            The validated :class:`GenerateSubtasksRequest` instance.
+
+        Raises:
+            ValueError: If neither or both of ``title`` and
+                ``parent_context`` are provided.
+        """
+        has_title = bool(self.title and self.title.strip())
+        has_parent_context = bool(self.parent_context and self.parent_context.strip())
+
+        if has_title == has_parent_context:
+            raise ValueError(
+                "provide either `title` (with optional `description`) for "
+                "new tasks, or `parent_context` for an existing parent task "
+                "— not both, not neither"
+            )
+
+        return self
 
 
 class ProposedSubtask(BaseModel):
