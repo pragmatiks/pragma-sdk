@@ -1,3 +1,9 @@
+## v1.6.0 (2026-04-27)
+
+### Feat
+
+- add task-board AI assist models and client methods (PRA-329) (#36)
+
 ## v1.5.0 (2026-04-25)
 
 ### Feat
