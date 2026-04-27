@@ -133,20 +133,26 @@ class PerformanceProfile(StrEnum):
     Identifies which tier of model an organization wants platform agents to use.
     The profile is chosen by the user; the API resolves it to a concrete model
     from the selected provider's catalog entries.
+
+    `PerformanceProfile` (low/medium/high) and `ModelTier` (fast/balanced/reasoning)
+    are two orthogonal axes. The org's profile + the agent's tier together select
+    a model from the platform catalog.
     """
 
-    FAST = "fast"
-    BALANCED = "balanced"
-    REASONING = "reasoning"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
 
 
 class ModelTier(StrEnum):
     """Classification of a catalog model's capability tier.
 
     Tier labels a model in the LLM catalog so the API can pick an appropriate
-    concrete model for a requested PerformanceProfile. Tier and
-    PerformanceProfile share the same string values but are semantically
-    distinct: tier describes the model, profile describes the user's selection.
+    concrete model for a requested PerformanceProfile.
+
+    `PerformanceProfile` (low/medium/high) and `ModelTier` (fast/balanced/reasoning)
+    are two orthogonal axes. The org's profile + the agent's tier together select
+    a model from the platform catalog.
     """
 
     FAST = "fast"
