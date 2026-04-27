@@ -1,3 +1,13 @@
+## v2.0.0 (2026-04-27)
+
+### BREAKING CHANGE
+
+- PerformanceProfile enum values are now LOW/MEDIUM/HIGH instead of FAST/BALANCED/REASONING. This separates the profile axis (low/medium/high) from the model tier axis (fast/balanced/reasoning) in the platform's 3x3 catalog matrix.
+
+### Feat
+
+- rename PerformanceProfile values from fast/balanced/reasoning to low/medium/high (#37)
+
 ## v1.6.0 (2026-04-27)
 
 ### Feat
