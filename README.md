@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/wordmark.png" alt="Pragma-OS" width="800">
+  <img src="assets/wordmark.png" alt="Pragmatiks" width="800">
 </p>
 
 # Pragma SDK
@@ -12,7 +12,7 @@
 
 **[Documentation](https://docs.pragmatiks.io/sdk/overview)** | **[CLI](https://github.com/pragmatiks/pragma-cli)** | **[Providers](https://github.com/pragmatiks/pragma-providers)**
 
-Build providers and interact with the pragma-os platform programmatically.
+Build providers and interact with Pragmatiks programmatically.
 
 ## Quick Start
 
@@ -76,7 +76,7 @@ uv add pragmatiks-sdk
 
 ## Features
 
-- **HTTP Clients** - Sync and async clients for the pragma-os API
+- **HTTP Clients** - Sync and async clients for the Pragmatiks API
 - **Provider Authoring** - Build custom providers with type-safe Config and Outputs
 - **Provider Deployment** - Push, build, deploy, and rollback providers programmatically
 - **Dead-Letter Queue** - Inspect and retry failed events for debugging and recovery

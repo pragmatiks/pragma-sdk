@@ -24,7 +24,7 @@ class Project(BaseModel):
         slug: URL-safe slug, unique within the organization.
         is_private: True for platform-owned projects. Private projects are
             excluded from user-facing list endpoints and are internal to
-            pragma-os.
+            the Pragmatiks platform.
         created_at: Timestamp when the project was created.
         updated_at: Timestamp of the last update.
     """
