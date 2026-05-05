@@ -355,8 +355,7 @@ def _upload_wheel_to_artifact_registry(wheel: Path, artifact_repo: str) -> str:
         Canonical ``https://<repo>/<wheel-name>`` URL of the uploaded
         wheel. This shape is the project's documented contract (see
         ``pragma-os`` ``docs/runbooks/wheel-provider-setup.md``) and
-        is what ``uv pip install <wheel_url>`` consumes from the
-        runtime container at deploy time.
+        is what the runtime container resolves at deploy time.
 
     Raises:
         FileNotFoundError: If the ``uv`` binary is not on ``PATH``.
