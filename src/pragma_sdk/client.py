@@ -2320,11 +2320,7 @@ class AsyncPragmaClient(BaseClient):
             RuntimeError: If the local build or wheel upload fails.
             httpx.HTTPStatusError: If the API request fails.
         """  # noqa: DOC502
-        if organization_id is None:
-            me = await self.get_me()
-            resolved_organization_id = me.organization_id
-        else:
-            resolved_organization_id = organization_id
+        resolved_organization_id = organization_id or (await self.get_me()).organization_id
 
         org = await self.get_organization(resolved_organization_id)
 

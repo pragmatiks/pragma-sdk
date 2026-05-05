@@ -24,14 +24,17 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import tomllib
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from pragma_sdk.provider.extract_schemas import extract_schemas
+from pragma_sdk.provider.extract_schemas import (
+    detect_provider_package,
+    extract_schemas,
+    load_pyproject,
+)
 
 
 DEFAULT_ARTIFACT_REPO = "europe-west4-python.pkg.dev/pragmatiks-prod/pragma-providers"
@@ -40,6 +43,9 @@ DEFAULT_ARTIFACT_REPO = "europe-west4-python.pkg.dev/pragmatiks-prod/pragma-prov
 Override per-call via ``publish_provider(..., artifact_repo=...)`` when
 publishing to a different GCP project or region.
 """
+
+_GAR_KEYRING_USERNAME = "oauth2accesstoken"
+_UV_KEYRING_PROVIDER = "subprocess"
 
 
 @dataclass(frozen=True)
@@ -81,21 +87,16 @@ def _load_provider_pyproject(provider_dir: Path) -> dict[str, Any]:
     Raises:
         FileNotFoundError: If no ``pyproject.toml`` is present.
     """
-    pyproject = provider_dir / "pyproject.toml"
+    data = load_pyproject(provider_dir / "pyproject.toml")
 
-    if not pyproject.exists():
+    if data is None:
         raise FileNotFoundError(f"No pyproject.toml found in {provider_dir}")
 
-    with pyproject.open("rb") as f:
-        return tomllib.load(f)
+    return data
 
 
-def _detect_provider_package(pyproject: dict[str, Any]) -> str:
-    """Resolve the importable Python package name for a provider.
-
-    Mirrors :func:`pragma_sdk.provider.extract_schemas.detect_provider_package`
-    but reads from a parsed pyproject in any directory rather than the
-    current working directory.
+def _require_provider_package(pyproject: dict[str, Any]) -> str:
+    """Strict wrapper around :func:`detect_provider_package`.
 
     Args:
         pyproject: Parsed pyproject.toml data.
@@ -107,20 +108,15 @@ def _detect_provider_package(pyproject: dict[str, Any]) -> str:
         ValueError: If neither ``[tool.pragma].package`` nor a
             ``-provider`` distribution name is present.
     """
-    pragma_package = pyproject.get("tool", {}).get("pragma", {}).get("package")
+    package = detect_provider_package(pyproject)
 
-    if pragma_package:
-        return pragma_package
+    if package is None:
+        raise ValueError(
+            "Could not determine provider package name. Set [tool.pragma].package or "
+            "name the distribution '<x>-provider' in pyproject.toml."
+        )
 
-    name = pyproject.get("project", {}).get("name", "")
-
-    if name and name.endswith("-provider"):
-        return name.replace("-", "_")
-
-    raise ValueError(
-        "Could not determine provider package name. Set [tool.pragma].package or "
-        "name the distribution '<x>-provider' in pyproject.toml."
-    )
+    return package
 
 
 def _detect_provider_version(pyproject: dict[str, Any]) -> str:
@@ -212,10 +208,31 @@ def _detect_runtime_overrides(pyproject: dict[str, Any]) -> tuple[str | None, li
     return runtime_image, entrypoint
 
 
-def _build_wheel(provider_dir: Path, out_dir: Path) -> Path:
+def _resolve_uv() -> str:
+    """Locate the ``uv`` binary or raise a clear error.
+
+    Returns:
+        Absolute path to the ``uv`` executable.
+
+    Raises:
+        FileNotFoundError: If ``uv`` is not on ``PATH``.
+    """
+    uv = shutil.which("uv")
+
+    if uv is None:
+        raise FileNotFoundError(
+            "'uv' binary not found on PATH; install uv (and "
+            "'keyrings.google-artifactregistry-auth' for credentials) to publish providers"
+        )
+
+    return uv
+
+
+def _build_wheel(uv: str, provider_dir: Path, out_dir: Path) -> Path:
     """Run ``uv build --wheel`` for a provider directory.
 
     Args:
+        uv: Path to the ``uv`` binary (resolved by :func:`_resolve_uv`).
         provider_dir: Path to the provider source tree.
         out_dir: Directory the built wheel should be written into.
 
@@ -225,13 +242,7 @@ def _build_wheel(provider_dir: Path, out_dir: Path) -> Path:
     Raises:
         RuntimeError: If ``uv build`` exits non-zero or fails to emit a
             single wheel artifact.
-        FileNotFoundError: If the ``uv`` binary is not on ``PATH``.
     """
-    uv = shutil.which("uv")
-
-    if uv is None:
-        raise FileNotFoundError("'uv' binary not found on PATH; install uv to publish providers")
-
     completed = subprocess.run(
         [uv, "build", "--wheel", "--out-dir", str(out_dir), str(provider_dir)],
         check=False,
@@ -336,17 +347,17 @@ def _to_resource_schemas_dict(schemas: list[dict[str, Any]]) -> dict[str, dict[s
     }
 
 
-def _upload_wheel_to_artifact_registry(wheel: Path, artifact_repo: str) -> str:
+def _upload_wheel_to_artifact_registry(uv: str, wheel: Path, artifact_repo: str) -> str:
     """Upload a wheel to GCP Artifact Registry via ``uv publish``.
 
-    Delegates auth to the system keyring (``--keyring-provider
-    subprocess``) so ``keyrings.google-artifactregistry-auth`` can
-    resolve credentials from Application Default Credentials. The
-    ``oauth2accesstoken`` username is the conventional GAR keyring
-    key — the keyring backend looks up the actual OAuth2 token under
-    that name.
+    Delegates auth to the system keyring so
+    ``keyrings.google-artifactregistry-auth`` can resolve credentials
+    from Application Default Credentials. The ``oauth2accesstoken``
+    username is the conventional GAR keyring key — the keyring backend
+    looks up the actual OAuth2 token under that name.
 
     Args:
+        uv: Path to the ``uv`` binary (resolved by :func:`_resolve_uv`).
         wheel: Path to the ``.whl`` file to upload.
         artifact_repo: Repository host and path of the form
             ``<region>-python.pkg.dev/<project>/<repo>``.
@@ -358,17 +369,8 @@ def _upload_wheel_to_artifact_registry(wheel: Path, artifact_repo: str) -> str:
         is what the runtime container resolves at deploy time.
 
     Raises:
-        FileNotFoundError: If the ``uv`` binary is not on ``PATH``.
         RuntimeError: If ``uv publish`` exits non-zero.
     """
-    uv = shutil.which("uv")
-
-    if uv is None:
-        raise FileNotFoundError(
-            "'uv' binary not found on PATH; install uv (and "
-            "'keyrings.google-artifactregistry-auth' for credentials) to publish providers"
-        )
-
     publish_url = f"https://{artifact_repo}/"
 
     completed = subprocess.run(
@@ -378,9 +380,9 @@ def _upload_wheel_to_artifact_registry(wheel: Path, artifact_repo: str) -> str:
             "--publish-url",
             publish_url,
             "--keyring-provider",
-            "subprocess",
+            _UV_KEYRING_PROVIDER,
             "--username",
-            "oauth2accesstoken",
+            _GAR_KEYRING_USERNAME,
             str(wheel),
         ],
         check=False,
@@ -471,8 +473,10 @@ def prepare_wheel_publish(
     if not provider_path.is_dir():
         raise FileNotFoundError(f"Provider directory does not exist: {provider_path}")
 
+    uv = _resolve_uv()
+
     pyproject = _load_provider_pyproject(provider_path)
-    package_name = _detect_provider_package(pyproject)
+    package_name = _require_provider_package(pyproject)
 
     resolved_name = name or _detect_provider_short_name(pyproject)
     resolved_version = _detect_provider_version(pyproject)
@@ -485,9 +489,9 @@ def prepare_wheel_publish(
     catalog_name = f"{catalog_prefix}/{resolved_name}"
 
     with tempfile.TemporaryDirectory(prefix="pragma-publish-") as tmp:
-        wheel = _build_wheel(provider_path, Path(tmp))
+        wheel = _build_wheel(uv, provider_path, Path(tmp))
         schemas = _extract_schemas_from_dir(provider_path, package_name, catalog_name)
-        wheel_url = _upload_wheel_to_artifact_registry(wheel, repo)
+        wheel_url = _upload_wheel_to_artifact_registry(uv, wheel, repo)
 
     return WheelPublishPayload(
         name=resolved_name,

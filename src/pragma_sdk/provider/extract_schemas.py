@@ -30,18 +30,22 @@ class ProviderMetadata(TypedDict, total=False):
 METADATA_KEYS: tuple[str, ...] = tuple(ProviderMetadata.__annotations__)
 
 
-def _load_pyproject() -> dict[str, Any] | None:
-    """Load and parse pyproject.toml from the current directory.
+def load_pyproject(path: Path | None = None) -> dict[str, Any] | None:
+    """Load and parse a ``pyproject.toml`` file.
+
+    Args:
+        path: Path to the file. Defaults to ``pyproject.toml`` in the
+            current directory.
 
     Returns:
         Parsed TOML data, or None if file doesn't exist.
     """
-    pyproject = Path("pyproject.toml")
+    pyproject = path if path is not None else Path("pyproject.toml")
 
     if not pyproject.exists():
         return None
 
-    with open(pyproject, "rb") as f:
+    with pyproject.open("rb") as f:
         return tomllib.load(f)
 
 
@@ -105,17 +109,21 @@ def get_outputs_class(resource_class: type[Resource]) -> type[Outputs] | None:
     return None
 
 
-def detect_provider_package() -> str | None:
-    """Detect provider package name from current directory.
+def detect_provider_package(pyproject: dict[str, Any] | None = None) -> str | None:
+    """Detect provider package name.
 
-    Reads pyproject.toml and checks in order:
+    Checks in order:
     1. [tool.pragma] package - explicit module name
     2. [project] name - converted to underscores if ends with '-provider'
+
+    Args:
+        pyproject: Parsed pyproject.toml data. If ``None``, reads
+            ``pyproject.toml`` from the current directory.
 
     Returns:
         Package name if found, None otherwise.
     """
-    data = _load_pyproject()
+    data = pyproject if pyproject is not None else load_pyproject()
 
     if data is None:
         return None
@@ -153,7 +161,7 @@ def extract_metadata() -> ProviderMetadata | None:
     Raises:
         TypeError: If a metadata field has an unexpected type.
     """
-    data = _load_pyproject()
+    data = load_pyproject()
 
     if data is None:
         return None
