@@ -44,15 +44,23 @@ from pragma_sdk.provider.harness import (
     ProviderHarness,
 )
 from pragma_sdk.provider.provider import RESOURCE_MARKER, Provider
+from pragma_sdk.provider.publish import (
+    DEFAULT_ARTIFACT_REPO,
+    WheelPublishPayload,
+    prepare_wheel_publish,
+)
 
 
 __all__ = [
+    "DEFAULT_ARTIFACT_REPO",
     "EventType",
     "LifecycleEvent",
     "LifecycleResult",
     "Provider",
     "ProviderHarness",
     "RESOURCE_MARKER",
+    "WheelPublishPayload",
     "discover_resources",
     "is_registered_resource",
+    "prepare_wheel_publish",
 ]
