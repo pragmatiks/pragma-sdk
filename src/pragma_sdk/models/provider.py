@@ -68,9 +68,12 @@ class ProviderVersion(BaseModel):
 
     prefix: str = Field(frozen=True)
     name: str = Field(frozen=True)
-    version: str
+    version: str = Field(frozen=True)
     runtime_version: str
     image_url: str | None = None
+    wheel_url: str | None = None
+    runtime_image: str | None = None
+    entrypoint: list[str] | None = None
     source_hash: str | None = None
     build_id: str | None = None
     schemas: list[dict[str, Any]] | None = None

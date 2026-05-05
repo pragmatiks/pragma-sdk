@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import time
-from contextlib import AbstractAsyncContextManager, AbstractContextManager
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
@@ -76,6 +75,11 @@ from pragma_sdk.models.project import (
     Project,
     UpdateProjectRequest,
 )
+from pragma_sdk.provider.publish import (
+    DEFAULT_ARTIFACT_REPO,
+    WheelPublishPayload,
+    prepare_wheel_publish,
+)
 from pragma_sdk.types import LifecycleState
 
 
@@ -100,6 +104,45 @@ def _validate_provider_name(provider_name: str) -> str:
         raise ValueError(f"Provider name must be namespaced as 'org/name', got: {provider_name!r}")
 
     return provider_name
+
+
+def _build_provider_version_request_body(
+    *,
+    organization_id: str,
+    payload: WheelPublishPayload,
+    changelog: str | None,
+) -> dict[str, Any]:
+    """Assemble the JSON body for ``POST /provider-versions``.
+
+    Args:
+        organization_id: Publisher's organization id; the API checks
+            it matches the authenticated user.
+        payload: Output of :func:`prepare_wheel_publish` carrying the
+            wheel URL and extracted schemas.
+        changelog: Optional release notes for this version.
+
+    Returns:
+        Dict matching the ``WheelProviderVersionCreate`` shape on the
+        API.
+    """
+    body: dict[str, Any] = {
+        "organization_id": organization_id,
+        "name": payload.name,
+        "version": payload.version,
+        "wheel_url": payload.wheel_url,
+        "resource_schemas": payload.resource_schemas,
+    }
+
+    if changelog is not None:
+        body["changelog"] = changelog
+
+    if payload.runtime_image is not None:
+        body["runtime_image"] = payload.runtime_image
+
+    if payload.entrypoint is not None:
+        body["entrypoint"] = payload.entrypoint
+
+    return body
 
 
 def _raise_project_has_resources(error: httpx.HTTPStatusError) -> None:
@@ -633,97 +676,77 @@ class PragmaClient(BaseClient):
 
     def publish_provider(
         self,
-        provider_name: str,
-        tarball: bytes,
-        version: str,
-        changelog: str | None = None,
+        provider_dir: str | Path,
         *,
-        display_name: str | None = None,
-        description: str | None = None,
-        tags: list[str] | None = None,
-        icon_url: str | None = None,
+        name: str | None = None,
+        changelog: str | None = None,
+        runtime_image: str | None = None,
+        entrypoint: list[str] | None = None,
+        artifact_repo: str = DEFAULT_ARTIFACT_REPO,
+        organization_id: str | None = None,
     ) -> ProviderVersion:
-        """Publish a new version of a provider.
+        """Publish a new version of a provider via the wheel-based flow.
+
+        Builds the wheel locally with ``uv build``, runs schema
+        extraction against the provider package, uploads the wheel to
+        Artifact Registry via ``uv publish`` (auth via the system
+        keyring with ``keyrings.google-artifactregistry-auth``), and
+        posts a metadata record to ``POST /provider-versions``.
+        Publish is synchronous: the API returns the persisted
+        ``ProviderVersion`` directly.
+
+        The version is read from the provider's ``[project].version``
+        — bump pyproject and republish to cut a new version.
 
         Args:
-            provider_name: Namespaced provider name ('org/name').
-            tarball: Gzipped tarball containing provider source code.
-            version: Version string for this release.
+            provider_dir: Path to the provider source tree (the
+                directory containing ``pyproject.toml``).
+            name: Provider short name. Defaults to ``[tool.pragma].name``
+                or the ``-provider`` distribution stem.
             changelog: Optional changelog text.
-            display_name: Human-friendly provider name for the catalog listing.
-            description: Provider description for the catalog listing.
-            tags: Tags for the catalog listing.
-            icon_url: URL to provider icon image for the catalog listing.
+            runtime_image: Optional runtime base image override.
+                Defaults to ``[tool.pragma].image`` when present.
+            entrypoint: Optional runtime entrypoint override. Defaults
+                to ``[tool.pragma].entrypoint`` when present.
+            artifact_repo: GCP Artifact Registry Python repository in
+                ``<region>-python.pkg.dev/<project>/<repo>`` form.
+            organization_id: Publishing organization id. Defaults to
+                the authenticated user's organization (resolved via
+                ``GET /auth/me``).
 
         Returns:
             Published version info.
 
         Raises:
-            httpx.HTTPStatusError: If publishing fails.
+            FileNotFoundError: If ``provider_dir`` is missing or the
+                ``uv`` binary is not on ``PATH``.
+            ValueError: If the provider name or ``[project].version``
+                cannot be determined.
+            TypeError: If ``[tool.pragma]`` entries are malformed.
+            RuntimeError: If the local build or wheel upload fails.
+            httpx.HTTPStatusError: If the API request fails.
         """  # noqa: DOC502
-        path = _validate_provider_name(provider_name)
-        data: dict[str, str] = {"version": version}
+        resolved_organization_id = organization_id or self.get_me().organization_id
 
-        if changelog is not None:
-            data["changelog"] = changelog
+        org = self.get_organization(resolved_organization_id)
 
-        if display_name is not None:
-            data["display_name"] = display_name
-
-        if description is not None:
-            data["description"] = description
-
-        if tags is not None:
-            data["tags"] = json.dumps(tags)
-
-        if icon_url is not None:
-            data["icon_url"] = icon_url
-
-        response = self._request(
-            "POST",
-            f"/providers/{path}/publish",
-            files={"code": ("source.tar.gz", tarball, "application/gzip")},
-            data=data,
+        payload = prepare_wheel_publish(
+            provider_dir,
+            name=name,
+            catalog_prefix=org.slug,
+            artifact_repo=artifact_repo,
+            runtime_image=runtime_image,
+            entrypoint=entrypoint,
         )
+
+        body = _build_provider_version_request_body(
+            organization_id=resolved_organization_id,
+            payload=payload,
+            changelog=changelog,
+        )
+
+        response = self._request("POST", "/provider-versions", json_data=body)
         return ProviderVersion.model_validate(response)
-
-    def get_publish_status(self, provider_name: str, version: str) -> ProviderVersion:
-        """Check build/publish status for a provider version.
-
-        Args:
-            provider_name: Namespaced provider name ('org/name').
-            version: Version string.
-
-        Returns:
-            Version with current build status.
-
-        Raises:
-            httpx.HTTPStatusError: If version not found or request fails.
-        """  # noqa: DOC502
-        path = _validate_provider_name(provider_name)
-        response = self._request("GET", f"/providers/{path}/versions/{version}/status")
-        return ProviderVersion.model_validate(response)
-
-    def stream_publish_logs(self, provider_name: str, version: str) -> AbstractContextManager[httpx.Response]:
-        """Stream build logs for a provider version.
-
-        Args:
-            provider_name: Namespaced provider name ('org/name').
-            version: Version string.
-
-        Returns:
-            Context manager yielding httpx.Response with build logs (text/plain).
-
-        Raises:
-            httpx.HTTPStatusError: If version not found or request fails.
-
-        Example:
-            >>> with client.stream_publish_logs("pragma/qdrant", "1.2.0") as response:
-            ...     for line in response.iter_lines():
-            ...         print(line)
-        """  # noqa: DOC502
-        path = _validate_provider_name(provider_name)
-        return self._client.stream("GET", f"/providers/{path}/versions/{version}/logs")
 
     def install_provider(
         self,
@@ -1893,6 +1916,15 @@ class AsyncPragmaClient(BaseClient):
         except httpx.HTTPError:
             return False
 
+    async def get_me(self) -> UserInfo:
+        """Get current authenticated user information.
+
+        Returns:
+            UserInfo with user ID, email, organization ID and name.
+        """
+        response = await self._request("GET", "/auth/me")
+        return UserInfo.model_validate(response)
+
     def project(self, project_id: str) -> AsyncProjectResources:
         """Build a project-scoped async resource handle.
 
@@ -2235,97 +2267,81 @@ class AsyncPragmaClient(BaseClient):
 
     async def publish_provider(
         self,
-        provider_name: str,
-        tarball: bytes,
-        version: str,
-        changelog: str | None = None,
+        provider_dir: str | Path,
         *,
-        display_name: str | None = None,
-        description: str | None = None,
-        tags: list[str] | None = None,
-        icon_url: str | None = None,
+        name: str | None = None,
+        changelog: str | None = None,
+        runtime_image: str | None = None,
+        entrypoint: list[str] | None = None,
+        artifact_repo: str = DEFAULT_ARTIFACT_REPO,
+        organization_id: str | None = None,
     ) -> ProviderVersion:
-        """Publish a new version of a provider.
+        """Publish a new version of a provider via the wheel-based flow.
+
+        Builds the wheel locally with ``uv build``, runs schema
+        extraction against the provider package, uploads the wheel to
+        Artifact Registry via ``uv publish`` (auth via the system
+        keyring with ``keyrings.google-artifactregistry-auth``), and
+        posts a metadata record to ``POST /provider-versions``.
+        Publish is synchronous: the API returns the persisted
+        ``ProviderVersion`` directly.
+
+        The version is read from the provider's ``[project].version``
+        — bump pyproject and republish to cut a new version.
+
+        The local build/upload steps run in a worker thread so they
+        do not block the event loop.
 
         Args:
-            provider_name: Namespaced provider name ('org/name').
-            tarball: Gzipped tarball containing provider source code.
-            version: Version string for this release.
+            provider_dir: Path to the provider source tree (the
+                directory containing ``pyproject.toml``).
+            name: Provider short name. Defaults to ``[tool.pragma].name``
+                or the ``-provider`` distribution stem.
             changelog: Optional changelog text.
-            display_name: Human-friendly provider name for the catalog listing.
-            description: Provider description for the catalog listing.
-            tags: Tags for the catalog listing.
-            icon_url: URL to provider icon image for the catalog listing.
+            runtime_image: Optional runtime base image override.
+                Defaults to ``[tool.pragma].image`` when present.
+            entrypoint: Optional runtime entrypoint override. Defaults
+                to ``[tool.pragma].entrypoint`` when present.
+            artifact_repo: GCP Artifact Registry Python repository in
+                ``<region>-python.pkg.dev/<project>/<repo>`` form.
+            organization_id: Publishing organization id. Defaults to
+                the authenticated user's organization (resolved via
+                ``GET /auth/me``).
 
         Returns:
             Published version info.
 
         Raises:
-            httpx.HTTPStatusError: If publishing fails.
+            FileNotFoundError: If ``provider_dir`` is missing or the
+                ``uv`` binary is not on ``PATH``.
+            ValueError: If the provider name or ``[project].version``
+                cannot be determined.
+            TypeError: If ``[tool.pragma]`` entries are malformed.
+            RuntimeError: If the local build or wheel upload fails.
+            httpx.HTTPStatusError: If the API request fails.
         """  # noqa: DOC502
-        path = _validate_provider_name(provider_name)
-        data: dict[str, str] = {"version": version}
+        resolved_organization_id = organization_id or (await self.get_me()).organization_id
 
-        if changelog is not None:
-            data["changelog"] = changelog
+        org = await self.get_organization(resolved_organization_id)
 
-        if display_name is not None:
-            data["display_name"] = display_name
-
-        if description is not None:
-            data["description"] = description
-
-        if tags is not None:
-            data["tags"] = json.dumps(tags)
-
-        if icon_url is not None:
-            data["icon_url"] = icon_url
-
-        response = await self._request(
-            "POST",
-            f"/providers/{path}/publish",
-            files={"code": ("source.tar.gz", tarball, "application/gzip")},
-            data=data,
+        payload = await asyncio.to_thread(
+            prepare_wheel_publish,
+            provider_dir,
+            name=name,
+            catalog_prefix=org.slug,
+            artifact_repo=artifact_repo,
+            runtime_image=runtime_image,
+            entrypoint=entrypoint,
         )
+
+        body = _build_provider_version_request_body(
+            organization_id=resolved_organization_id,
+            payload=payload,
+            changelog=changelog,
+        )
+
+        response = await self._request("POST", "/provider-versions", json_data=body)
         return ProviderVersion.model_validate(response)
-
-    async def get_publish_status(self, provider_name: str, version: str) -> ProviderVersion:
-        """Check build/publish status for a provider version.
-
-        Args:
-            provider_name: Namespaced provider name ('org/name').
-            version: Version string.
-
-        Returns:
-            Version with current build status.
-
-        Raises:
-            httpx.HTTPStatusError: If version not found or request fails.
-        """  # noqa: DOC502
-        path = _validate_provider_name(provider_name)
-        response = await self._request("GET", f"/providers/{path}/versions/{version}/status")
-        return ProviderVersion.model_validate(response)
-
-    def stream_publish_logs(self, provider_name: str, version: str) -> AbstractAsyncContextManager[httpx.Response]:
-        """Stream build logs for a provider version.
-
-        Args:
-            provider_name: Namespaced provider name ('org/name').
-            version: Version string.
-
-        Returns:
-            Async context manager yielding httpx.Response with build logs (text/plain).
-
-        Raises:
-            httpx.HTTPStatusError: If version not found or request fails.
-
-        Example:
-            >>> async with client.stream_publish_logs("pragma/qdrant", "1.2.0") as response:
-            ...     async for line in response.aiter_lines():
-            ...         print(line)
-        """  # noqa: DOC502
-        path = _validate_provider_name(provider_name)
-        return self._client.stream("GET", f"/providers/{path}/versions/{version}/logs")
 
     async def install_provider(
         self,
