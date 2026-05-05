@@ -1,3 +1,16 @@
+## v3.0.0 (2026-05-05)
+
+### BREAKING CHANGE
+
+- ``PragmaClient.publish_provider`` /
+``AsyncPragmaClient.publish_provider`` now take ``provider_dir``
+instead of a ``tarball`` and namespaced ``provider_name``.
+``get_publish_status`` and ``stream_publish_logs`` are removed.
+
+### Feat
+
+- migrate publish_provider to wheel-based provider-versions endpoint (PRA-376) (#40)
+
 ## v2.0.0 (2026-04-27)
 
 ### BREAKING CHANGE
