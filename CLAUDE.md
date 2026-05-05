@@ -8,12 +8,11 @@
 
 ```
 pragma-sdk/
-├── src/pragma_sdk/
-│   ├── client.py          # PragmaClient (sync) and AsyncPragmaClient
-│   ├── models/            # Pydantic models (shared with API)
-│   ├── resources/         # Resource-specific client methods
-│   └── provider/          # Provider authoring (Provider, Resource, Config, Outputs)
-└── tests/
+└── src/pragma_sdk/
+    ├── client.py          # PragmaClient (sync) and AsyncPragmaClient
+    ├── models/            # Pydantic models (shared with API)
+    ├── resources/         # Resource-specific client methods
+    └── provider/          # Provider authoring (Provider, Resource, Config, Outputs)
 ```
 
 ## Features
@@ -38,7 +37,6 @@ Always use `task` commands:
 
 | Command | Purpose |
 |---------|---------|
-| `task test` | Run pytest |
 | `task format` | Format with ruff |
 | `task check` | Lint + type check |
 
@@ -46,15 +44,16 @@ Always use `task` commands:
 
 - All API methods are async in `AsyncPragmaClient`, sync wrappers in `PragmaClient`
 - Pydantic models for request/response types
-- httpx for HTTP calls with respx for testing
+- httpx for HTTP calls
 - Type hints on all public interfaces
 
 ## Testing
 
-- Use respx to mock httpx calls
-- Fixtures in `conftest.py`
-- No real API calls in unit tests
-- Test both sync and async client methods
+**Do not write unit tests in this repository.** No `tests/` tree, no
+`pytest` files, no test-only fixtures. If a change feels like it
+needs a test, surface that to the user instead of adding one — they
+will decide where the coverage should live (often in pragma-os e2e
+suites or downstream consumers).
 
 ## Publishing to PyPI
 
