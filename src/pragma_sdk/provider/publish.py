@@ -8,8 +8,9 @@ for:
 1. Building the provider wheel locally with ``uv build --wheel``.
 2. Discovering resource schemas from the provider package using
    :func:`pragma_sdk.provider.extract_schemas`.
-3. Uploading the wheel to GCP Artifact Registry via ``twine`` (with
-   ``keyrings.google-artifactregistry-auth`` providing credentials).
+3. Uploading the wheel to GCP Artifact Registry via ``uv publish``
+   (with ``keyrings.google-artifactregistry-auth`` providing
+   credentials through uv's ``--keyring-provider subprocess`` mode).
 4. Posting a JSON metadata payload to the API.
 
 This module groups the side-effecting steps (1-3) so the sync and
@@ -34,6 +35,11 @@ from pragma_sdk.provider.extract_schemas import extract_schemas
 
 
 DEFAULT_ARTIFACT_REPO = "europe-west4-python.pkg.dev/pragmatiks-prod/pragma-providers"
+"""Pragmatiks-managed Artifact Registry Python repo used by default.
+
+Override per-call via ``publish_provider(..., artifact_repo=...)`` when
+publishing to a different GCP project or region.
+"""
 
 
 @dataclass(frozen=True)
@@ -42,14 +48,9 @@ class WheelPublishPayload:
 
     Attributes:
         name: Provider short name (without ``org/`` prefix).
-        version: Semver string read from the provider's pyproject.toml
-            (or supplied explicitly by the caller).
+        version: Semver string read from the provider's pyproject.toml.
         wheel_url: Canonical ``https://...whl`` URL of the uploaded
             wheel in Artifact Registry.
-        config_schema: Top-level provider config schema, or ``None``
-            when the provider exposes none.
-        outputs_schema: Top-level provider outputs schema, or ``None``
-            when the provider exposes none.
         resource_schemas: Per-resource schema map keyed by resource
             type name, matching the API's
             ``dict[str, ResourceSchemaResponse]`` shape.
@@ -62,8 +63,6 @@ class WheelPublishPayload:
     name: str
     version: str
     wheel_url: str
-    config_schema: dict[str, Any] | None
-    outputs_schema: dict[str, Any] | None
     resource_schemas: dict[str, dict[str, Any]]
     runtime_image: str | None
     entrypoint: list[str] | None
@@ -124,17 +123,32 @@ def _detect_provider_package(pyproject: dict[str, Any]) -> str:
     )
 
 
-def _detect_provider_version(pyproject: dict[str, Any]) -> str | None:
+def _detect_provider_version(pyproject: dict[str, Any]) -> str:
     """Read ``[project].version`` from a parsed pyproject.
 
     Args:
         pyproject: Parsed pyproject.toml data.
 
     Returns:
-        The declared version, or ``None`` if not present.
+        The declared version.
+
+    Raises:
+        ValueError: If ``[project].version`` is missing or not a
+            string. The wheel build pulls the version from this field
+            and bakes it into the wheel filename, so the SDK refuses
+            to publish without it rather than letting the API row
+            desynchronise from the uploaded artifact.
     """
     version = pyproject.get("project", {}).get("version")
-    return version if isinstance(version, str) else None
+
+    if not isinstance(version, str) or not version:
+        raise ValueError(
+            "[project].version is missing from pyproject.toml — bump it before publishing. "
+            "(The wheel filename is derived from this field; the SDK refuses to publish "
+            "without it to keep the API record and the uploaded wheel in sync.)"
+        )
+
+    return version
 
 
 def _detect_provider_short_name(pyproject: dict[str, Any]) -> str:
@@ -241,9 +255,11 @@ def _provider_on_sys_path(provider_dir: Path):
     """Temporarily add the provider's ``src/`` directory to ``sys.path``.
 
     Used so :func:`extract_schemas` can import the provider package
-    without it being installed in the publisher's environment. The
-    addition is reverted on exit, including any modules that were
-    imported in the meantime so a re-run starts clean.
+    without it being installed in the publisher's environment. Only
+    ``sys.path`` is mutated; ``sys.modules`` entries created by the
+    import are left in place. That is fine for the one-shot CLI use
+    case, but a long-lived process publishing the same provider twice
+    will see cached modules from the first run.
 
     Args:
         provider_dir: Provider source tree root (the directory that
@@ -321,10 +337,14 @@ def _to_resource_schemas_dict(schemas: list[dict[str, Any]]) -> dict[str, dict[s
 
 
 def _upload_wheel_to_artifact_registry(wheel: Path, artifact_repo: str) -> str:
-    """Upload a wheel to GCP Artifact Registry via ``twine``.
+    """Upload a wheel to GCP Artifact Registry via ``uv publish``.
 
-    Relies on ``keyrings.google-artifactregistry-auth`` being installed
-    so ``twine`` can pick up Application Default Credentials.
+    Delegates auth to the system keyring (``--keyring-provider
+    subprocess``) so ``keyrings.google-artifactregistry-auth`` can
+    resolve credentials from Application Default Credentials. The
+    ``oauth2accesstoken`` username is the conventional GAR keyring
+    key — the keyring backend looks up the actual OAuth2 token under
+    that name.
 
     Args:
         wheel: Path to the ``.whl`` file to upload.
@@ -333,31 +353,44 @@ def _upload_wheel_to_artifact_registry(wheel: Path, artifact_repo: str) -> str:
 
     Returns:
         Canonical ``https://<repo>/<wheel-name>`` URL of the uploaded
-        wheel.
+        wheel. This shape is the project's documented contract (see
+        ``pragma-os`` ``docs/runbooks/wheel-provider-setup.md``) and
+        is what ``uv pip install <wheel_url>`` consumes from the
+        runtime container at deploy time.
 
     Raises:
-        FileNotFoundError: If the ``twine`` binary is not on ``PATH``.
-        RuntimeError: If ``twine upload`` exits non-zero.
+        FileNotFoundError: If the ``uv`` binary is not on ``PATH``.
+        RuntimeError: If ``uv publish`` exits non-zero.
     """
-    twine = shutil.which("twine")
+    uv = shutil.which("uv")
 
-    if twine is None:
+    if uv is None:
         raise FileNotFoundError(
-            "'twine' binary not found on PATH; install 'twine' and "
-            "'keyrings.google-artifactregistry-auth' to publish providers"
+            "'uv' binary not found on PATH; install uv (and "
+            "'keyrings.google-artifactregistry-auth' for credentials) to publish providers"
         )
 
-    repository_url = f"https://{artifact_repo}/"
+    publish_url = f"https://{artifact_repo}/"
 
     completed = subprocess.run(
-        [twine, "upload", "--repository-url", repository_url, str(wheel)],
+        [
+            uv,
+            "publish",
+            "--publish-url",
+            publish_url,
+            "--keyring-provider",
+            "subprocess",
+            "--username",
+            "oauth2accesstoken",
+            str(wheel),
+        ],
         check=False,
         capture_output=True,
         text=True,
     )
 
     if completed.returncode != 0:
-        raise RuntimeError(f"'twine upload' failed (exit {completed.returncode}):\n{completed.stderr}")
+        raise RuntimeError(f"'uv publish' failed (exit {completed.returncode}):\n{completed.stderr}")
 
     return f"https://{artifact_repo}/{wheel.name}"
 
@@ -386,7 +419,6 @@ def prepare_wheel_publish(
     provider_dir: str | Path,
     *,
     name: str | None = None,
-    version: str | None = None,
     catalog_prefix: str,
     artifact_repo: str = DEFAULT_ARTIFACT_REPO,
     runtime_image: str | None = None,
@@ -399,12 +431,17 @@ def prepare_wheel_publish(
     is left to the SDK client so sync and async paths can share this
     helper.
 
+    The provider's ``[project].version`` is the single source of
+    truth: it is read from pyproject.toml, baked into the wheel
+    filename by ``uv build``, and recorded on the API row. There is
+    deliberately no ``version=`` override — bump pyproject and
+    republish to cut a new version.
+
     Args:
         provider_dir: Path to the provider source tree.
         name: Provider short name (without ``org/`` prefix). Defaults
             to ``[tool.pragma].name`` or the ``-provider`` distribution
             stem.
-        version: Semver string. Defaults to ``[project].version``.
         catalog_prefix: Namespace token (organization slug) the
             provider will be published under. Used purely to form the
             ``provider`` field on each extracted schema entry.
@@ -420,11 +457,14 @@ def prepare_wheel_publish(
         data.
 
     Raises:
-        FileNotFoundError: If ``provider_dir`` is missing or
-            ``pyproject.toml`` is absent, or required tools (``uv``,
-            ``twine``) are not on ``PATH``.
-        ValueError: If the provider name or version cannot be
-            determined from pyproject.toml and no override was passed.
+        FileNotFoundError: If ``provider_dir`` is missing, its
+            ``pyproject.toml`` is absent, or the ``uv`` binary
+            required for build/publish is not on ``PATH``.
+        ValueError: If the provider name or ``[project].version``
+            cannot be determined from pyproject.toml.
+        TypeError: If ``[tool.pragma].image`` or
+            ``[tool.pragma].entrypoint`` is declared with the wrong
+            shape.
         RuntimeError: If the build or upload step fails.
     """  # noqa: DOC502
     provider_path = Path(provider_dir).expanduser().resolve()
@@ -436,12 +476,7 @@ def prepare_wheel_publish(
     package_name = _detect_provider_package(pyproject)
 
     resolved_name = name or _detect_provider_short_name(pyproject)
-    resolved_version = version or _detect_provider_version(pyproject)
-
-    if not resolved_version:
-        raise ValueError(
-            f"Provider version not specified and [project].version is missing in {provider_path / 'pyproject.toml'}"
-        )
+    resolved_version = _detect_provider_version(pyproject)
 
     pyproject_runtime_image, pyproject_entrypoint = _detect_runtime_overrides(pyproject)
     final_runtime_image = runtime_image if runtime_image is not None else pyproject_runtime_image
@@ -459,8 +494,6 @@ def prepare_wheel_publish(
         name=resolved_name,
         version=resolved_version,
         wheel_url=wheel_url,
-        config_schema=None,
-        outputs_schema=None,
         resource_schemas=_to_resource_schemas_dict(schemas),
         runtime_image=final_runtime_image,
         entrypoint=final_entrypoint,

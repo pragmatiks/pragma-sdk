@@ -133,12 +133,6 @@ def _build_provider_version_request_body(
         "resource_schemas": payload.resource_schemas,
     }
 
-    if payload.config_schema is not None:
-        body["config_schema"] = payload.config_schema
-
-    if payload.outputs_schema is not None:
-        body["outputs_schema"] = payload.outputs_schema
-
     if changelog is not None:
         body["changelog"] = changelog
 
@@ -685,7 +679,6 @@ class PragmaClient(BaseClient):
         provider_dir: str | Path,
         *,
         name: str | None = None,
-        version: str | None = None,
         changelog: str | None = None,
         runtime_image: str | None = None,
         entrypoint: list[str] | None = None,
@@ -696,17 +689,20 @@ class PragmaClient(BaseClient):
 
         Builds the wheel locally with ``uv build``, runs schema
         extraction against the provider package, uploads the wheel to
-        Artifact Registry via ``twine``, and posts a metadata record
-        to ``POST /provider-versions``. Publish is synchronous: the
-        API returns the persisted ``ProviderVersion`` directly.
+        Artifact Registry via ``uv publish`` (auth via the system
+        keyring with ``keyrings.google-artifactregistry-auth``), and
+        posts a metadata record to ``POST /provider-versions``.
+        Publish is synchronous: the API returns the persisted
+        ``ProviderVersion`` directly.
+
+        The version is read from the provider's ``[project].version``
+        — bump pyproject and republish to cut a new version.
 
         Args:
             provider_dir: Path to the provider source tree (the
                 directory containing ``pyproject.toml``).
             name: Provider short name. Defaults to ``[tool.pragma].name``
                 or the ``-provider`` distribution stem.
-            version: Semver string for this release. Defaults to
-                ``[project].version``.
             changelog: Optional changelog text.
             runtime_image: Optional runtime base image override.
                 Defaults to ``[tool.pragma].image`` when present.
@@ -723,9 +719,10 @@ class PragmaClient(BaseClient):
 
         Raises:
             FileNotFoundError: If ``provider_dir`` is missing or the
-                ``uv``/``twine`` binaries are not on ``PATH``.
-            ValueError: If the provider name or version cannot be
-                determined.
+                ``uv`` binary is not on ``PATH``.
+            ValueError: If the provider name or ``[project].version``
+                cannot be determined.
+            TypeError: If ``[tool.pragma]`` entries are malformed.
             RuntimeError: If the local build or wheel upload fails.
             httpx.HTTPStatusError: If the API request fails.
         """  # noqa: DOC502
@@ -736,7 +733,6 @@ class PragmaClient(BaseClient):
         payload = prepare_wheel_publish(
             provider_dir,
             name=name,
-            version=version,
             catalog_prefix=org.slug,
             artifact_repo=artifact_repo,
             runtime_image=runtime_image,
@@ -2274,7 +2270,6 @@ class AsyncPragmaClient(BaseClient):
         provider_dir: str | Path,
         *,
         name: str | None = None,
-        version: str | None = None,
         changelog: str | None = None,
         runtime_image: str | None = None,
         entrypoint: list[str] | None = None,
@@ -2285,9 +2280,14 @@ class AsyncPragmaClient(BaseClient):
 
         Builds the wheel locally with ``uv build``, runs schema
         extraction against the provider package, uploads the wheel to
-        Artifact Registry via ``twine``, and posts a metadata record
-        to ``POST /provider-versions``. Publish is synchronous: the
-        API returns the persisted ``ProviderVersion`` directly.
+        Artifact Registry via ``uv publish`` (auth via the system
+        keyring with ``keyrings.google-artifactregistry-auth``), and
+        posts a metadata record to ``POST /provider-versions``.
+        Publish is synchronous: the API returns the persisted
+        ``ProviderVersion`` directly.
+
+        The version is read from the provider's ``[project].version``
+        — bump pyproject and republish to cut a new version.
 
         The local build/upload steps run in a worker thread so they
         do not block the event loop.
@@ -2297,8 +2297,6 @@ class AsyncPragmaClient(BaseClient):
                 directory containing ``pyproject.toml``).
             name: Provider short name. Defaults to ``[tool.pragma].name``
                 or the ``-provider`` distribution stem.
-            version: Semver string for this release. Defaults to
-                ``[project].version``.
             changelog: Optional changelog text.
             runtime_image: Optional runtime base image override.
                 Defaults to ``[tool.pragma].image`` when present.
@@ -2315,9 +2313,10 @@ class AsyncPragmaClient(BaseClient):
 
         Raises:
             FileNotFoundError: If ``provider_dir`` is missing or the
-                ``uv``/``twine`` binaries are not on ``PATH``.
-            ValueError: If the provider name or version cannot be
-                determined.
+                ``uv`` binary is not on ``PATH``.
+            ValueError: If the provider name or ``[project].version``
+                cannot be determined.
+            TypeError: If ``[tool.pragma]`` entries are malformed.
             RuntimeError: If the local build or wheel upload fails.
             httpx.HTTPStatusError: If the API request fails.
         """  # noqa: DOC502
@@ -2333,7 +2332,6 @@ class AsyncPragmaClient(BaseClient):
             prepare_wheel_publish,
             provider_dir,
             name=name,
-            version=version,
             catalog_prefix=org.slug,
             artifact_repo=artifact_repo,
             runtime_image=runtime_image,
