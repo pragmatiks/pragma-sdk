@@ -77,6 +77,7 @@ from pragma_sdk.models.provider import (
     ProviderAuthor,
     ProviderInstallation,
     ProviderVersion,
+    RegisterProviderVersionRequest,
 )
 from pragma_sdk.models.references import (
     Dependency,
@@ -184,6 +185,7 @@ __all__ = [
     "ProviderStatus",
     "ProviderVersion",
     "PushResult",
+    "RegisterProviderVersionRequest",
     "Resource",
     "ResourceFieldDiff",
     "ResourceIdentity",

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import re
 import time
 from typing import Any
 from urllib.parse import quote
@@ -45,6 +44,7 @@ from pragma_sdk.models import (
     ProviderInstallation,
     ProviderScope,
     ProviderVersion,
+    RegisterProviderVersionRequest,
     Resource,
     ResourceSchema,
     ResourceTier,
@@ -78,51 +78,6 @@ from pragma_sdk.models.project import (
 from pragma_sdk.types import LifecycleState
 
 
-_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-
-
-def _validate_wheel_url(wheel_url: str) -> str:
-    """Validate that ``wheel_url`` is an HTTPS URL ending in ``.whl``.
-
-    The SDK has no opinion about where wheels live — only that the
-    URL is HTTPS and points at a wheel.
-
-    Args:
-        wheel_url: Candidate URL.
-
-    Returns:
-        The URL unchanged.
-
-    Raises:
-        ValueError: If the URL is not HTTPS or does not end in ``.whl``.
-    """
-    if not wheel_url.startswith("https://"):
-        raise ValueError(f"wheel_url must be an HTTPS URL, got: {wheel_url!r}")
-
-    if not wheel_url.endswith(".whl"):
-        raise ValueError(f"wheel_url must end in '.whl', got: {wheel_url!r}")
-
-    return wheel_url
-
-
-def _validate_sha256(sha256: str) -> str:
-    """Validate a hex-encoded SHA-256 digest.
-
-    Args:
-        sha256: Candidate digest.
-
-    Returns:
-        The digest unchanged.
-
-    Raises:
-        ValueError: If the value is not 64 lowercase hex characters.
-    """
-    if not _SHA256_RE.fullmatch(sha256):
-        raise ValueError(f"sha256 must be 64 lowercase hex characters, got: {sha256!r}")
-
-    return sha256
-
-
 def _validate_provider_name(provider_name: str) -> str:
     """Validate and return a namespaced provider name for URL construction.
 
@@ -144,47 +99,6 @@ def _validate_provider_name(provider_name: str) -> str:
         raise ValueError(f"Provider name must be namespaced as 'org/name', got: {provider_name!r}")
 
     return provider_name
-
-
-def _build_provider_version_request_body(
-    *,
-    name: str,
-    version: str,
-    wheel_url: str,
-    sha256: str,
-    schemas: dict[str, dict[str, Any]],
-    metadata: dict[str, Any],
-    changelog: str | None,
-) -> dict[str, Any]:
-    """Assemble the JSON body for ``POST /provider-versions``.
-
-    Args:
-        name: Namespaced provider name in ``"org/short"`` form.
-        version: Semver string for this release.
-        wheel_url: HTTPS URL pointing at the published ``.whl``.
-        sha256: Hex-encoded SHA-256 of the wheel; the API verifies it
-            against the bytes it fetches from ``wheel_url``.
-        schemas: Per-resource schema map keyed by resource type name.
-        metadata: Display fields (``display_name``, ``description``,
-            ``icon_url``, ``tags``) recorded on the catalog row.
-        changelog: Optional release notes.
-
-    Returns:
-        Dict matching the ``ProviderVersionRegister`` shape on the API.
-    """
-    body: dict[str, Any] = {
-        "name": name,
-        "version": version,
-        "wheel_url": wheel_url,
-        "sha256": sha256,
-        "schemas": schemas,
-        "metadata": metadata,
-    }
-
-    if changelog is not None:
-        body["changelog"] = changelog
-
-    return body
 
 
 def _raise_project_has_resources(error: httpx.HTTPStatusError) -> None:
@@ -716,17 +630,7 @@ class PragmaClient(BaseClient):
         path = _validate_provider_name(provider_name)
         self._request("DELETE", f"/providers/{path}")
 
-    def register_provider_version(
-        self,
-        *,
-        name: str,
-        version: str,
-        wheel_url: str,
-        sha256: str,
-        schemas: dict[str, dict[str, Any]],
-        metadata: dict[str, Any],
-        changelog: str | None = None,
-    ) -> ProviderVersion:
+    def register_provider_version(self, request: RegisterProviderVersionRequest) -> ProviderVersion:
         """Register a new provider version against an externally hosted wheel.
 
         The SDK does not build, upload, or hash the wheel — the caller
@@ -736,39 +640,17 @@ class PragmaClient(BaseClient):
         the persisted version.
 
         Args:
-            name: Namespaced provider name in ``"org/short"`` form
-                (e.g. ``"pragmatiks/gcp"``).
-            version: Semver string for this release.
-            wheel_url: HTTPS URL ending in ``.whl``.
-            sha256: 64-character lowercase hex SHA-256 of the wheel; the
-                API verifies it after fetching the URL.
-            schemas: Per-resource schema map keyed by resource type
-                name, in the shape the API expects on the request body.
-            metadata: Catalog display fields (``display_name``,
-                ``description``, ``icon_url``, ``tags``).
-            changelog: Optional release notes for this version.
+            request: Validated registration payload.
 
         Returns:
             The persisted ``ProviderVersion``.
 
         Raises:
-            ValueError: If ``wheel_url`` is not HTTPS, does not end in
-                ``.whl``, or ``sha256`` is not 64 lowercase hex chars.
             httpx.HTTPStatusError: If the API rejects the request (e.g.
                 already-published version, schema validation failure,
                 unreachable wheel URL).
         """  # noqa: DOC502
-        body = _build_provider_version_request_body(
-            name=name,
-            version=version,
-            wheel_url=_validate_wheel_url(wheel_url),
-            sha256=_validate_sha256(sha256),
-            schemas=schemas,
-            metadata=metadata,
-            changelog=changelog,
-        )
-
-        response = self._request("POST", "/provider-versions", json_data=body)
+        response = self._request("POST", "/provider-versions", json_data=request.model_dump(exclude_none=True))
         return ProviderVersion.model_validate(response)
 
     def install_provider(
@@ -2288,60 +2170,19 @@ class AsyncPragmaClient(BaseClient):
         path = _validate_provider_name(provider_name)
         await self._request("DELETE", f"/providers/{path}")
 
-    async def register_provider_version(
-        self,
-        *,
-        name: str,
-        version: str,
-        wheel_url: str,
-        sha256: str,
-        schemas: dict[str, dict[str, Any]],
-        metadata: dict[str, Any],
-        changelog: str | None = None,
-    ) -> ProviderVersion:
-        """Register a new provider version against an externally hosted wheel.
-
-        Async mirror of :meth:`PragmaClient.register_provider_version`.
-        The SDK does not build, upload, or hash the wheel — the caller
-        is responsible for placing the wheel on any HTTPS host and
-        supplying the URL plus SHA-256 digest. This method only POSTs
-        the metadata record to ``POST /provider-versions`` and returns
-        the persisted version.
+    async def register_provider_version(self, request: RegisterProviderVersionRequest) -> ProviderVersion:
+        """Async mirror of :meth:`PragmaClient.register_provider_version`.
 
         Args:
-            name: Namespaced provider name in ``"org/short"`` form
-                (e.g. ``"pragmatiks/gcp"``).
-            version: Semver string for this release.
-            wheel_url: HTTPS URL ending in ``.whl``.
-            sha256: 64-character lowercase hex SHA-256 of the wheel; the
-                API verifies it after fetching the URL.
-            schemas: Per-resource schema map keyed by resource type
-                name, in the shape the API expects on the request body.
-            metadata: Catalog display fields (``display_name``,
-                ``description``, ``icon_url``, ``tags``).
-            changelog: Optional release notes for this version.
+            request: Validated registration payload.
 
         Returns:
             The persisted ``ProviderVersion``.
 
         Raises:
-            ValueError: If ``wheel_url`` is not HTTPS, does not end in
-                ``.whl``, or ``sha256`` is not 64 lowercase hex chars.
-            httpx.HTTPStatusError: If the API rejects the request (e.g.
-                already-published version, schema validation failure,
-                unreachable wheel URL).
+            httpx.HTTPStatusError: If the API rejects the request.
         """  # noqa: DOC502
-        body = _build_provider_version_request_body(
-            name=name,
-            version=version,
-            wheel_url=_validate_wheel_url(wheel_url),
-            sha256=_validate_sha256(sha256),
-            schemas=schemas,
-            metadata=metadata,
-            changelog=changelog,
-        )
-
-        response = await self._request("POST", "/provider-versions", json_data=body)
+        response = await self._request("POST", "/provider-versions", json_data=request.model_dump(exclude_none=True))
         return ProviderVersion.model_validate(response)
 
     async def install_provider(
