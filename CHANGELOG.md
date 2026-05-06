@@ -1,3 +1,15 @@
+## v4.0.0 (2026-05-06)
+
+### BREAKING CHANGE
+
+- PragmaClient.publish_provider is removed. Callers
+must now build, upload, and hash the wheel themselves and call
+register_provider_version with the resulting URL and digest.
+
+### Feat
+
+- register-only provider version API, drop wheel upload (PRA-380) (#41)
+
 ## v3.0.0 (2026-05-05)
 
 ### BREAKING CHANGE
