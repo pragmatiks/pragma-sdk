@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, computed_field, field_validator
 
@@ -99,13 +100,30 @@ class ProviderVersion(BaseModel):
         return f"{self.prefix}/{self.name}"
 
 
+class ProviderVersionMetadata(BaseModel):
+    """Catalog display fields recorded on the provider catalog row.
+
+    Attributes:
+        display_name: Human-facing label shown in catalog listings.
+        description: Long-form description of the provider.
+        icon_url: Optional URL to an icon shown alongside the listing.
+        tags: Optional list of catalog tags.
+    """
+
+    display_name: str
+    description: str
+    icon_url: str | None = None
+    tags: list[str] = Field(default_factory=list)
+
+
 class RegisterProviderVersionRequest(BaseModel):
     """Request body for ``POST /provider-versions``.
 
     The SDK has no opinion about where the wheel lives — only that
-    ``wheel_url`` is HTTPS and ends in ``.whl``, and that ``sha256``
-    matches the bytes the API fetches. Building, uploading, and
-    hashing the wheel are the caller's responsibility.
+    ``wheel_url`` is HTTPS and points at a ``.whl`` (signed-URL query
+    strings are allowed) and that ``sha256`` matches the bytes the API
+    fetches. Building, uploading, and hashing the wheel are the
+    caller's responsibility.
 
     Attributes:
         name: Namespaced provider name in ``"org/short"`` form.
@@ -113,8 +131,7 @@ class RegisterProviderVersionRequest(BaseModel):
         wheel_url: HTTPS URL pointing at the published ``.whl``.
         sha256: 64-character lowercase hex SHA-256 of the wheel.
         schemas: Per-resource schema map keyed by resource type name.
-        metadata: Catalog display fields (``display_name``,
-            ``description``, ``icon_url``, ``tags``).
+        metadata: Catalog display fields.
         changelog: Optional release notes.
     """
 
@@ -123,7 +140,7 @@ class RegisterProviderVersionRequest(BaseModel):
     wheel_url: str
     sha256: str
     schemas: dict[str, dict[str, Any]]
-    metadata: dict[str, Any]
+    metadata: ProviderVersionMetadata
     changelog: str | None = None
 
     @field_validator("name")
@@ -151,7 +168,11 @@ class RegisterProviderVersionRequest(BaseModel):
     @field_validator("wheel_url")
     @classmethod
     def _check_wheel_url(cls, value: str) -> str:
-        """Reject wheel URLs that are not HTTPS or do not end in ``.whl``.
+        """Reject wheel URLs that are not HTTPS or do not point at a ``.whl``.
+
+        The URL path must end in ``.whl``; query strings and fragments
+        are allowed so signed-download URLs (e.g. presigned Artifact
+        Registry / S3 links) can be passed through unchanged.
 
         Args:
             value: Candidate URL.
@@ -160,13 +181,16 @@ class RegisterProviderVersionRequest(BaseModel):
             The validated URL.
 
         Raises:
-            ValueError: If the URL is not HTTPS or does not end in ``.whl``.
+            ValueError: If the URL is not HTTPS or its path does not
+                end in ``.whl``.
         """
-        if not value.startswith("https://"):
+        parsed = urlparse(value)
+
+        if parsed.scheme != "https":
             raise ValueError(f"wheel_url must be an HTTPS URL, got: {value!r}")
 
-        if not value.endswith(".whl"):
-            raise ValueError(f"wheel_url must end in '.whl', got: {value!r}")
+        if not parsed.path.endswith(".whl"):
+            raise ValueError(f"wheel_url path must end in '.whl', got: {value!r}")
 
         return value
 

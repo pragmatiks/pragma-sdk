@@ -44,6 +44,7 @@ from pragma_sdk.models import (
     ProviderInstallation,
     ProviderScope,
     ProviderVersion,
+    ProviderVersionMetadata,
     RegisterProviderVersionRequest,
     Resource,
     ResourceSchema,
@@ -630,7 +631,17 @@ class PragmaClient(BaseClient):
         path = _validate_provider_name(provider_name)
         self._request("DELETE", f"/providers/{path}")
 
-    def register_provider_version(self, request: RegisterProviderVersionRequest) -> ProviderVersion:
+    def register_provider_version(
+        self,
+        *,
+        name: str,
+        version: str,
+        wheel_url: str,
+        sha256: str,
+        schemas: dict[str, dict[str, Any]],
+        metadata: ProviderVersionMetadata | dict[str, Any],
+        changelog: str | None = None,
+    ) -> ProviderVersion:
         """Register a new provider version against an externally hosted wheel.
 
         The SDK does not build, upload, or hash the wheel — the caller
@@ -640,16 +651,35 @@ class PragmaClient(BaseClient):
         the persisted version.
 
         Args:
-            request: Validated registration payload.
+            name: Namespaced provider name in ``"org/short"`` form.
+            version: Semver string for this release.
+            wheel_url: HTTPS URL whose path ends in ``.whl``.
+            sha256: 64-character lowercase hex SHA-256 of the wheel.
+            schemas: Per-resource schema map keyed by resource type
+                name, in the shape the API expects.
+            metadata: Catalog display fields, either as a
+                :class:`ProviderVersionMetadata` instance or a plain
+                dict that will be coerced to one.
+            changelog: Optional release notes for this version.
 
         Returns:
             The persisted ``ProviderVersion``.
 
         Raises:
+            ValidationError: If any field fails the validation rules
+                declared on :class:`RegisterProviderVersionRequest`.
             httpx.HTTPStatusError: If the API rejects the request (e.g.
-                already-published version, schema validation failure,
-                unreachable wheel URL).
+                already-published version, unreachable wheel URL).
         """  # noqa: DOC502
+        request = RegisterProviderVersionRequest(
+            name=name,
+            version=version,
+            wheel_url=wheel_url,
+            sha256=sha256,
+            schemas=schemas,
+            metadata=ProviderVersionMetadata.model_validate(metadata),
+            changelog=changelog,
+        )
         response = self._request("POST", "/provider-versions", json_data=request.model_dump(exclude_none=True))
         return ProviderVersion.model_validate(response)
 
@@ -2170,18 +2200,46 @@ class AsyncPragmaClient(BaseClient):
         path = _validate_provider_name(provider_name)
         await self._request("DELETE", f"/providers/{path}")
 
-    async def register_provider_version(self, request: RegisterProviderVersionRequest) -> ProviderVersion:
+    async def register_provider_version(
+        self,
+        *,
+        name: str,
+        version: str,
+        wheel_url: str,
+        sha256: str,
+        schemas: dict[str, dict[str, Any]],
+        metadata: ProviderVersionMetadata | dict[str, Any],
+        changelog: str | None = None,
+    ) -> ProviderVersion:
         """Async mirror of :meth:`PragmaClient.register_provider_version`.
 
         Args:
-            request: Validated registration payload.
+            name: Namespaced provider name in ``"org/short"`` form.
+            version: Semver string for this release.
+            wheel_url: HTTPS URL whose path ends in ``.whl``.
+            sha256: 64-character lowercase hex SHA-256 of the wheel.
+            schemas: Per-resource schema map keyed by resource type
+                name, in the shape the API expects.
+            metadata: Catalog display fields.
+            changelog: Optional release notes for this version.
 
         Returns:
             The persisted ``ProviderVersion``.
 
         Raises:
+            ValidationError: If any field fails the validation rules
+                declared on :class:`RegisterProviderVersionRequest`.
             httpx.HTTPStatusError: If the API rejects the request.
         """  # noqa: DOC502
+        request = RegisterProviderVersionRequest(
+            name=name,
+            version=version,
+            wheel_url=wheel_url,
+            sha256=sha256,
+            schemas=schemas,
+            metadata=ProviderVersionMetadata.model_validate(metadata),
+            changelog=changelog,
+        )
         response = await self._request("POST", "/provider-versions", json_data=request.model_dump(exclude_none=True))
         return ProviderVersion.model_validate(response)
 
