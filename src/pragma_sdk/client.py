@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import time
-from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
@@ -75,12 +75,52 @@ from pragma_sdk.models.project import (
     Project,
     UpdateProjectRequest,
 )
-from pragma_sdk.provider.publish import (
-    DEFAULT_ARTIFACT_REPO,
-    WheelPublishPayload,
-    prepare_wheel_publish,
-)
 from pragma_sdk.types import LifecycleState
+
+
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _validate_wheel_url(wheel_url: str) -> str:
+    """Validate that ``wheel_url`` is an HTTPS URL ending in ``.whl``.
+
+    The SDK has no opinion about where wheels live — only that the
+    URL is HTTPS and points at a wheel.
+
+    Args:
+        wheel_url: Candidate URL.
+
+    Returns:
+        The URL unchanged.
+
+    Raises:
+        ValueError: If the URL is not HTTPS or does not end in ``.whl``.
+    """
+    if not wheel_url.startswith("https://"):
+        raise ValueError(f"wheel_url must be an HTTPS URL, got: {wheel_url!r}")
+
+    if not wheel_url.endswith(".whl"):
+        raise ValueError(f"wheel_url must end in '.whl', got: {wheel_url!r}")
+
+    return wheel_url
+
+
+def _validate_sha256(sha256: str) -> str:
+    """Validate a hex-encoded SHA-256 digest.
+
+    Args:
+        sha256: Candidate digest.
+
+    Returns:
+        The digest unchanged.
+
+    Raises:
+        ValueError: If the value is not 64 lowercase hex characters.
+    """
+    if not _SHA256_RE.fullmatch(sha256):
+        raise ValueError(f"sha256 must be 64 lowercase hex characters, got: {sha256!r}")
+
+    return sha256
 
 
 def _validate_provider_name(provider_name: str) -> str:
@@ -108,39 +148,41 @@ def _validate_provider_name(provider_name: str) -> str:
 
 def _build_provider_version_request_body(
     *,
-    organization_id: str,
-    payload: WheelPublishPayload,
+    name: str,
+    version: str,
+    wheel_url: str,
+    sha256: str,
+    schemas: dict[str, dict[str, Any]],
+    metadata: dict[str, Any],
     changelog: str | None,
 ) -> dict[str, Any]:
     """Assemble the JSON body for ``POST /provider-versions``.
 
     Args:
-        organization_id: Publisher's organization id; the API checks
-            it matches the authenticated user.
-        payload: Output of :func:`prepare_wheel_publish` carrying the
-            wheel URL and extracted schemas.
-        changelog: Optional release notes for this version.
+        name: Namespaced provider name in ``"org/short"`` form.
+        version: Semver string for this release.
+        wheel_url: HTTPS URL pointing at the published ``.whl``.
+        sha256: Hex-encoded SHA-256 of the wheel; the API verifies it
+            against the bytes it fetches from ``wheel_url``.
+        schemas: Per-resource schema map keyed by resource type name.
+        metadata: Display fields (``display_name``, ``description``,
+            ``icon_url``, ``tags``) recorded on the catalog row.
+        changelog: Optional release notes.
 
     Returns:
-        Dict matching the ``WheelProviderVersionCreate`` shape on the
-        API.
+        Dict matching the ``ProviderVersionRegister`` shape on the API.
     """
     body: dict[str, Any] = {
-        "organization_id": organization_id,
-        "name": payload.name,
-        "version": payload.version,
-        "wheel_url": payload.wheel_url,
-        "resource_schemas": payload.resource_schemas,
+        "name": name,
+        "version": version,
+        "wheel_url": wheel_url,
+        "sha256": sha256,
+        "schemas": schemas,
+        "metadata": metadata,
     }
 
     if changelog is not None:
         body["changelog"] = changelog
-
-    if payload.runtime_image is not None:
-        body["runtime_image"] = payload.runtime_image
-
-    if payload.entrypoint is not None:
-        body["entrypoint"] = payload.entrypoint
 
     return body
 
@@ -674,74 +716,55 @@ class PragmaClient(BaseClient):
         path = _validate_provider_name(provider_name)
         self._request("DELETE", f"/providers/{path}")
 
-    def publish_provider(
+    def register_provider_version(
         self,
-        provider_dir: str | Path,
         *,
-        name: str | None = None,
+        name: str,
+        version: str,
+        wheel_url: str,
+        sha256: str,
+        schemas: dict[str, dict[str, Any]],
+        metadata: dict[str, Any],
         changelog: str | None = None,
-        runtime_image: str | None = None,
-        entrypoint: list[str] | None = None,
-        artifact_repo: str = DEFAULT_ARTIFACT_REPO,
-        organization_id: str | None = None,
     ) -> ProviderVersion:
-        """Publish a new version of a provider via the wheel-based flow.
+        """Register a new provider version against an externally hosted wheel.
 
-        Builds the wheel locally with ``uv build``, runs schema
-        extraction against the provider package, uploads the wheel to
-        Artifact Registry via ``uv publish`` (auth via the system
-        keyring with ``keyrings.google-artifactregistry-auth``), and
-        posts a metadata record to ``POST /provider-versions``.
-        Publish is synchronous: the API returns the persisted
-        ``ProviderVersion`` directly.
-
-        The version is read from the provider's ``[project].version``
-        — bump pyproject and republish to cut a new version.
+        The SDK does not build, upload, or hash the wheel — the caller
+        is responsible for placing the wheel on any HTTPS host and
+        supplying the URL plus SHA-256 digest. This method only POSTs
+        the metadata record to ``POST /provider-versions`` and returns
+        the persisted version.
 
         Args:
-            provider_dir: Path to the provider source tree (the
-                directory containing ``pyproject.toml``).
-            name: Provider short name. Defaults to ``[tool.pragma].name``
-                or the ``-provider`` distribution stem.
-            changelog: Optional changelog text.
-            runtime_image: Optional runtime base image override.
-                Defaults to ``[tool.pragma].image`` when present.
-            entrypoint: Optional runtime entrypoint override. Defaults
-                to ``[tool.pragma].entrypoint`` when present.
-            artifact_repo: GCP Artifact Registry Python repository in
-                ``<region>-python.pkg.dev/<project>/<repo>`` form.
-            organization_id: Publishing organization id. Defaults to
-                the authenticated user's organization (resolved via
-                ``GET /auth/me``).
+            name: Namespaced provider name in ``"org/short"`` form
+                (e.g. ``"pragmatiks/gcp"``).
+            version: Semver string for this release.
+            wheel_url: HTTPS URL ending in ``.whl``.
+            sha256: 64-character lowercase hex SHA-256 of the wheel; the
+                API verifies it after fetching the URL.
+            schemas: Per-resource schema map keyed by resource type
+                name, in the shape the API expects on the request body.
+            metadata: Catalog display fields (``display_name``,
+                ``description``, ``icon_url``, ``tags``).
+            changelog: Optional release notes for this version.
 
         Returns:
-            Published version info.
+            The persisted ``ProviderVersion``.
 
         Raises:
-            FileNotFoundError: If ``provider_dir`` is missing or the
-                ``uv`` binary is not on ``PATH``.
-            ValueError: If the provider name or ``[project].version``
-                cannot be determined.
-            TypeError: If ``[tool.pragma]`` entries are malformed.
-            RuntimeError: If the local build or wheel upload fails.
-            httpx.HTTPStatusError: If the API request fails.
+            ValueError: If ``wheel_url`` is not HTTPS, does not end in
+                ``.whl``, or ``sha256`` is not 64 lowercase hex chars.
+            httpx.HTTPStatusError: If the API rejects the request (e.g.
+                already-published version, schema validation failure,
+                unreachable wheel URL).
         """  # noqa: DOC502
-        resolved_organization_id = organization_id or self.get_me().organization_id
-
-        org = self.get_organization(resolved_organization_id)
-
-        payload = prepare_wheel_publish(
-            provider_dir,
-            name=name,
-            catalog_prefix=org.slug,
-            artifact_repo=artifact_repo,
-            runtime_image=runtime_image,
-            entrypoint=entrypoint,
-        )
-
         body = _build_provider_version_request_body(
-            organization_id=resolved_organization_id,
-            payload=payload,
+            name=name,
+            version=version,
+            wheel_url=_validate_wheel_url(wheel_url),
+            sha256=_validate_sha256(sha256),
+            schemas=schemas,
+            metadata=metadata,
             changelog=changelog,
         )
 
@@ -2265,78 +2288,56 @@ class AsyncPragmaClient(BaseClient):
         path = _validate_provider_name(provider_name)
         await self._request("DELETE", f"/providers/{path}")
 
-    async def publish_provider(
+    async def register_provider_version(
         self,
-        provider_dir: str | Path,
         *,
-        name: str | None = None,
+        name: str,
+        version: str,
+        wheel_url: str,
+        sha256: str,
+        schemas: dict[str, dict[str, Any]],
+        metadata: dict[str, Any],
         changelog: str | None = None,
-        runtime_image: str | None = None,
-        entrypoint: list[str] | None = None,
-        artifact_repo: str = DEFAULT_ARTIFACT_REPO,
-        organization_id: str | None = None,
     ) -> ProviderVersion:
-        """Publish a new version of a provider via the wheel-based flow.
+        """Register a new provider version against an externally hosted wheel.
 
-        Builds the wheel locally with ``uv build``, runs schema
-        extraction against the provider package, uploads the wheel to
-        Artifact Registry via ``uv publish`` (auth via the system
-        keyring with ``keyrings.google-artifactregistry-auth``), and
-        posts a metadata record to ``POST /provider-versions``.
-        Publish is synchronous: the API returns the persisted
-        ``ProviderVersion`` directly.
-
-        The version is read from the provider's ``[project].version``
-        — bump pyproject and republish to cut a new version.
-
-        The local build/upload steps run in a worker thread so they
-        do not block the event loop.
+        Async mirror of :meth:`PragmaClient.register_provider_version`.
+        The SDK does not build, upload, or hash the wheel — the caller
+        is responsible for placing the wheel on any HTTPS host and
+        supplying the URL plus SHA-256 digest. This method only POSTs
+        the metadata record to ``POST /provider-versions`` and returns
+        the persisted version.
 
         Args:
-            provider_dir: Path to the provider source tree (the
-                directory containing ``pyproject.toml``).
-            name: Provider short name. Defaults to ``[tool.pragma].name``
-                or the ``-provider`` distribution stem.
-            changelog: Optional changelog text.
-            runtime_image: Optional runtime base image override.
-                Defaults to ``[tool.pragma].image`` when present.
-            entrypoint: Optional runtime entrypoint override. Defaults
-                to ``[tool.pragma].entrypoint`` when present.
-            artifact_repo: GCP Artifact Registry Python repository in
-                ``<region>-python.pkg.dev/<project>/<repo>`` form.
-            organization_id: Publishing organization id. Defaults to
-                the authenticated user's organization (resolved via
-                ``GET /auth/me``).
+            name: Namespaced provider name in ``"org/short"`` form
+                (e.g. ``"pragmatiks/gcp"``).
+            version: Semver string for this release.
+            wheel_url: HTTPS URL ending in ``.whl``.
+            sha256: 64-character lowercase hex SHA-256 of the wheel; the
+                API verifies it after fetching the URL.
+            schemas: Per-resource schema map keyed by resource type
+                name, in the shape the API expects on the request body.
+            metadata: Catalog display fields (``display_name``,
+                ``description``, ``icon_url``, ``tags``).
+            changelog: Optional release notes for this version.
 
         Returns:
-            Published version info.
+            The persisted ``ProviderVersion``.
 
         Raises:
-            FileNotFoundError: If ``provider_dir`` is missing or the
-                ``uv`` binary is not on ``PATH``.
-            ValueError: If the provider name or ``[project].version``
-                cannot be determined.
-            TypeError: If ``[tool.pragma]`` entries are malformed.
-            RuntimeError: If the local build or wheel upload fails.
-            httpx.HTTPStatusError: If the API request fails.
+            ValueError: If ``wheel_url`` is not HTTPS, does not end in
+                ``.whl``, or ``sha256`` is not 64 lowercase hex chars.
+            httpx.HTTPStatusError: If the API rejects the request (e.g.
+                already-published version, schema validation failure,
+                unreachable wheel URL).
         """  # noqa: DOC502
-        resolved_organization_id = organization_id or (await self.get_me()).organization_id
-
-        org = await self.get_organization(resolved_organization_id)
-
-        payload = await asyncio.to_thread(
-            prepare_wheel_publish,
-            provider_dir,
-            name=name,
-            catalog_prefix=org.slug,
-            artifact_repo=artifact_repo,
-            runtime_image=runtime_image,
-            entrypoint=entrypoint,
-        )
-
         body = _build_provider_version_request_body(
-            organization_id=resolved_organization_id,
-            payload=payload,
+            name=name,
+            version=version,
+            wheel_url=_validate_wheel_url(wheel_url),
+            sha256=_validate_sha256(sha256),
+            schemas=schemas,
+            metadata=metadata,
             changelog=changelog,
         )
 
