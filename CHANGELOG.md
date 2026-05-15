@@ -1,3 +1,9 @@
+## v4.1.0 (2026-05-15)
+
+### Feat
+
+- **provider**: re-export extract_schemas (#46)
+
 ## v4.0.0 (2026-05-06)
 
 ### BREAKING CHANGE
