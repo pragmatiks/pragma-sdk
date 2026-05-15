@@ -37,6 +37,7 @@ Example:
 """
 
 from pragma_sdk.provider.discovery import discover_resources, is_registered_resource
+from pragma_sdk.provider.extract_schemas import extract_schemas
 from pragma_sdk.provider.harness import (
     EventType,
     LifecycleEvent,
@@ -54,5 +55,6 @@ __all__ = [
     "ProviderHarness",
     "RESOURCE_MARKER",
     "discover_resources",
+    "extract_schemas",
     "is_registered_resource",
 ]
