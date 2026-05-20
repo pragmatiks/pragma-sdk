@@ -1,3 +1,0 @@
-[mcp_servers.graphify]
-command = "uv"
-args = ["run", "--with", "graphifyy", "--with", "mcp", "-m", "graphify.serve", "graphify-out/graph.json"]
