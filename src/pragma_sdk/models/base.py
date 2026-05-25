@@ -15,6 +15,7 @@ from pydantic import Field as PydanticField
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode
 
 from pragma_sdk.context import apply_resource, get_current_resource_owner, get_provider_name, wait_for_resource_state
+from pragma_sdk.models.file import FileReference
 from pragma_sdk.models.identity import ResourceIdentity
 from pragma_sdk.models.references import (
     Dependency,
@@ -177,12 +178,24 @@ def _find_dependency_forward_ref(annotation: Any) -> str | None:
     return None
 
 
+def _union_contains_file_reference(args: tuple[Any, ...]) -> bool:
+    """Check whether a union's args include :class:`FileReference` or a subclass.
+
+    Args:
+        args: Result of :func:`typing.get_args` on a union annotation.
+
+    Returns:
+        True when any arg is a class that subclasses ``FileReference``.
+    """
+    return any(isinstance(arg, type) and issubclass(arg, FileReference) for arg in args)
+
+
 def _is_valid_config_field(annotation: Any) -> bool:
     """Check if a type annotation uses a valid Config field type.
 
     Valid types are Field[T], ImmutableField[T], Dependency[T],
-    ImmutableDependency[T], and their Optional/list variants.
-    Bare types like str, int, bool are invalid.
+    ImmutableDependency[T], FileReference, FileField, and their Optional/list
+    variants. Bare types like str, int, bool are invalid.
 
     Args:
         annotation: The type annotation to validate.
@@ -190,6 +203,9 @@ def _is_valid_config_field(annotation: Any) -> bool:
     Returns:
         True if the annotation is a valid Config field type.
     """
+    if isinstance(annotation, typing.TypeAliasType):
+        return _is_valid_config_field(annotation.__value__)
+
     origin = typing.get_origin(annotation)
 
     if isinstance(origin, typing.TypeAliasType):
@@ -199,10 +215,18 @@ def _is_valid_config_field(annotation: Any) -> bool:
             val = typing.get_args(val)[0]
 
         if _is_union_origin(typing.get_origin(val)):
-            if FieldReference in typing.get_args(val):
+            union_args = typing.get_args(val)
+
+            if FieldReference in union_args:
+                return True
+
+            if _union_contains_file_reference(union_args):
                 return True
 
         if isinstance(val, type) and issubclass(val, FieldReference):
+            return True
+
+        if isinstance(val, type) and issubclass(val, FileReference):
             return True
 
         dep_origin = typing.get_origin(val)
@@ -221,6 +245,9 @@ def _is_valid_config_field(annotation: Any) -> bool:
     if isinstance(annotation, type) and issubclass(annotation, Dependency):
         return True
 
+    if isinstance(annotation, type) and issubclass(annotation, FileReference):
+        return True
+
     if origin is list:
         args = typing.get_args(annotation)
 
@@ -236,6 +263,9 @@ def _is_valid_config_field(annotation: Any) -> bool:
             return _is_valid_config_field(non_none_args[0])
 
         if FieldReference in typing.get_args(annotation):
+            return True
+
+        if _union_contains_file_reference(typing.get_args(annotation)):
             return True
 
         if all(_is_valid_config_field(arg) for arg in non_none_args):

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from pydantic import BaseModel, PrivateAttr, field_validator
 from pydantic import Field as PydanticField
 
+from pragma_sdk.models.file import FileReference
 from pragma_sdk.models.identity import ResourceIdentity, _validate_segment
 
 
@@ -138,6 +139,17 @@ class Dependency[ResourceT: "Resource"](_ResourceIdentityFields):
 
 type Field[T] = T | FieldReference
 """Config field that accepts a direct value or a FieldReference."""
+
+
+type FileField = FileReference | FieldReference
+"""Config field that accepts a runtime-resolved :class:`FileReference` or a FieldReference.
+
+The pragma-os runtime substitutes ``pragma://files/<name>`` strings with signed
+HTTPS URLs before validation. Pydantic coerces those strings into a ``FileReference``
+via :meth:`FileReference._accept_url_string`, so providers can declare
+``my_input: FileField`` and consume the file through ``fetch`` / ``stream`` /
+``save`` without writing raw httpx code.
+"""
 
 
 class Immutable:
