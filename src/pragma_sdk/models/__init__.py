@@ -57,7 +57,7 @@ from pragma_sdk.models.enums import (
     UpgradePolicy,
     VersionStatus,
 )
-from pragma_sdk.models.file import FileRef
+from pragma_sdk.models.file import FileReference
 from pragma_sdk.models.identity import InvalidResourceIdentityError, ResourceIdentity
 from pragma_sdk.models.llm import (
     CatalogEntry,
@@ -154,7 +154,7 @@ __all__ = [
     "Field",
     "FieldReference",
     "FileField",
-    "FileRef",
+    "FileReference",
     "FleetVitals",
     "GenerateSubtasksRequest",
     "GenerateSubtasksResponse",

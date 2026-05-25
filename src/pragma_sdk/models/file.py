@@ -2,7 +2,7 @@
 
 The pragma-os runtime resolves ``pragma://files/<name>`` config values to
 short-lived signed download URLs before invoking provider lifecycle
-methods. ``FileRef`` wraps such a URL and exposes async helpers to
+methods. ``FileReference`` wraps such a URL and exposes async helpers to
 download the bytes, stream chunks, or save to disk.
 
 Provider authors declare file inputs via :data:`FileField` (in
@@ -24,11 +24,11 @@ _PRAGMA_FILE_SCHEME = "pragma://files/"
 _DEFAULT_TIMEOUT_SECONDS = 30.0
 
 
-class FileRef(BaseModel):
+class FileReference(BaseModel):
     """Typed reference to a file the runtime has resolved for this provider.
 
     The runtime substitutes ``pragma://files/<name>`` config values with a
-    signed HTTPS URL before pydantic validates the Config. ``FileRef``
+    signed HTTPS URL before pydantic validates the Config. ``FileReference``
     accepts that string directly and exposes async I/O helpers that fetch,
     stream, or save the file. A fresh ``httpx.AsyncClient`` is created per
     call to avoid sharing connection state across unrelated downloads.
@@ -45,7 +45,7 @@ class FileRef(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _accept_url_string(cls, value: Any) -> Any:
-        """Coerce a bare URL string into a ``FileRef`` payload.
+        """Coerce a bare URL string into a ``FileReference`` payload.
 
         Pydantic invokes this before model construction so a Config field
         annotated with :data:`FileField` accepts both the dict form
@@ -85,7 +85,7 @@ class FileRef(BaseModel):
         """
         if isinstance(value, str) and value.startswith(_PRAGMA_FILE_SCHEME):
             raise ValueError(
-                f"FileRef received unresolved file reference {value!r}. "
+                f"FileReference received unresolved file reference {value!r}. "
                 "The pragma-os runtime did not substitute this reference — "
                 "your runtime image is likely outdated. Upgrade to a runtime "
                 "that resolves pragma:// file references inline "
