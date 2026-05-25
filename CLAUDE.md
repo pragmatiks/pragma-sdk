@@ -272,24 +272,37 @@ Every developer dispatch must:
 
 ## Publishing to PyPI
 
-Package: `pragmatiks-sdk` on [PyPI](https://pypi.org/project/pragmatiks-sdk/)
+Package: `pragmatiks-sdk` on [PyPI](https://pypi.org/project/pragmatiks-sdk/).
 
-**Versioning** (commitizen):
-```bash
-cz bump              # Bump version based on conventional commits
-cz bump --patch      # Force patch bump
-cz bump --minor      # Force minor bump
-```
+Publishing is fully automated by `.github/workflows/publish.yaml`. On every push to `main`, CI runs `cz bump --yes --changelog`, which:
 
-**Publishing**:
-```bash
-uv build             # Build wheel and sdist
-uv publish           # Publish to PyPI (requires PYPI_TOKEN)
-```
+1. Inspects the conventional commits since the last `v$version` tag.
+2. Computes the next version (PATCH for `fix:`, MINOR for `feat:`, MAJOR for `BREAKING CHANGE:` or `!`).
+3. Updates `[project] version` and `[tool.commitizen] version` in `pyproject.toml`.
+4. Updates `CHANGELOG.md`.
+5. Commits the bump, tags `v$version`, pushes.
+6. Builds via `uv build` and publishes via `pypa/gh-action-pypi-publish` (PyPI OIDC trusted publisher in the `pypi` GitHub Environment).
+7. Triggers downstream `update-sdk.yaml` workflows in `pragma-cli` and `pragma-os` to bump lockfiles.
 
-**Version files**: `pyproject.toml` (version field updated by commitizen)
+### Do NOT run `cz bump` locally
 
-**Tag format**: `v{version}` (e.g., `v0.15.1`)
+Pre-bumping `pyproject.toml` in a feature branch is forbidden:
+
+- The local `cz bump` creates a `v$next` tag pointing at the branch commit. After squash-merge, that tag becomes orphan (points to an unreachable commit).
+- `pyproject.toml` is now ahead of the latest git tag on origin. The next CI `cz bump` gets confused — depending on the commit history it can detect the wrong increment (e.g. MAJOR instead of MINOR) and fail on incremental-changelog generation.
+- Recovery requires reverting `pyproject.toml` and `CHANGELOG.md` back to the previous version on a chore commit and re-pushing, so CI can re-anchor.
+
+The correct developer flow:
+
+1. Make your changes on a feature branch.
+2. Use conventional commits (`feat:`, `fix:`, `refactor:`, etc.). Do not touch the `version` field in `pyproject.toml` and do not edit `CHANGELOG.md`.
+3. Open a PR.
+4. After review, squash-merge to main.
+5. CI bumps, tags, builds, publishes, and cascades.
+
+### Tag format
+
+`v{version}` (e.g. `v4.2.0`).
 
 ## graphify
 
