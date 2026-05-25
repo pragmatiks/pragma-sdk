@@ -1,3 +1,9 @@
+## v4.2.0 (2026-05-25)
+
+### Feat
+
+- **sdk**: add FileRef / FileField for signed-URL consumption
+
 ## v4.1.0 (2026-05-15)
 
 ### Feat
