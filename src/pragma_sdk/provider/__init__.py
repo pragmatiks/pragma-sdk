@@ -37,13 +37,13 @@ Example:
 """
 
 from pragma_sdk.provider.discovery import discover_resources, is_registered_resource
-from pragma_sdk.provider.extract_schemas import extract_schemas
 from pragma_sdk.provider.harness import (
     EventType,
     LifecycleEvent,
     LifecycleResult,
     ProviderHarness,
 )
+from pragma_sdk.provider.loading import load_provider_schemas
 from pragma_sdk.provider.provider import RESOURCE_MARKER, Provider
 
 
@@ -55,6 +55,6 @@ __all__ = [
     "ProviderHarness",
     "RESOURCE_MARKER",
     "discover_resources",
-    "extract_schemas",
     "is_registered_resource",
+    "load_provider_schemas",
 ]
