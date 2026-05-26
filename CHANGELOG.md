@@ -1,3 +1,15 @@
+## v5.0.0 (2026-05-26)
+
+### BREAKING CHANGE
+
+- pragma_sdk.provider.extract_schemas is removed.
+Consumers must switch to load_provider_schemas. pragma-cli rename
+to follow in a separate Linear issue.
+
+### Refactor
+
+- rename extract_schemas, drop dead code (PRA-439) (#49)
+
 ## v4.2.0 (2026-05-25)
 
 ### Feat
