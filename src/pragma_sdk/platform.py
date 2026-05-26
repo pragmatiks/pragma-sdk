@@ -28,24 +28,3 @@ class SecretOutputs(Outputs):
     """
 
     keys: list[str]
-
-
-def create_secret_config(data: dict[str, str]) -> dict:
-    """Build a Secret resource config dict.
-
-    Args:
-        data: Key-value pairs to store in the secret.
-
-    Returns:
-        Complete resource config dict ready for API submission.
-
-    Example:
-        >>> config = create_secret_config({"api_key": "secret123"})
-        >>> config
-        {'provider': 'pragma', 'resource': 'secret', 'config': {'data': {'api_key': 'secret123'}}}
-    """
-    return {
-        "provider": "pragma",
-        "resource": "secret",
-        "config": {"data": data},
-    }
