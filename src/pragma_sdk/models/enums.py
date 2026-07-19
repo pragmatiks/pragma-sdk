@@ -74,9 +74,18 @@ class ResourceTier(StrEnum):
 
 
 class OrganizationStatus(StrEnum):
-    """Lifecycle status of an organization."""
+    """Lifecycle status of an organization.
 
-    ACTIVE = "active"
+    Mirrors the API's organization lifecycle: an organization is created in
+    ``BOOTSTRAPPING`` while the bootstrap worker provisions its tenant
+    namespace, reaches ``READY`` once usable, or lands in ``BOOTSTRAP_FAILED``
+    if provisioning exhausts its retries. ``DEACTIVATING`` and ``DELETED``
+    cover teardown.
+    """
+
+    BOOTSTRAPPING = "bootstrapping"
+    READY = "ready"
+    BOOTSTRAP_FAILED = "bootstrap_failed"
     DEACTIVATING = "deactivating"
     DELETED = "deleted"
 

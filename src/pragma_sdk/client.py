@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import time
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
@@ -15,6 +17,7 @@ from pragma_sdk.config import get_token_for_context
 from pragma_sdk.exceptions import (
     ProjectHasResourcesError,
     ProjectMismatchError,
+    ProviderVersionConflictError,
     ResourceFailedError,
 )
 from pragma_sdk.models import (
@@ -45,7 +48,6 @@ from pragma_sdk.models import (
     ProviderScope,
     ProviderVersion,
     ProviderVersionMetadata,
-    RegisterProviderVersionRequest,
     Resource,
     ResourceSchema,
     ResourceTier,
@@ -102,6 +104,45 @@ def _validate_provider_name(provider_name: str) -> str:
     return provider_name
 
 
+def _build_publish_metadata_field(
+    name: str,
+    version: str,
+    schemas: dict[str, dict[str, Any]],
+    metadata: ProviderVersionMetadata | dict[str, Any],
+    changelog: str | None,
+) -> str:
+    """Build the JSON ``metadata`` form field for a provider publish upload.
+
+    The publish endpoint takes the wheel as a binary part and everything
+    else as a single JSON string field named ``metadata``. This assembles
+    that string, coercing the catalog display object through
+    :class:`ProviderVersionMetadata` so it serializes in the shape the API
+    expects.
+
+    Args:
+        name: Namespaced provider name in ``"org/short"`` form, or a bare
+            short name the server resolves against the caller's org.
+        version: Semver string for this release; must equal the version
+            encoded in the wheel filename.
+        schemas: Per-resource schema map keyed by resource type name.
+        metadata: Catalog display fields, either a
+            :class:`ProviderVersionMetadata` instance or a plain dict
+            coerced to one.
+        changelog: Optional release notes for this version.
+
+    Returns:
+        The JSON-encoded metadata form field.
+    """
+    payload = {
+        "name": name,
+        "version": version,
+        "schemas": schemas,
+        "metadata": ProviderVersionMetadata.model_validate(metadata).model_dump(mode="json"),
+        "changelog": changelog,
+    }
+    return json.dumps(payload)
+
+
 def _raise_project_has_resources(error: httpx.HTTPStatusError) -> None:
     """Translate a project-has-resources 409 into a typed SDK exception.
 
@@ -145,7 +186,7 @@ def _raise_project_has_resources(error: httpx.HTTPStatusError) -> None:
     raise ProjectHasResourcesError(
         project_id=project_id,
         resource_count=resource_count,
-        resources=list(resources),
+        resources=[str(resource_id) for resource_id in resources],
     ) from error
 
 
@@ -631,56 +672,66 @@ class PragmaClient(BaseClient):
         path = _validate_provider_name(provider_name)
         self._request("DELETE", f"/providers/{path}")
 
-    def register_provider_version(
+    def publish_provider_version(
         self,
         *,
+        wheel_path: Path | str,
         name: str,
         version: str,
-        wheel_url: str,
-        sha256: str,
         schemas: dict[str, dict[str, Any]],
         metadata: ProviderVersionMetadata | dict[str, Any],
         changelog: str | None = None,
     ) -> ProviderVersion:
-        """Register a new provider version against an externally hosted wheel.
+        """Publish a new provider version by uploading its wheel bytes.
 
-        The SDK does not build, upload, or hash the wheel — the caller
-        is responsible for placing the wheel on any HTTPS host and
-        supplying the URL plus SHA-256 digest. This method only POSTs
-        the metadata record to ``POST /provider-versions`` and returns
-        the persisted version.
+        Streams the wheel from disk to ``POST /providers/publish`` as a
+        multipart upload; the API hosts the wheel in its own registry,
+        derives the package name from the wheel filename, and computes the
+        digest server-side. No external wheel host or URL is involved. The
+        wheel filename must carry the real distribution name and a version
+        equal to ``version``.
 
         Args:
-            name: Namespaced provider name in ``"org/short"`` form.
-            version: Semver string for this release.
-            wheel_url: HTTPS URL whose path ends in ``.whl``.
-            sha256: 64-character lowercase hex SHA-256 of the wheel.
-            schemas: Per-resource schema map keyed by resource type
-                name, in the shape the API expects.
-            metadata: Catalog display fields, either as a
-                :class:`ProviderVersionMetadata` instance or a plain
-                dict that will be coerced to one.
+            wheel_path: Path to the built ``.whl`` to upload. Streamed from
+                disk, never read fully into memory.
+            name: Namespaced provider name in ``"org/short"`` form, or a bare
+                short name the server resolves against the caller's org.
+            version: Semver string for this release; must equal the version
+                encoded in the wheel filename.
+            schemas: Per-resource schema map keyed by resource type name, in
+                the shape the API expects.
+            metadata: Catalog display fields, either a
+                :class:`ProviderVersionMetadata` instance or a plain dict
+                coerced to one.
             changelog: Optional release notes for this version.
 
         Returns:
-            The persisted ``ProviderVersion``.
+            The persisted, published ``ProviderVersion``.
 
         Raises:
-            ValidationError: If any field fails the validation rules
-                declared on :class:`RegisterProviderVersionRequest`.
-            httpx.HTTPStatusError: If the API rejects the request (e.g.
-                already-published version, unreachable wheel URL).
+            ProviderVersionConflictError: If this version already exists;
+                published versions are immutable and must not be retried.
+            httpx.HTTPStatusError: If the API otherwise rejects the request
+                (invalid wheel filename or version mismatch, namespace not
+                owned, oversized wheel, invalid metadata, registry failure).
         """  # noqa: DOC502
-        request = RegisterProviderVersionRequest(
-            name=name,
-            version=version,
-            wheel_url=wheel_url,
-            sha256=sha256,
-            schemas=schemas,
-            metadata=ProviderVersionMetadata.model_validate(metadata),
-            changelog=changelog,
-        )
-        response = self._request("POST", "/provider-versions", json_data=request.model_dump(exclude_none=True))
+        wheel_path = Path(wheel_path)
+        metadata_field = _build_publish_metadata_field(name, version, schemas, metadata, changelog)
+
+        with wheel_path.open("rb") as wheel_file:
+            try:
+                response = self._request(
+                    "POST",
+                    "/providers/publish",
+                    data={"metadata": metadata_field},
+                    files={"wheel": (wheel_path.name, wheel_file, "application/octet-stream")},
+                    timeout=600.0,
+                )
+            except httpx.HTTPStatusError as error:
+                if error.response.status_code == 409:
+                    raise ProviderVersionConflictError(name=name, version=version) from error
+                raise
+
         return ProviderVersion.model_validate(response)
 
     def install_provider(
@@ -848,19 +899,18 @@ class PragmaClient(BaseClient):
         response = self._request("GET", "/organizations")
         return [Organization.model_validate(item) for item in response]
 
-    def get_organization(self, organization_id: str) -> Organization:
-        """Get organization details by ID.
-
-        Args:
-            organization_id: Unique identifier for the organization.
+    def get_current_organization(self) -> Organization:
+        """Get the organization the authenticated caller belongs to.
 
         Returns:
-            Organization details.
+            The caller's organization, resolved server-side from the
+            authenticated session.
 
         Raises:
-            httpx.HTTPStatusError: If organization not found or request fails.
+            httpx.HTTPStatusError: If the caller is unauthenticated or the
+                request fails.
         """  # noqa: DOC502
-        response = self._request("GET", f"/organizations/{organization_id}")
+        response = self._request("GET", "/organizations/me")
         return Organization.model_validate(response)
 
     def cleanup_organization(self, organization_id: str) -> None:
@@ -2200,47 +2250,59 @@ class AsyncPragmaClient(BaseClient):
         path = _validate_provider_name(provider_name)
         await self._request("DELETE", f"/providers/{path}")
 
-    async def register_provider_version(
+    async def publish_provider_version(
         self,
         *,
+        wheel_path: Path | str,
         name: str,
         version: str,
-        wheel_url: str,
-        sha256: str,
         schemas: dict[str, dict[str, Any]],
         metadata: ProviderVersionMetadata | dict[str, Any],
         changelog: str | None = None,
     ) -> ProviderVersion:
-        """Async mirror of :meth:`PragmaClient.register_provider_version`.
+        """Async mirror of :meth:`PragmaClient.publish_provider_version`.
 
         Args:
-            name: Namespaced provider name in ``"org/short"`` form.
-            version: Semver string for this release.
-            wheel_url: HTTPS URL whose path ends in ``.whl``.
-            sha256: 64-character lowercase hex SHA-256 of the wheel.
-            schemas: Per-resource schema map keyed by resource type
-                name, in the shape the API expects.
-            metadata: Catalog display fields.
+            wheel_path: Path to the built ``.whl`` to upload. Streamed from
+                disk, never read fully into memory.
+            name: Namespaced provider name in ``"org/short"`` form, or a bare
+                short name the server resolves against the caller's org.
+            version: Semver string for this release; must equal the version
+                encoded in the wheel filename.
+            schemas: Per-resource schema map keyed by resource type name, in
+                the shape the API expects.
+            metadata: Catalog display fields, either a
+                :class:`ProviderVersionMetadata` instance or a plain dict
+                coerced to one.
             changelog: Optional release notes for this version.
 
         Returns:
-            The persisted ``ProviderVersion``.
+            The persisted, published ``ProviderVersion``.
 
         Raises:
-            ValidationError: If any field fails the validation rules
-                declared on :class:`RegisterProviderVersionRequest`.
-            httpx.HTTPStatusError: If the API rejects the request.
+            ProviderVersionConflictError: If this version already exists;
+                published versions are immutable and must not be retried.
+            httpx.HTTPStatusError: If the API otherwise rejects the request
+                (invalid wheel filename or version mismatch, namespace not
+                owned, oversized wheel, invalid metadata, registry failure).
         """  # noqa: DOC502
-        request = RegisterProviderVersionRequest(
-            name=name,
-            version=version,
-            wheel_url=wheel_url,
-            sha256=sha256,
-            schemas=schemas,
-            metadata=ProviderVersionMetadata.model_validate(metadata),
-            changelog=changelog,
-        )
-        response = await self._request("POST", "/provider-versions", json_data=request.model_dump(exclude_none=True))
+        wheel_path = Path(wheel_path)
+        metadata_field = _build_publish_metadata_field(name, version, schemas, metadata, changelog)
+
+        with wheel_path.open("rb") as wheel_file:
+            try:
+                response = await self._request(
+                    "POST",
+                    "/providers/publish",
+                    data={"metadata": metadata_field},
+                    files={"wheel": (wheel_path.name, wheel_file, "application/octet-stream")},
+                    timeout=600.0,
+                )
+            except httpx.HTTPStatusError as error:
+                if error.response.status_code == 409:
+                    raise ProviderVersionConflictError(name=name, version=version) from error
+                raise
+
         return ProviderVersion.model_validate(response)
 
     async def install_provider(
@@ -2408,19 +2470,18 @@ class AsyncPragmaClient(BaseClient):
         response = await self._request("GET", "/organizations")
         return [Organization.model_validate(item) for item in response]
 
-    async def get_organization(self, organization_id: str) -> Organization:
-        """Get organization details by ID.
-
-        Args:
-            organization_id: Unique identifier for the organization.
+    async def get_current_organization(self) -> Organization:
+        """Get the organization the authenticated caller belongs to.
 
         Returns:
-            Organization details.
+            The caller's organization, resolved server-side from the
+            authenticated session.
 
         Raises:
-            httpx.HTTPStatusError: If organization not found or request fails.
+            httpx.HTTPStatusError: If the caller is unauthenticated or the
+                request fails.
         """  # noqa: DOC502
-        response = await self._request("GET", f"/organizations/{organization_id}")
+        response = await self._request("GET", "/organizations/me")
         return Organization.model_validate(response)
 
     async def cleanup_organization(self, organization_id: str) -> None:

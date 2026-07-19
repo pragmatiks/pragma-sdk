@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 
 
-def get_credentials_file_path() -> Path:
+def credentials_file_path() -> Path:
     """Return the credentials file path.
 
     Returns:
@@ -31,7 +31,7 @@ def load_credentials(context: str) -> str | None:
     Returns:
         Token string, or None if context not found.
     """
-    creds_file = get_credentials_file_path()
+    creds_file = credentials_file_path()
     if not creds_file.exists():
         return None
 

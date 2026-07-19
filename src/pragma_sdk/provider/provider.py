@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TypeVar
 
 from pragma_sdk.models import Resource
@@ -41,7 +42,7 @@ class Provider:
         """Initialize a Provider."""
         self._resources: dict[str, type[Resource]] = {}
 
-    def resource(self, name: str) -> type[ResourceT]:
+    def resource(self, name: str) -> Callable[[type[ResourceT]], type[ResourceT]]:
         """Register a Resource class under this provider.
 
         Args:
@@ -73,7 +74,7 @@ class Provider:
             self._resources[name] = cls
             return cls
 
-        return decorator  # type: ignore[return-value]
+        return decorator
 
     @property
     def resources(self) -> dict[str, type[Resource]]:

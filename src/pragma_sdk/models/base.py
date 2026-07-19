@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from pydantic import Field as PydanticField
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode
 
-from pragma_sdk.context import apply_resource, get_current_resource_owner, get_provider_name, wait_for_resource_state
+from pragma_sdk.context import apply_resource, provider_name, resource_owner, wait_for_resource_state
 from pragma_sdk.models.file import FileReference
 from pragma_sdk.models.identity import ResourceIdentity
 from pragma_sdk.models.references import (
@@ -740,7 +740,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
             RuntimeError: If called outside a runtime context where the
                 provider name has not been set.
         """
-        name = get_provider_name()
+        name = provider_name()
 
         if name is None:
             raise RuntimeError("provider name not set — this must be called within a runtime context")
@@ -983,7 +983,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
                 return AppOutputs(db_url=db.outputs.connection_url)
             ```
         """
-        current_owner = get_current_resource_owner()
+        current_owner = resource_owner()
         if current_owner is not None and current_owner not in self.owner_references:
             self.owner_references.append(current_owner)
 
@@ -1036,7 +1036,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         if outputs_data is not None:
             outputs_type = self._outputs_type()
             if outputs_type is not None:
-                self.outputs = outputs_type.model_validate(outputs_data)  # type: ignore[assignment]
+                self.outputs = typing.cast("OutputsT", outputs_type.model_validate(outputs_data))
             else:
                 self.outputs = outputs_data
 

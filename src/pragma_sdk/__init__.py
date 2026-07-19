@@ -27,6 +27,7 @@ from pragma_sdk.client import (
 from pragma_sdk.exceptions import (
     ProjectHasResourcesError,
     ProjectMismatchError,
+    ProviderVersionConflictError,
     ResourceFailedError,
 )
 from pragma_sdk.models import (
@@ -90,7 +91,6 @@ from pragma_sdk.models import (
     ProviderVersion,
     ProviderVersionMetadata,
     PushResult,
-    RegisterProviderVersionRequest,
     Resource,
     ResourceFieldDiff,
     ResourceIdentity,
@@ -217,9 +217,9 @@ __all__ = [
     "ProviderModel",
     "ProviderScope",
     "ProviderVersion",
+    "ProviderVersionConflictError",
     "ProviderVersionMetadata",
     "PushResult",
-    "RegisterProviderVersionRequest",
     "Resource",
     "ResourceFailedError",
     "ResourceFieldDiff",

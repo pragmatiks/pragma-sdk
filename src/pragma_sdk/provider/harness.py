@@ -40,7 +40,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from uuid import uuid4
 
-from pragma_sdk.context import reset_provider_name, set_provider_name
+from pragma_sdk.context import provider_name_scope
 from pragma_sdk.models import Config, Outputs, Resource
 from pragma_sdk.types import CopyContext, CopyResult, LifecycleState, PatchDefinition, PatchResult
 
@@ -198,9 +198,9 @@ class ProviderHarness:
             tags=tags,
         )
 
-        provider_token = set_provider_name(self._provider_name)
         try:
-            outputs = await resource.on_create()
+            with provider_name_scope(self._provider_name):
+                outputs = await resource.on_create()
             result = LifecycleResult(
                 success=True,
                 outputs=outputs,
@@ -214,8 +214,6 @@ class ProviderHarness:
                 resource=resource,
                 event=event,
             )
-        finally:
-            reset_provider_name(provider_token)
 
         self._results.append(result)
         return result
@@ -261,9 +259,9 @@ class ProviderHarness:
             tags=tags,
         )
 
-        provider_token = set_provider_name(self._provider_name)
         try:
-            outputs = await resource.on_update(previous_config)
+            with provider_name_scope(self._provider_name):
+                outputs = await resource.on_update(previous_config)
             result = LifecycleResult(
                 success=True,
                 outputs=outputs,
@@ -277,8 +275,6 @@ class ProviderHarness:
                 resource=resource,
                 event=event,
             )
-        finally:
-            reset_provider_name(provider_token)
 
         self._results.append(result)
         return result
@@ -321,9 +317,9 @@ class ProviderHarness:
             tags=tags,
         )
 
-        provider_token = set_provider_name(self._provider_name)
         try:
-            await resource.on_delete()
+            with provider_name_scope(self._provider_name):
+                await resource.on_delete()
             result = LifecycleResult(
                 success=True,
                 resource=resource,
@@ -336,8 +332,6 @@ class ProviderHarness:
                 resource=resource,
                 event=event,
             )
-        finally:
-            reset_provider_name(provider_token)
 
         self._results.append(result)
         return result
@@ -382,9 +376,9 @@ class ProviderHarness:
             tags=tags,
         )
 
-        provider_token = set_provider_name(self._provider_name)
         try:
-            copy_result = await resource.on_copy(context)
+            with provider_name_scope(self._provider_name):
+                copy_result = await resource.on_copy(context)
             result = LifecycleResult(
                 success=True,
                 copy_result=copy_result,
@@ -398,8 +392,6 @@ class ProviderHarness:
                 resource=resource,
                 event=event,
             )
-        finally:
-            reset_provider_name(provider_token)
 
         self._results.append(result)
         return result
@@ -444,9 +436,9 @@ class ProviderHarness:
             tags=tags,
         )
 
-        provider_token = set_provider_name(self._provider_name)
         try:
-            patch_result = await resource.on_patch(patch)
+            with provider_name_scope(self._provider_name):
+                patch_result = await resource.on_patch(patch)
             result = LifecycleResult(
                 success=True,
                 patch_result=patch_result,
@@ -460,8 +452,6 @@ class ProviderHarness:
                 resource=resource,
                 event=event,
             )
-        finally:
-            reset_provider_name(provider_token)
 
         self._results.append(result)
         return result

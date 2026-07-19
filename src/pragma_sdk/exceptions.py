@@ -50,6 +50,25 @@ class ResourceFailedError(Exception):
         super().__init__(message)
 
 
+class ProviderVersionConflictError(Exception):
+    """Raised when publishing a provider version that already exists.
+
+    Published versions are immutable. The server rejects a re-publish of an
+    existing ``name``/``version`` pair with HTTP 409. Bump the version rather
+    than retrying the same one — the same bytes will never publish twice.
+
+    Attributes:
+        name: Namespaced provider name that was targeted.
+        version: Version that already exists in the catalog.
+    """
+
+    def __init__(self, name: str, version: str) -> None:
+        """Initialize ProviderVersionConflictError with the rejected identity."""
+        self.name = name
+        self.version = version
+        super().__init__(f"Provider version {name!r} v{version} already exists and is immutable; bump the version.")
+
+
 class ProjectHasResourcesError(Exception):
     """Raised when deleting a non-empty project without orphan_resources=True.
 

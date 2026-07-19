@@ -12,6 +12,7 @@ exported functions instead.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -19,6 +20,8 @@ from pragma_sdk.types import LifecycleState
 
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from pragma_sdk.models.references import OwnerReference
 
 
@@ -68,35 +71,28 @@ class RuntimeContext(Protocol):
 
 
 _runtime_context: ContextVar[RuntimeContext | None] = ContextVar("_runtime_context", default=None)
-_current_resource_owner: ContextVar[OwnerReference | None] = ContextVar("_current_resource_owner", default=None)
+_resource_owner: ContextVar[OwnerReference | None] = ContextVar("_resource_owner", default=None)
 _provider_name: ContextVar[str | None] = ContextVar("_provider_name", default=None)
 
 
-def set_runtime_context(ctx: RuntimeContext) -> Any:
-    """Set the runtime context for the current async context.
+@contextmanager
+def runtime_context_scope(context: RuntimeContext) -> Iterator[None]:
+    """Bind the runtime context for the duration of the ``with`` block.
 
-    Called by the runtime before invoking lifecycle methods. Returns a
-    token that must be passed to reset_runtime_context() when done.
-
-    Args:
-        ctx: Runtime context implementing RuntimeContext protocol.
-
-    Returns:
-        Token for resetting the context.
-    """
-    return _runtime_context.set(ctx)
-
-
-def reset_runtime_context(token: Any) -> None:
-    """Reset the runtime context using the token from set_runtime_context().
+    Called by the runtime before invoking lifecycle methods. The previous
+    context is restored on exit, even if the block raises.
 
     Args:
-        token: Token returned by set_runtime_context().
+        context: Runtime context implementing the RuntimeContext protocol.
     """
-    _runtime_context.reset(token)
+    token = _runtime_context.set(context)
+    try:
+        yield
+    finally:
+        _runtime_context.reset(token)
 
 
-def get_runtime_context() -> RuntimeContext | None:
+def runtime_context() -> RuntimeContext | None:
     """Get the current runtime context, if any.
 
     Returns:
@@ -182,66 +178,52 @@ async def apply_resource(resource_data: dict[str, Any]) -> None:
     await ctx.apply_resource(resource_data)
 
 
-def set_current_resource_owner(owner: OwnerReference) -> Any:
-    """Set the current executing resource as owner for child resources.
+@contextmanager
+def resource_owner_scope(owner: OwnerReference) -> Iterator[None]:
+    """Bind the executing resource as owner for child resources.
 
     Called by the runtime before invoking lifecycle methods. When a child
-    resource calls apply(), it will automatically have this owner added
-    to its owner_references.
+    resource calls apply() within the block, this owner is automatically
+    added to its owner_references. The previous owner is restored on exit.
 
     Args:
         owner: OwnerReference for the currently executing resource.
-
-    Returns:
-        Token for resetting the owner context.
     """
-    return _current_resource_owner.set(owner)
+    token = _resource_owner.set(owner)
+    try:
+        yield
+    finally:
+        _resource_owner.reset(token)
 
 
-def reset_current_resource_owner(token: Any) -> None:
-    """Reset the current resource owner using the token from set_current_resource_owner().
-
-    Args:
-        token: Token returned by set_current_resource_owner().
-    """
-    _current_resource_owner.reset(token)
-
-
-def get_current_resource_owner() -> OwnerReference | None:
+def resource_owner() -> OwnerReference | None:
     """Get the current resource owner, if any.
 
     Returns:
         OwnerReference for the currently executing resource, or None if
         not in a lifecycle handler context.
     """
-    return _current_resource_owner.get()
+    return _resource_owner.get()
 
 
-def set_provider_name(name: str) -> Any:
-    """Set the provider name for the current async context.
+@contextmanager
+def provider_name_scope(name: str) -> Iterator[None]:
+    """Bind the provider name for the duration of the ``with`` block.
 
-    Called by the runtime before invoking lifecycle methods. Returns a
-    token that must be passed to reset_provider_name() when done.
+    Called by the runtime before invoking lifecycle methods. The previous
+    provider name is restored on exit, even if the block raises.
 
     Args:
         name: Catalog name of the provider (e.g., "pragmatiks/gcp").
-
-    Returns:
-        Token for resetting the provider name.
     """
-    return _provider_name.set(name)
+    token = _provider_name.set(name)
+    try:
+        yield
+    finally:
+        _provider_name.reset(token)
 
 
-def reset_provider_name(token: Any) -> None:
-    """Reset the provider name using the token from set_provider_name().
-
-    Args:
-        token: Token returned by set_provider_name().
-    """
-    _provider_name.reset(token)
-
-
-def get_provider_name() -> str | None:
+def provider_name() -> str | None:
     """Get the current provider name, if any.
 
     Returns:

@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from typing import Any, Literal
-from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, computed_field, field_validator
+from pydantic import BaseModel, Field, computed_field
 
 from pragma_sdk.models.enums import ProviderScope, ResourceTier, UpgradePolicy, VersionStatus
-
-
-_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ProviderAuthor(BaseModel):
@@ -74,7 +69,7 @@ class ProviderVersion(BaseModel):
     prefix: str = Field(frozen=True)
     name: str = Field(frozen=True)
     version: str = Field(frozen=True)
-    runtime_version: str
+    runtime_version: str | None = None
     image_url: str | None = None
     wheel_url: str | None = None
     runtime_image: str | None = None
@@ -114,104 +109,6 @@ class ProviderVersionMetadata(BaseModel):
     description: str
     icon_url: str | None = None
     tags: list[str] = Field(default_factory=list)
-
-
-class RegisterProviderVersionRequest(BaseModel):
-    """Request body for ``POST /provider-versions``.
-
-    The SDK has no opinion about where the wheel lives — only that
-    ``wheel_url`` is HTTPS and points at a ``.whl`` (signed-URL query
-    strings are allowed) and that ``sha256`` matches the bytes the API
-    fetches. Building, uploading, and hashing the wheel are the
-    caller's responsibility.
-
-    Attributes:
-        name: Namespaced provider name in ``"org/short"`` form.
-        version: Semver string for this release.
-        wheel_url: HTTPS URL pointing at the published ``.whl``.
-        sha256: 64-character lowercase hex SHA-256 of the wheel.
-        schemas: Per-resource schema map keyed by resource type name.
-        metadata: Catalog display fields.
-        changelog: Optional release notes.
-    """
-
-    name: str
-    version: str
-    wheel_url: str
-    sha256: str
-    schemas: dict[str, dict[str, Any]]
-    metadata: ProviderVersionMetadata
-    changelog: str | None = None
-
-    @field_validator("name")
-    @classmethod
-    def _check_name(cls, value: str) -> str:
-        """Reject names that are not in ``"org/short"`` form.
-
-        Args:
-            value: Candidate name.
-
-        Returns:
-            The validated name.
-
-        Raises:
-            ValueError: If the name does not contain exactly one slash
-                or either segment is empty.
-        """
-        org, sep, short = value.partition("/")
-
-        if not sep or not org or not short or "/" in short:
-            raise ValueError(f"name must be namespaced as 'org/short', got: {value!r}")
-
-        return value
-
-    @field_validator("wheel_url")
-    @classmethod
-    def _check_wheel_url(cls, value: str) -> str:
-        """Reject wheel URLs that are not HTTPS or do not point at a ``.whl``.
-
-        The URL path must end in ``.whl``; query strings and fragments
-        are allowed so signed-download URLs (e.g. presigned Artifact
-        Registry / S3 links) can be passed through unchanged.
-
-        Args:
-            value: Candidate URL.
-
-        Returns:
-            The validated URL.
-
-        Raises:
-            ValueError: If the URL is not HTTPS or its path does not
-                end in ``.whl``.
-        """
-        parsed = urlparse(value)
-
-        if parsed.scheme != "https":
-            raise ValueError(f"wheel_url must be an HTTPS URL, got: {value!r}")
-
-        if not parsed.path.endswith(".whl"):
-            raise ValueError(f"wheel_url path must end in '.whl', got: {value!r}")
-
-        return value
-
-    @field_validator("sha256")
-    @classmethod
-    def _check_sha256(cls, value: str) -> str:
-        """Reject digests that are not 64 lowercase hex characters.
-
-        Args:
-            value: Candidate digest.
-
-        Returns:
-            The validated digest.
-
-        Raises:
-            ValueError: If the value is not 64 lowercase hex characters.
-        """
-        if not _SHA256_RE.fullmatch(value):
-            raise ValueError(f"sha256 must be 64 lowercase hex characters, got: {value!r}")
-
-        return value
 
 
 class ProviderInstallation(BaseModel):
