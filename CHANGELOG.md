@@ -1,3 +1,19 @@
+## v6.0.0 (2026-07-19)
+
+### BREAKING CHANGE
+
+- register_provider_version and
+RegisterProviderVersionRequest are removed (the POST /provider-versions
+endpoint no longer exists); get_organization(organization_id) is
+replaced by get_current_organization(); OrganizationStatus is realigned
+to the API's real values (bootstrapping, ready, bootstrap_failed,
+deactivating, deleted — 'active' removed); ProviderVersion.runtime_version
+is now optional.
+
+### Feat
+
+- publish provider versions by wheel upload
+
 ## v5.0.0 (2026-05-26)
 
 ### BREAKING CHANGE
