@@ -64,15 +64,21 @@ class Provider(BaseModel):
 
 
 class ProviderVersion(BaseModel):
-    """A published version of a provider."""
+    """A published version of a provider.
+
+    Attributes:
+        wheel_sha256: SHA-256 digest of the wheel bytes, computed
+            server-side at publish time as a catalog audit field.
+        package_name: Importable Python package name inside the
+            published wheel. ``None`` when the runtime must infer it
+            from installed wheel metadata.
+    """
 
     prefix: str = Field(frozen=True)
     name: str = Field(frozen=True)
     version: str = Field(frozen=True)
-    runtime_version: str | None = None
-    image_url: str | None = None
-    wheel_url: str | None = None
-    runtime_image: str | None = None
+    wheel_sha256: str | None = None
+    package_name: str | None = None
     entrypoint: list[str] | None = None
     source_hash: str | None = None
     build_id: str | None = None
