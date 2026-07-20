@@ -1,3 +1,16 @@
+## v8.0.0 (2026-07-20)
+
+### BREAKING CHANGE
+
+- ProviderVersion drops wheel_url, image_url,
+runtime_image, and runtime_version (none were ever populated by the
+API). Adds wheel_sha256 (str | None) and package_name (str | None) to
+match the actual API response fields.
+
+### Feat
+
+- realign ProviderVersion with the wheel-registry API response
+
 ## v7.0.0 (2026-07-20)
 
 ### BREAKING CHANGE
