@@ -1,3 +1,15 @@
+## v7.0.0 (2026-07-20)
+
+### BREAKING CHANGE
+
+- All agent, task/board, assist, and LLM-settings client
+methods, models, and enums are removed. Consumers using these surfaces must
+migrate off them; they map to platform features that no longer exist.
+
+### Feat
+
+- remove retired platform-agent, tasks, and LLM-settings surfaces
+
 ## v6.0.0 (2026-07-19)
 
 ### BREAKING CHANGE
