@@ -1,3 +1,9 @@
+## v9.0.1 (2026-07-22)
+
+### Fix
+
+- **ci**: dispatch sdk updates to pragma-providers
+
 ## v9.0.0 (2026-07-22)
 
 ### BREAKING CHANGE
