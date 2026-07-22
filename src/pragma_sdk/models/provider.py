@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, computed_field
 
-from pragma_sdk.models.enums import ProviderScope, ResourceTier, UpgradePolicy, VersionStatus
+from pragma_sdk.models.enums import ProviderScope, UpgradePolicy, VersionStatus
 
 
 class ProviderAuthor(BaseModel):
@@ -121,7 +121,6 @@ class ProviderInstallation(BaseModel):
     name: str = Field(frozen=True)
     installed_version: str
     upgrade_policy: UpgradePolicy
-    resource_tier: ResourceTier
     config: dict[str, str] | None = None
     current_version: str | None = None
     current_image: str | None = None

@@ -65,14 +65,6 @@ class ProviderScope(StrEnum):
     TENANT = "tenant"
 
 
-class ResourceTier(StrEnum):
-    """Resource tier for installed providers."""
-
-    FREE = "free"
-    STANDARD = "standard"
-    PERFORMANCE = "performance"
-
-
 class OrganizationStatus(StrEnum):
     """Lifecycle status of an organization.
 

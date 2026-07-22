@@ -31,7 +31,6 @@ from pragma_sdk.models import (
     ProviderVersionMetadata,
     Resource,
     ResourceSchema,
-    ResourceTier,
     UpgradePolicy,
     UserInfo,
 )
@@ -702,7 +701,6 @@ class PragmaClient(BaseClient):
         self,
         provider_name: str,
         version: str | None = None,
-        resource_tier: ResourceTier | str = ResourceTier.STANDARD,
         upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
         config: dict[str, str] | None = None,
     ) -> ProviderInstallation:
@@ -711,7 +709,6 @@ class PragmaClient(BaseClient):
         Args:
             provider_name: Namespaced provider name ('org/name').
             version: Specific version to install (latest if None).
-            resource_tier: Resource tier for the installation.
             upgrade_policy: Upgrade policy for the installation.
             config: Key-value pairs injected as environment variables
                 on the provider deployment.
@@ -725,7 +722,6 @@ class PragmaClient(BaseClient):
         _validate_provider_name(provider_name)
         data: dict = {
             "provider_name": provider_name,
-            "resource_tier": resource_tier,
             "upgrade_policy": upgrade_policy,
         }
 
@@ -1383,7 +1379,6 @@ class AsyncPragmaClient(BaseClient):
         self,
         provider_name: str,
         version: str | None = None,
-        resource_tier: ResourceTier | str = ResourceTier.STANDARD,
         upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
         config: dict[str, str] | None = None,
     ) -> ProviderInstallation:
@@ -1392,7 +1387,6 @@ class AsyncPragmaClient(BaseClient):
         Args:
             provider_name: Namespaced provider name ('org/name').
             version: Specific version to install (latest if None).
-            resource_tier: Resource tier for the installation.
             upgrade_policy: Upgrade policy for the installation.
             config: Key-value pairs injected as environment variables
                 on the provider deployment.
@@ -1406,7 +1400,6 @@ class AsyncPragmaClient(BaseClient):
         _validate_provider_name(provider_name)
         data: dict = {
             "provider_name": provider_name,
-            "resource_tier": resource_tier,
             "upgrade_policy": upgrade_policy,
         }
 
