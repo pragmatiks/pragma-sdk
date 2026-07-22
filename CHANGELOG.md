@@ -1,3 +1,14 @@
+## v9.0.0 (2026-07-22)
+
+### BREAKING CHANGE
+
+- ProviderAuthor.kind is removed and
+ProviderAuthor.organization_id is now required.
+
+### Fix
+
+- realign ProviderAuthor with the catalog API response
+
 ## v8.0.0 (2026-07-20)
 
 ### BREAKING CHANGE
