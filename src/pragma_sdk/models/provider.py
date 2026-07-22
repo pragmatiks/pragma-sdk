@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -13,16 +13,13 @@ from pragma_sdk.models.enums import ProviderScope, ResourceTier, UpgradePolicy, 
 class ProviderAuthor(BaseModel):
     """Author information for a provider.
 
-    ``kind`` discriminates between providers owned by Pragmatiks
-    (``"platform"``) and providers owned by a customer organization
-    (``"customer"``). Platform-owned providers leave ``organization_id``
-    as ``None``; customer-owned providers must populate it.
-    ``display_name`` is the human-facing label shown in catalog listings
-    and the web UI.
+    Every provider is owned by exactly one publishing organization,
+    identified by ``organization_id``. First-party providers are owned
+    by the reserved ``pragmatiks`` organization. ``display_name`` is the
+    human-facing label shown in catalog listings and the web UI.
     """
 
-    kind: Literal["customer", "platform"]
-    organization_id: str | None = None
+    organization_id: str
     display_name: str
 
 
