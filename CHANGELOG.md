@@ -1,3 +1,14 @@
+## v10.0.0 (2026-07-22)
+
+### BREAKING CHANGE
+
+- ResourceTier enum, ProviderInstallation.resource_tier,
+and the install_provider resource_tier parameter are removed.
+
+### Feat
+
+- remove the ResourceTier concept
+
 ## v9.0.1 (2026-07-22)
 
 ### Fix
