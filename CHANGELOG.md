@@ -1,3 +1,9 @@
+## v11.0.0 (2026-07-24)
+
+### Feat
+
+- align project models with the API contract
+
 ## v10.0.0 (2026-07-22)
 
 ### BREAKING CHANGE
