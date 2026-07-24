@@ -358,7 +358,7 @@ class PragmaClient(BaseClient):
 
         Args:
             project_id: Project identifier.
-            request: Fields to update. ``slug`` is immutable and not included.
+            request: Fields to update. Only ``name`` may change.
 
         Returns:
             The updated project.
@@ -376,7 +376,7 @@ class PragmaClient(BaseClient):
     def delete_project(self, project_id: str, request: DeleteProjectRequest) -> None:
         """Hard-delete a project with typed confirmation.
 
-        The caller must pass the project's slug in ``request.confirmation``;
+        The caller must pass the project's name in ``request.confirmation``;
         the server rejects the request if the value does not match. By
         default the server also refuses to delete a project that still
         holds resources. Set ``request.orphan_resources`` to ``True`` to
@@ -384,7 +384,7 @@ class PragmaClient(BaseClient):
 
         Args:
             project_id: Project identifier to delete.
-            request: Confirmation payload carrying the project's slug and
+            request: Confirmation payload carrying the project's name and
                 optional ``orphan_resources`` flag.
 
         Raises:
@@ -1043,7 +1043,7 @@ class AsyncPragmaClient(BaseClient):
 
         Args:
             project_id: Project identifier.
-            request: Fields to update. ``slug`` is immutable and not included.
+            request: Fields to update. Only ``name`` may change.
 
         Returns:
             The updated project.
@@ -1061,7 +1061,7 @@ class AsyncPragmaClient(BaseClient):
     async def delete_project(self, project_id: str, request: DeleteProjectRequest) -> None:
         """Hard-delete a project with typed confirmation.
 
-        The caller must pass the project's slug in ``request.confirmation``;
+        The caller must pass the project's name in ``request.confirmation``;
         the server rejects the request if the value does not match. By
         default the server also refuses to delete a project that still
         holds resources. Set ``request.orphan_resources`` to ``True`` to
@@ -1069,7 +1069,7 @@ class AsyncPragmaClient(BaseClient):
 
         Args:
             project_id: Project identifier to delete.
-            request: Confirmation payload carrying the project's slug and
+            request: Confirmation payload carrying the project's name and
                 optional ``orphan_resources`` flag.
 
         Raises:
