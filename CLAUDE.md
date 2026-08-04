@@ -67,7 +67,7 @@ If you find yourself thinking "I'm pretty sure this library does X" or "the API 
 
 Before writing custom code, work through these in order:
 
-1. **Reuse what is already in the project.** Check `pyproject.toml` and lockfiles for an existing dependency that solves the problem. Grep / graphify the codebase for prior patterns. The cheapest correct answer is already on disk.
+1. **Reuse what is already in the project.** Check `pyproject.toml` and lockfiles for an existing dependency that solves the problem. Grep the codebase for prior patterns. The cheapest correct answer is already on disk.
 2. **Adopt an established external library.** Look for popular, state-of-the-art, actively maintained libraries. Verify GitHub stars / last release / open critical issues / maintainer reputation. A boring widely-used library beats a custom implementation.
 3. **Custom code, only as a last resort.** Only after 1 and 2 fail should you write it from scratch.
 
@@ -302,13 +302,3 @@ The correct developer flow:
 ### Tag format
 
 `v{version}` (e.g. `v4.2.0`).
-
-## graphify
-
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-
-Rules:
-- ALWAYS read graphify-out/GRAPH_REPORT.md before reading any source files, running grep/glob searches, or answering codebase questions. The graph is your primary map of the codebase.
-- IF graphify-out/wiki/index.md EXISTS, navigate it instead of reading raw files
-- For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
