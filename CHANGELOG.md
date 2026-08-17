@@ -1,3 +1,9 @@
+## v11.1.0 (2026-08-17)
+
+### Feat
+
+- **client**: wait_deactivated helper for resources
+
 ## v11.0.0 (2026-07-24)
 
 ### Feat
