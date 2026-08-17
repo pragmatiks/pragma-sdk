@@ -1815,6 +1815,54 @@ class ProjectResources:
 
             time.sleep(poll_interval)
 
+    def wait_deactivated(
+        self,
+        provider: str,
+        resource: str,
+        name: str,
+        *,
+        timeout: float = 300.0,
+        poll_interval: float = 2.0,
+    ) -> dict[str, Any]:
+        """Poll a project-scoped resource until it reaches DRAFT or FAILED.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+            timeout: Maximum seconds to wait before raising :class:`TimeoutError`.
+            poll_interval: Seconds between polls.
+
+        Returns:
+            Final resource payload.
+
+        Raises:
+            ResourceFailedError: If the resource transitions to FAILED.
+            TimeoutError: If the resource does not reach DRAFT within ``timeout``.
+        """
+        deadline = time.monotonic() + timeout
+
+        while True:
+            payload = self.get_resource(provider, resource, name)
+            state = payload.get("lifecycle_state") if isinstance(payload, dict) else None
+
+            if state == LifecycleState.DRAFT.value:
+                return payload
+
+            if state == LifecycleState.FAILED.value:
+                raise ResourceFailedError(
+                    resource_id=f"{self._project_id}::{provider}::{resource}::{name}",
+                    error=payload.get("error") if isinstance(payload, dict) else None,
+                    resource_data=payload if isinstance(payload, dict) else None,
+                )
+
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"Resource {self._project_id}::{provider}::{resource}::{name} did not reach DRAFT within {timeout}s"
+                )
+
+            time.sleep(poll_interval)
+
 
 class AsyncProjectResources:
     """Project-scoped async resource operations for :class:`AsyncPragmaClient`.
@@ -2040,6 +2088,55 @@ class AsyncProjectResources:
             if loop.time() >= deadline:
                 raise TimeoutError(
                     f"Resource {self._project_id}::{provider}::{resource}::{name} did not reach READY within {timeout}s"
+                )
+
+            await asyncio.sleep(poll_interval)
+
+    async def wait_deactivated(
+        self,
+        provider: str,
+        resource: str,
+        name: str,
+        *,
+        timeout: float = 300.0,
+        poll_interval: float = 2.0,
+    ) -> dict[str, Any]:
+        """Poll a project-scoped resource until it reaches DRAFT or FAILED.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+            timeout: Maximum seconds to wait before raising :class:`TimeoutError`.
+            poll_interval: Seconds between polls.
+
+        Returns:
+            Final resource payload.
+
+        Raises:
+            ResourceFailedError: If the resource transitions to FAILED.
+            TimeoutError: If the resource does not reach DRAFT within ``timeout``.
+        """
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+
+        while True:
+            payload = await self.get_resource(provider, resource, name)
+            state = payload.get("lifecycle_state") if isinstance(payload, dict) else None
+
+            if state == LifecycleState.DRAFT.value:
+                return payload
+
+            if state == LifecycleState.FAILED.value:
+                raise ResourceFailedError(
+                    resource_id=f"{self._project_id}::{provider}::{resource}::{name}",
+                    error=payload.get("error") if isinstance(payload, dict) else None,
+                    resource_data=payload if isinstance(payload, dict) else None,
+                )
+
+            if loop.time() >= deadline:
+                raise TimeoutError(
+                    f"Resource {self._project_id}::{provider}::{resource}::{name} did not reach DRAFT within {timeout}s"
                 )
 
             await asyncio.sleep(poll_interval)
