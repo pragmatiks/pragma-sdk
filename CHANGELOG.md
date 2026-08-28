@@ -1,3 +1,16 @@
+## v12.0.0 (2026-08-28)
+
+### BREAKING CHANGE
+
+- deactivate_resource drops the model= parameter and returns
+TeardownResponse; delete_resource returns TeardownResponse instead of None;
+waiter timeout=0 now means wait forever instead of failing immediately.
+Requires a Pragmatiks API with teardown dry-run support (pragma-os 23ccb4db).
+
+### Feat
+
+- teardown dry-run and impact list, wait_deleted, forever timeouts, lifecycle event stream
+
 ## v11.1.0 (2026-08-17)
 
 ### Feat
