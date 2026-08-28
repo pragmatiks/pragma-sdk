@@ -108,7 +108,7 @@ class ResourceIdentity(BaseModel):
 
     @property
     def canonical(self) -> str:
-        """Return the canonical ``project::provider::resource::name`` string.
+        """Canonical ``project::provider::resource::name`` string.
 
         Returns:
             Flat canonical identifier suitable for display, database keys,

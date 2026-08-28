@@ -51,7 +51,7 @@ class Provider(BaseModel):
     @computed_field
     @property
     def canonical(self) -> str:
-        """Return the slash-joined ``prefix/name`` canonical string.
+        """Slash-joined ``prefix/name`` canonical string.
 
         Returns:
             Display form of the provider identity, used in CLI output,
@@ -90,7 +90,7 @@ class ProviderVersion(BaseModel):
     @computed_field
     @property
     def canonical(self) -> str:
-        """Return the slash-joined ``prefix/name`` canonical string.
+        """Slash-joined ``prefix/name`` canonical string.
 
         Returns:
             Display form of the provider identity this version belongs to.
@@ -131,7 +131,7 @@ class ProviderInstallation(BaseModel):
     @computed_field
     @property
     def canonical(self) -> str:
-        """Return the slash-joined ``prefix/name`` canonical string.
+        """Slash-joined ``prefix/name`` canonical string.
 
         Returns:
             Display form of the provider identity this installation

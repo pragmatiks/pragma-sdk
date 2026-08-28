@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import time
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -22,6 +23,7 @@ from pragma_sdk.exceptions import (
 )
 from pragma_sdk.models import (
     DeploymentResult,
+    LifecycleEventFrame,
     Organization,
     PaginatedResponse,
     Provider,
@@ -31,6 +33,7 @@ from pragma_sdk.models import (
     ProviderVersionMetadata,
     Resource,
     ResourceSchema,
+    TeardownResponse,
     UpgradePolicy,
     UserInfo,
 )
@@ -1564,8 +1567,52 @@ class AsyncPragmaClient(BaseClient):
         """  # noqa: DOC502
         await self._request("POST", f"/organizations/{organization_id}/cleanup")
 
+    async def stream_lifecycle_events(self, *, timeout: float | None = None) -> AsyncGenerator[LifecycleEventFrame]:
+        """Stream resource lifecycle transitions as they happen.
 
-def _scoped_path(project_id: str, *suffix: str) -> str:
+        Consumes the API's server-sent event stream and yields one frame per
+        transition. The stream is scoped to the authenticated organization by
+        the API and stays open until the caller stops consuming or the budget
+        expires. The budget is checked whenever the API writes, which its
+        keepalives guarantee at least every 15 seconds.
+
+        A stream that ends normally says nothing about why: the API closes the
+        body cleanly whether it was restarted, lost its backing subscription,
+        or the caller was disconnected on purpose. Callers that need continuity
+        reconnect or fall back to polling rather than treat the end as final.
+
+        Args:
+            timeout: Maximum seconds to keep the stream open; ``0`` or None
+                streams forever.
+
+        Yields:
+            One frame per resource state transition.
+
+        Raises:
+            TimeoutError: If the stream is still open when ``timeout`` expires.
+            httpx.ReadTimeout: If the API goes silent for longer than two
+                keepalive intervals, meaning the connection died.
+            httpx.HTTPStatusError: If the API refuses the stream.
+        """  # noqa: DOC502
+        loop = asyncio.get_running_loop()
+        deadline = compute_deadline(timeout, loop.time())
+
+        async with self._client.stream(
+            "GET",
+            "/events/stream",
+            timeout=httpx.Timeout(self.timeout, read=30.0),
+        ) as response:
+            response.raise_for_status()
+
+            async for line in response.aiter_lines():
+                if deadline is not None and loop.time() >= deadline:
+                    raise TimeoutError(f"Lifecycle event stream did not close within {timeout}s")
+
+                if line.startswith("data:"):
+                    yield LifecycleEventFrame.model_validate_json(line.removeprefix("data:"))
+
+
+def build_scoped_path(project_id: str, *suffix: str) -> str:
     """Build a project-scoped API path with the project ID URL-encoded.
 
     Args:
@@ -1577,6 +1624,37 @@ def _scoped_path(project_id: str, *suffix: str) -> str:
     """
     tail = "/".join(suffix)
     return f"/projects/{quote(project_id, safe='')}/resources" + (f"/{tail}" if tail else "")
+
+
+def compute_deadline(timeout: float | None, now: float) -> float | None:
+    """Turn a waiting budget into an absolute deadline.
+
+    Args:
+        timeout: Seconds to wait; ``0`` or ``None`` means wait forever.
+        now: Current reading of the caller's monotonic clock.
+
+    Returns:
+        Deadline on the caller's clock, or None when the caller waits forever.
+    """
+    return now + timeout if timeout else None
+
+
+def raise_if_resource_failed(resource_id: str, payload: dict[str, Any]) -> None:
+    """Turn a FAILED resource payload into an exception.
+
+    Args:
+        resource_id: Fully-qualified identity of the polled resource.
+        payload: Resource record returned by the last poll.
+
+    Raises:
+        ResourceFailedError: If the payload reports the FAILED state.
+    """
+    if payload.get("lifecycle_state") == LifecycleState.FAILED.value:
+        raise ResourceFailedError(
+            resource_id=resource_id,
+            error=payload.get("error"),
+            resource_data=payload,
+        )
 
 
 class ProjectResources:
@@ -1645,7 +1723,7 @@ class ProjectResources:
         if reveal:
             params["reveal"] = "true"
 
-        response = self._client._request("GET", _scoped_path(self._project_id), params=params)
+        response = self._client._request("GET", build_scoped_path(self._project_id), params=params)
         if model is not None:
             return [model.model_validate(item) for item in response]
         return response
@@ -1678,7 +1756,7 @@ class ProjectResources:
         if reveal:
             params["reveal"] = "true"
 
-        response = self._client._request("GET", _scoped_path(self._project_id, "by-name"), params=params)
+        response = self._client._request("GET", build_scoped_path(self._project_id, "by-name"), params=params)
         if model is not None:
             return model.model_validate(response)
         return response
@@ -1717,7 +1795,7 @@ class ProjectResources:
 
         response = self._client._request(
             "POST",
-            _scoped_path(self._project_id, "apply"),
+            build_scoped_path(self._project_id, "apply"),
             json_data=resource.model_dump(),
             params=params,
         )
@@ -1725,47 +1803,61 @@ class ProjectResources:
             return model.model_validate(response)
         return response
 
-    def deactivate_resource[ResourceT: Resource](
+    def deactivate_resource(
         self,
         provider: str,
         resource: str,
         name: str,
         *,
-        model: type[ResourceT] | None = None,
-    ) -> ResourceT | dict[str, Any]:
+        dry_run: bool = False,
+    ) -> TeardownResponse:
         """Deactivate a resource in this project, triggering provider teardown.
 
         Args:
             provider: Provider that manages the resource.
             resource: Resource type name.
             name: Resource instance name.
-            model: Resource subclass for typed response; returns raw dict if None.
+            dry_run: Preview the deactivation and its impact without changing
+                anything.
 
         Returns:
-            Resource in deleting state as typed instance or raw dict.
+            The resource as the deactivation left it, with the impact list the
+            pre-flight walk predicted.
 
         Raises:
             httpx.HTTPStatusError: If resource not found or deactivation fails.
         """  # noqa: DOC502
-        params = {"provider": provider, "resource": resource, "name": name}
-        response = self._client._request("POST", _scoped_path(self._project_id, "deactivate"), params=params)
-        if model is not None:
-            return model.model_validate(response)
-        return response
+        params = {"provider": provider, "resource": resource, "name": name, "dry_run": dry_run}
+        response = self._client._request("POST", build_scoped_path(self._project_id, "deactivate"), params=params)
+        return TeardownResponse.model_validate(response)
 
-    def delete_resource(self, provider: str, resource: str, name: str) -> None:
+    def delete_resource(
+        self,
+        provider: str,
+        resource: str,
+        name: str,
+        *,
+        dry_run: bool = False,
+    ) -> TeardownResponse:
         """Hard-delete a resource in this project.
 
         Args:
             provider: Provider that manages the resource.
             resource: Resource type name.
             name: Resource instance name.
+            dry_run: Preview the removal and its impact without changing
+                anything.
+
+        Returns:
+            The resource as the removal left it, or its untouched state on a
+            dry run, with the impact list the pre-flight walk predicted.
 
         Raises:
             httpx.HTTPStatusError: If resource not found or deletion fails.
         """  # noqa: DOC502
-        params = {"provider": provider, "resource": resource, "name": name}
-        self._client._request("DELETE", _scoped_path(self._project_id, "by-name"), params=params)
+        params = {"provider": provider, "resource": resource, "name": name, "dry_run": dry_run}
+        response = self._client._request("DELETE", build_scoped_path(self._project_id, "by-name"), params=params)
+        return TeardownResponse.model_validate(response)
 
     def wait_ready(
         self,
@@ -1773,7 +1865,7 @@ class ProjectResources:
         resource: str,
         name: str,
         *,
-        timeout: float = 300.0,
+        timeout: float | None = 300.0,
         poll_interval: float = 2.0,
     ) -> dict[str, Any]:
         """Poll a project-scoped resource until it reaches READY or FAILED.
@@ -1782,7 +1874,8 @@ class ProjectResources:
             provider: Provider that manages the resource.
             resource: Resource type name.
             name: Resource instance name.
-            timeout: Maximum seconds to wait before raising :class:`TimeoutError`.
+            timeout: Maximum seconds to wait before raising :class:`TimeoutError`;
+                ``0`` or None waits forever.
             poll_interval: Seconds between polls.
 
         Returns:
@@ -1791,24 +1884,18 @@ class ProjectResources:
         Raises:
             ResourceFailedError: If the resource transitions to FAILED.
             TimeoutError: If the resource does not reach READY within ``timeout``.
-        """
-        deadline = time.monotonic() + timeout
+        """  # noqa: DOC502
+        deadline = compute_deadline(timeout, time.monotonic())
 
         while True:
             payload = self.get_resource(provider, resource, name)
-            state = payload.get("lifecycle_state") if isinstance(payload, dict) else None
 
-            if state == LifecycleState.READY.value:
+            if payload.get("lifecycle_state") == LifecycleState.READY.value:
                 return payload
 
-            if state == LifecycleState.FAILED.value:
-                raise ResourceFailedError(
-                    resource_id=f"{self._project_id}::{provider}::{resource}::{name}",
-                    error=payload.get("error") if isinstance(payload, dict) else None,
-                    resource_data=payload if isinstance(payload, dict) else None,
-                )
+            raise_if_resource_failed(f"{self._project_id}::{provider}::{resource}::{name}", payload)
 
-            if time.monotonic() >= deadline:
+            if deadline is not None and time.monotonic() >= deadline:
                 raise TimeoutError(
                     f"Resource {self._project_id}::{provider}::{resource}::{name} did not reach READY within {timeout}s"
                 )
@@ -1821,7 +1908,7 @@ class ProjectResources:
         resource: str,
         name: str,
         *,
-        timeout: float = 300.0,
+        timeout: float | None = 300.0,
         poll_interval: float = 2.0,
     ) -> dict[str, Any]:
         """Poll a project-scoped resource until it reaches DRAFT or FAILED.
@@ -1830,7 +1917,8 @@ class ProjectResources:
             provider: Provider that manages the resource.
             resource: Resource type name.
             name: Resource instance name.
-            timeout: Maximum seconds to wait before raising :class:`TimeoutError`.
+            timeout: Maximum seconds to wait before raising :class:`TimeoutError`;
+                ``0`` or None waits forever.
             poll_interval: Seconds between polls.
 
         Returns:
@@ -1839,26 +1927,68 @@ class ProjectResources:
         Raises:
             ResourceFailedError: If the resource transitions to FAILED.
             TimeoutError: If the resource does not reach DRAFT within ``timeout``.
-        """
-        deadline = time.monotonic() + timeout
+        """  # noqa: DOC502
+        deadline = compute_deadline(timeout, time.monotonic())
 
         while True:
             payload = self.get_resource(provider, resource, name)
-            state = payload.get("lifecycle_state") if isinstance(payload, dict) else None
 
-            if state == LifecycleState.DRAFT.value:
+            if payload.get("lifecycle_state") == LifecycleState.DRAFT.value:
                 return payload
 
-            if state == LifecycleState.FAILED.value:
-                raise ResourceFailedError(
-                    resource_id=f"{self._project_id}::{provider}::{resource}::{name}",
-                    error=payload.get("error") if isinstance(payload, dict) else None,
-                    resource_data=payload if isinstance(payload, dict) else None,
-                )
+            raise_if_resource_failed(f"{self._project_id}::{provider}::{resource}::{name}", payload)
 
-            if time.monotonic() >= deadline:
+            if deadline is not None and time.monotonic() >= deadline:
                 raise TimeoutError(
                     f"Resource {self._project_id}::{provider}::{resource}::{name} did not reach DRAFT within {timeout}s"
+                )
+
+            time.sleep(poll_interval)
+
+    def wait_deleted(
+        self,
+        provider: str,
+        resource: str,
+        name: str,
+        *,
+        timeout: float | None = 300.0,
+        poll_interval: float = 2.0,
+    ) -> None:
+        """Poll a project-scoped resource until it is gone from the graph.
+
+        Absence is the only success signal, so a resource that never existed is
+        indistinguishable from one that was deleted: a typo in ``provider``,
+        ``resource``, or ``name`` returns immediately as if the wait succeeded.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+            timeout: Maximum seconds to wait before raising :class:`TimeoutError`;
+                ``0`` or None waits forever.
+            poll_interval: Seconds between polls.
+
+        Raises:
+            ResourceFailedError: If the resource transitions to FAILED.
+            TimeoutError: If the resource still exists when ``timeout`` expires.
+            httpx.HTTPStatusError: If a poll fails for any reason other than the
+                resource being gone.
+        """  # noqa: DOC502
+        deadline = compute_deadline(timeout, time.monotonic())
+
+        while True:
+            try:
+                payload = self.get_resource(provider, resource, name)
+            except httpx.HTTPStatusError as error:
+                if error.response.status_code == httpx.codes.NOT_FOUND:
+                    return
+                raise
+
+            raise_if_resource_failed(f"{self._project_id}::{provider}::{resource}::{name}", payload)
+
+            if deadline is not None and time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"Resource {self._project_id}::{provider}::{resource}::{name} was not deleted within {timeout}s"
                 )
 
             time.sleep(poll_interval)
@@ -1924,7 +2054,7 @@ class AsyncProjectResources:
         if reveal:
             params["reveal"] = "true"
 
-        response = await self._client._request("GET", _scoped_path(self._project_id), params=params)
+        response = await self._client._request("GET", build_scoped_path(self._project_id), params=params)
         if model is not None:
             return [model.model_validate(item) for item in response]
         return response
@@ -1957,7 +2087,7 @@ class AsyncProjectResources:
         if reveal:
             params["reveal"] = "true"
 
-        response = await self._client._request("GET", _scoped_path(self._project_id, "by-name"), params=params)
+        response = await self._client._request("GET", build_scoped_path(self._project_id, "by-name"), params=params)
         if model is not None:
             return model.model_validate(response)
         return response
@@ -1993,7 +2123,7 @@ class AsyncProjectResources:
 
         response = await self._client._request(
             "POST",
-            _scoped_path(self._project_id, "apply"),
+            build_scoped_path(self._project_id, "apply"),
             json_data=resource.model_dump(),
             params=params,
         )
@@ -2001,47 +2131,61 @@ class AsyncProjectResources:
             return model.model_validate(response)
         return response
 
-    async def deactivate_resource[ResourceT: Resource](
+    async def deactivate_resource(
         self,
         provider: str,
         resource: str,
         name: str,
         *,
-        model: type[ResourceT] | None = None,
-    ) -> ResourceT | dict[str, Any]:
+        dry_run: bool = False,
+    ) -> TeardownResponse:
         """Deactivate a resource in this project, triggering provider teardown.
 
         Args:
             provider: Provider that manages the resource.
             resource: Resource type name.
             name: Resource instance name.
-            model: Resource subclass for typed response; returns raw dict if None.
+            dry_run: Preview the deactivation and its impact without changing
+                anything.
 
         Returns:
-            Resource in deleting state as typed instance or raw dict.
+            The resource as the deactivation left it, with the impact list the
+            pre-flight walk predicted.
 
         Raises:
             httpx.HTTPStatusError: If resource not found or deactivation fails.
         """  # noqa: DOC502
-        params = {"provider": provider, "resource": resource, "name": name}
-        response = await self._client._request("POST", _scoped_path(self._project_id, "deactivate"), params=params)
-        if model is not None:
-            return model.model_validate(response)
-        return response
+        params = {"provider": provider, "resource": resource, "name": name, "dry_run": dry_run}
+        response = await self._client._request("POST", build_scoped_path(self._project_id, "deactivate"), params=params)
+        return TeardownResponse.model_validate(response)
 
-    async def delete_resource(self, provider: str, resource: str, name: str) -> None:
+    async def delete_resource(
+        self,
+        provider: str,
+        resource: str,
+        name: str,
+        *,
+        dry_run: bool = False,
+    ) -> TeardownResponse:
         """Hard-delete a resource in this project.
 
         Args:
             provider: Provider that manages the resource.
             resource: Resource type name.
             name: Resource instance name.
+            dry_run: Preview the removal and its impact without changing
+                anything.
+
+        Returns:
+            The resource as the removal left it, or its untouched state on a
+            dry run, with the impact list the pre-flight walk predicted.
 
         Raises:
             httpx.HTTPStatusError: If resource not found or deletion fails.
         """  # noqa: DOC502
-        params = {"provider": provider, "resource": resource, "name": name}
-        await self._client._request("DELETE", _scoped_path(self._project_id, "by-name"), params=params)
+        params = {"provider": provider, "resource": resource, "name": name, "dry_run": dry_run}
+        response = await self._client._request("DELETE", build_scoped_path(self._project_id, "by-name"), params=params)
+        return TeardownResponse.model_validate(response)
 
     async def wait_ready(
         self,
@@ -2049,7 +2193,7 @@ class AsyncProjectResources:
         resource: str,
         name: str,
         *,
-        timeout: float = 300.0,
+        timeout: float | None = 300.0,
         poll_interval: float = 2.0,
     ) -> dict[str, Any]:
         """Poll a project-scoped resource until it reaches READY or FAILED.
@@ -2058,7 +2202,8 @@ class AsyncProjectResources:
             provider: Provider that manages the resource.
             resource: Resource type name.
             name: Resource instance name.
-            timeout: Maximum seconds to wait before raising :class:`TimeoutError`.
+            timeout: Maximum seconds to wait before raising :class:`TimeoutError`;
+                ``0`` or None waits forever.
             poll_interval: Seconds between polls.
 
         Returns:
@@ -2067,25 +2212,19 @@ class AsyncProjectResources:
         Raises:
             ResourceFailedError: If the resource transitions to FAILED.
             TimeoutError: If the resource does not reach READY within ``timeout``.
-        """
+        """  # noqa: DOC502
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + timeout
+        deadline = compute_deadline(timeout, loop.time())
 
         while True:
             payload = await self.get_resource(provider, resource, name)
-            state = payload.get("lifecycle_state") if isinstance(payload, dict) else None
 
-            if state == LifecycleState.READY.value:
+            if payload.get("lifecycle_state") == LifecycleState.READY.value:
                 return payload
 
-            if state == LifecycleState.FAILED.value:
-                raise ResourceFailedError(
-                    resource_id=f"{self._project_id}::{provider}::{resource}::{name}",
-                    error=payload.get("error") if isinstance(payload, dict) else None,
-                    resource_data=payload if isinstance(payload, dict) else None,
-                )
+            raise_if_resource_failed(f"{self._project_id}::{provider}::{resource}::{name}", payload)
 
-            if loop.time() >= deadline:
+            if deadline is not None and loop.time() >= deadline:
                 raise TimeoutError(
                     f"Resource {self._project_id}::{provider}::{resource}::{name} did not reach READY within {timeout}s"
                 )
@@ -2098,7 +2237,7 @@ class AsyncProjectResources:
         resource: str,
         name: str,
         *,
-        timeout: float = 300.0,
+        timeout: float | None = 300.0,
         poll_interval: float = 2.0,
     ) -> dict[str, Any]:
         """Poll a project-scoped resource until it reaches DRAFT or FAILED.
@@ -2107,7 +2246,8 @@ class AsyncProjectResources:
             provider: Provider that manages the resource.
             resource: Resource type name.
             name: Resource instance name.
-            timeout: Maximum seconds to wait before raising :class:`TimeoutError`.
+            timeout: Maximum seconds to wait before raising :class:`TimeoutError`;
+                ``0`` or None waits forever.
             poll_interval: Seconds between polls.
 
         Returns:
@@ -2116,27 +2256,70 @@ class AsyncProjectResources:
         Raises:
             ResourceFailedError: If the resource transitions to FAILED.
             TimeoutError: If the resource does not reach DRAFT within ``timeout``.
-        """
+        """  # noqa: DOC502
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + timeout
+        deadline = compute_deadline(timeout, loop.time())
 
         while True:
             payload = await self.get_resource(provider, resource, name)
-            state = payload.get("lifecycle_state") if isinstance(payload, dict) else None
 
-            if state == LifecycleState.DRAFT.value:
+            if payload.get("lifecycle_state") == LifecycleState.DRAFT.value:
                 return payload
 
-            if state == LifecycleState.FAILED.value:
-                raise ResourceFailedError(
-                    resource_id=f"{self._project_id}::{provider}::{resource}::{name}",
-                    error=payload.get("error") if isinstance(payload, dict) else None,
-                    resource_data=payload if isinstance(payload, dict) else None,
-                )
+            raise_if_resource_failed(f"{self._project_id}::{provider}::{resource}::{name}", payload)
 
-            if loop.time() >= deadline:
+            if deadline is not None and loop.time() >= deadline:
                 raise TimeoutError(
                     f"Resource {self._project_id}::{provider}::{resource}::{name} did not reach DRAFT within {timeout}s"
+                )
+
+            await asyncio.sleep(poll_interval)
+
+    async def wait_deleted(
+        self,
+        provider: str,
+        resource: str,
+        name: str,
+        *,
+        timeout: float | None = 300.0,
+        poll_interval: float = 2.0,
+    ) -> None:
+        """Poll a project-scoped resource until it is gone from the graph.
+
+        Absence is the only success signal, so a resource that never existed is
+        indistinguishable from one that was deleted: a typo in ``provider``,
+        ``resource``, or ``name`` returns immediately as if the wait succeeded.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+            timeout: Maximum seconds to wait before raising :class:`TimeoutError`;
+                ``0`` or None waits forever.
+            poll_interval: Seconds between polls.
+
+        Raises:
+            ResourceFailedError: If the resource transitions to FAILED.
+            TimeoutError: If the resource still exists when ``timeout`` expires.
+            httpx.HTTPStatusError: If a poll fails for any reason other than the
+                resource being gone.
+        """  # noqa: DOC502
+        loop = asyncio.get_running_loop()
+        deadline = compute_deadline(timeout, loop.time())
+
+        while True:
+            try:
+                payload = await self.get_resource(provider, resource, name)
+            except httpx.HTTPStatusError as error:
+                if error.response.status_code == httpx.codes.NOT_FOUND:
+                    return
+                raise
+
+            raise_if_resource_failed(f"{self._project_id}::{provider}::{resource}::{name}", payload)
+
+            if deadline is not None and loop.time() >= deadline:
+                raise TimeoutError(
+                    f"Resource {self._project_id}::{provider}::{resource}::{name} was not deleted within {timeout}s"
                 )
 
             await asyncio.sleep(poll_interval)

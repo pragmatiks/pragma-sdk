@@ -3,6 +3,7 @@
 from pragma_sdk.models.api import (
     BuildInfo,
     DeploymentResult,
+    LifecycleEventFrame,
     Organization,
     ProviderDeleteResult,
     ProviderInfo,
@@ -10,6 +11,8 @@ from pragma_sdk.models.api import (
     ProviderStatus,
     PushResult,
     ResourceSchema,
+    TeardownImpact,
+    TeardownResponse,
     UserInfo,
 )
 from pragma_sdk.models.base import Config, Outputs, Resource
@@ -20,6 +23,7 @@ from pragma_sdk.models.enums import (
     OrganizationStatus,
     ProviderScope,
     ResponseStatus,
+    TeardownAction,
     UpgradePolicy,
     VersionStatus,
 )
@@ -78,6 +82,7 @@ __all__ = [
     "ImmutableField",
     "ImmutableSensitiveField",
     "InvalidResourceIdentityError",
+    "LifecycleEventFrame",
     "Organization",
     "OrganizationStatus",
     "Outputs",
@@ -104,6 +109,9 @@ __all__ = [
     "SensitiveDependency",
     "SensitiveField",
     "SensitiveOutput",
+    "TeardownAction",
+    "TeardownImpact",
+    "TeardownResponse",
     "UpdateProjectRequest",
     "UpgradePolicy",
     "UserInfo",

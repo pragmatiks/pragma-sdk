@@ -738,7 +738,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
     @property
     def identity(self) -> ResourceIdentity:
-        """Return the structured identity for this resource.
+        """Structured identity for this resource.
 
         Returns:
             :class:`ResourceIdentity` composed from ``project_id``, ``provider``,

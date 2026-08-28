@@ -78,7 +78,7 @@ class Provider:
 
     @property
     def resources(self) -> dict[str, type[Resource]]:
-        """Return all resources registered with this provider.
+        """All resources registered with this provider.
 
         Returns:
             Dictionary mapping resource names to Resource classes.

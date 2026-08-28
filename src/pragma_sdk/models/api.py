@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from pydantic import Field as PydanticField
 
 from pragma_sdk.models.enums import (
@@ -14,7 +14,9 @@ from pragma_sdk.models.enums import (
     EventType,
     OrganizationStatus,
     ResponseStatus,
+    TeardownAction,
 )
+from pragma_sdk.types import LifecycleState
 
 
 class BuildInfo(BaseModel):
@@ -150,6 +152,85 @@ class ResourceSchema(BaseModel):
     tags: list[str] | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class TeardownImpact(BaseModel):
+    """One resource a teardown reaches, and what happens to it.
+
+    Attributes:
+        id: Resource identity in ``provider/resource/name`` form.
+        name: Resource instance name.
+        provider: Provider that manages the resource.
+        resource: Resource type name.
+        lifecycle_state: State the resource is in before the teardown runs.
+        action: What the teardown does to the resource.
+    """
+
+    id: str
+    name: str
+    provider: str
+    resource: str
+    lifecycle_state: LifecycleState
+    action: TeardownAction
+
+
+class TeardownResponse(BaseModel):
+    """A deactivated or removed resource, with everything the teardown reaches.
+
+    Mirrors the API response: the target resource's own fields sit alongside
+    the impact list. Resource fields other than ``lifecycle_state`` are kept as
+    model extras and reachable through ``model_extra``.
+
+    Attributes:
+        lifecycle_state: State the target resource is in after the call, or its
+            untouched state for a dry run.
+        impact: Resources the teardown reaches, the requested one first. This
+            is what the pre-flight walk predicted, not a record of what
+            happened: a write landing in between can still divert an individual
+            resource on a real call.
+        dry_run: Whether the call only previewed the teardown.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    lifecycle_state: LifecycleState
+    impact: list[TeardownImpact]
+    dry_run: bool
+
+
+class LifecycleEventFrame(BaseModel):
+    """One frame from the API's lifecycle event stream.
+
+    The API streams the full resource record after each state transition with
+    the transition metadata folded in. Resource fields the SDK does not declare
+    are kept as model extras and reachable through ``model_extra``.
+
+    Attributes:
+        id: Resource identity in ``provider/resource/name`` form.
+        project_id: Project that owns the resource.
+        provider: Provider that manages the resource.
+        resource: Resource type name.
+        name: Resource instance name.
+        lifecycle_state: State the resource is in after the transition.
+        from_state: State before the transition, absent when the API pushed the
+            record without transition metadata.
+        event_type: Lifecycle event that caused the transition.
+        action: Action the API attached to the notification.
+        error: Error message when the resource is FAILED.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    project_id: str
+    provider: str
+    resource: str
+    name: str
+    lifecycle_state: LifecycleState
+    from_state: LifecycleState | None = None
+    event_type: str | None = None
+    action: str | None = None
+    error: str | None = None
 
 
 class Organization(BaseModel):

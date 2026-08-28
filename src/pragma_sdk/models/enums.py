@@ -58,6 +58,22 @@ class UpgradePolicy(StrEnum):
     MANUAL = "manual"
 
 
+class TeardownAction(StrEnum):
+    """What a teardown does to one resource its cascade reaches.
+
+    ``TEARDOWN`` tears the resource down; ``WALK_THROUGH`` leaves it as it is
+    and carries on into what it owns; ``RELEASED`` keeps it alive because an
+    owner outside the teardown still holds it, dropping only the ownership
+    link; ``DEPENDENT_WAITING`` parks it in waiting until the resource it reads
+    from is available again.
+    """
+
+    TEARDOWN = "teardown"
+    WALK_THROUGH = "walk_through"
+    RELEASED = "released"
+    DEPENDENT_WAITING = "dependent_waiting"
+
+
 class ProviderScope(StrEnum):
     """Scope of a provider in the catalog."""
 

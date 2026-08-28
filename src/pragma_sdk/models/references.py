@@ -42,7 +42,7 @@ class _ResourceIdentityFields(BaseModel):
 
     @property
     def identity(self) -> ResourceIdentity:
-        """Return the structured :class:`ResourceIdentity` for this reference."""
+        """Structured :class:`ResourceIdentity` for this reference."""
         return ResourceIdentity(
             project_id=self.project_id,
             provider=self.provider,
@@ -52,7 +52,7 @@ class _ResourceIdentityFields(BaseModel):
 
     @property
     def canonical(self) -> str:
-        """Return the canonical ``project::provider::resource::name`` string."""
+        """Canonical ``project::provider::resource::name`` string."""
         return self.identity.canonical
 
 

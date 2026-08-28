@@ -182,17 +182,30 @@ client = PragmaClient(require_auth=True)
 
 ### HTTP Client Methods
 
-Both `PragmaClient` (sync) and `AsyncPragmaClient` (async) provide the same methods.
+Both `PragmaClient` (sync) and `AsyncPragmaClient` (async) provide the same methods, except where noted below.
 
 #### Resources
+
+Resource operations live on a project handle: `client.project("my-project").list_resources()`.
 
 | Method | Description |
 |--------|-------------|
 | `list_resources(provider, resource, tags)` | List resources with optional filters |
 | `get_resource(provider, resource, name)` | Get a specific resource |
 | `apply_resource(resource)` | Create or update a resource |
-| `delete_resource(provider, resource, name)` | Delete a resource |
-| `list_resource_types(provider)` | List available resource types from deployed providers |
+| `deactivate_resource(provider, resource, name, dry_run=False)` | Deactivate a resource; returns the teardown's impact list |
+| `delete_resource(provider, resource, name, dry_run=False)` | Delete a resource; returns the teardown's impact list |
+| `wait_ready(provider, resource, name, timeout=300)` | Poll until READY; `timeout=0` or `None` waits forever |
+| `wait_deactivated(provider, resource, name, timeout=300)` | Poll until DRAFT; `timeout=0` or `None` waits forever |
+| `wait_deleted(provider, resource, name, timeout=300)` | Poll until the resource is gone; `timeout=0` or `None` waits forever |
+
+#### Lifecycle Events
+
+On the client itself, `AsyncPragmaClient` only.
+
+| Method | Description |
+|--------|-------------|
+| `stream_lifecycle_events(timeout=None)` | Yield lifecycle event frames from the API's SSE stream; `timeout=0` or `None` streams forever |
 
 #### Providers
 
