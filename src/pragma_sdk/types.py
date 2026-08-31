@@ -24,6 +24,7 @@ class LifecycleState(StrEnum):
     READY = "ready"
     FAILED = "failed"
     DELETING = "deleting"
+    DELETED = "deleted"
 
 
 class LogEntry(BaseModel):
