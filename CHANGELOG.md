@@ -1,3 +1,15 @@
+## v13.0.0 (2026-08-31)
+
+### BREAKING CHANGE
+
+- a wait_deleted call on a name that never existed raises
+httpx.HTTPStatusError instead of returning immediately.
+
+### Feat
+
+- **client**: poll wait_deleted for DELETED state instead of 404 absence
+- **types**: add DELETED terminal lifecycle state
+
 ## v12.0.0 (2026-08-28)
 
 ### BREAKING CHANGE
