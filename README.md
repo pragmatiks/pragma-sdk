@@ -197,7 +197,7 @@ Resource operations live on a project handle: `client.project("my-project").list
 | `delete_resource(provider, resource, name, dry_run=False)` | Delete a resource; returns the teardown's impact list |
 | `wait_ready(provider, resource, name, timeout=300)` | Poll until READY; `timeout=0` or `None` waits forever |
 | `wait_deactivated(provider, resource, name, timeout=300)` | Poll until DRAFT; `timeout=0` or `None` waits forever |
-| `wait_deleted(provider, resource, name, timeout=300)` | Poll until the resource is gone; `timeout=0` or `None` waits forever |
+| `wait_deleted(provider, resource, name, timeout=300)` | Poll until DELETED; an unknown resource raises instead of returning; `timeout=0` or `None` waits forever |
 
 #### Lifecycle Events
 

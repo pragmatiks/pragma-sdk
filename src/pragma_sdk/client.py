@@ -1954,11 +1954,16 @@ class ProjectResources:
         timeout: float | None = 300.0,
         poll_interval: float = 2.0,
     ) -> None:
-        """Poll a project-scoped resource until it is gone from the graph.
+        """Poll a project-scoped resource until it reaches DELETED.
 
-        Absence is the only success signal, so a resource that never existed is
-        indistinguishable from one that was deleted: a typo in ``provider``,
-        ``resource``, or ``name`` returns immediately as if the wait succeeded.
+        Deletion is a lifecycle phase: the row survives its own teardown in the
+        DELETED state for a retention window, then is archived and stops
+        resolving. A 404 therefore carries three meanings — never existed,
+        archived before this wait started, archived mid-wait — which the wait
+        collapses into two outcomes: a 404 raised before any successful poll is
+        a lookup failure and propagates, while a 404 after the resource has been
+        observed at least once means the archive won the race against the poll
+        and counts as success.
 
         Args:
             provider: Provider that manages the resource.
@@ -1970,25 +1975,32 @@ class ProjectResources:
 
         Raises:
             ResourceFailedError: If the resource transitions to FAILED.
-            TimeoutError: If the resource still exists when ``timeout`` expires.
-            httpx.HTTPStatusError: If a poll fails for any reason other than the
-                resource being gone.
+            TimeoutError: If the resource does not reach DELETED within ``timeout``.
+            httpx.HTTPStatusError: If the first poll reports the resource as
+                unknown, or if any poll fails for another reason.
         """  # noqa: DOC502
         deadline = compute_deadline(timeout, time.monotonic())
+        observed = False
 
         while True:
             try:
                 payload = self.get_resource(provider, resource, name)
             except httpx.HTTPStatusError as error:
-                if error.response.status_code == httpx.codes.NOT_FOUND:
+                if observed and error.response.status_code == httpx.codes.NOT_FOUND:
                     return
                 raise
+
+            observed = True
+
+            if payload.get("lifecycle_state") == LifecycleState.DELETED.value:
+                return
 
             raise_if_resource_failed(f"{self._project_id}::{provider}::{resource}::{name}", payload)
 
             if deadline is not None and time.monotonic() >= deadline:
                 raise TimeoutError(
-                    f"Resource {self._project_id}::{provider}::{resource}::{name} was not deleted within {timeout}s"
+                    f"Resource {self._project_id}::{provider}::{resource}::{name} "
+                    f"did not reach DELETED within {timeout}s"
                 )
 
             time.sleep(poll_interval)
@@ -2284,11 +2296,16 @@ class AsyncProjectResources:
         timeout: float | None = 300.0,
         poll_interval: float = 2.0,
     ) -> None:
-        """Poll a project-scoped resource until it is gone from the graph.
+        """Poll a project-scoped resource until it reaches DELETED.
 
-        Absence is the only success signal, so a resource that never existed is
-        indistinguishable from one that was deleted: a typo in ``provider``,
-        ``resource``, or ``name`` returns immediately as if the wait succeeded.
+        Deletion is a lifecycle phase: the row survives its own teardown in the
+        DELETED state for a retention window, then is archived and stops
+        resolving. A 404 therefore carries three meanings — never existed,
+        archived before this wait started, archived mid-wait — which the wait
+        collapses into two outcomes: a 404 raised before any successful poll is
+        a lookup failure and propagates, while a 404 after the resource has been
+        observed at least once means the archive won the race against the poll
+        and counts as success.
 
         Args:
             provider: Provider that manages the resource.
@@ -2300,26 +2317,33 @@ class AsyncProjectResources:
 
         Raises:
             ResourceFailedError: If the resource transitions to FAILED.
-            TimeoutError: If the resource still exists when ``timeout`` expires.
-            httpx.HTTPStatusError: If a poll fails for any reason other than the
-                resource being gone.
+            TimeoutError: If the resource does not reach DELETED within ``timeout``.
+            httpx.HTTPStatusError: If the first poll reports the resource as
+                unknown, or if any poll fails for another reason.
         """  # noqa: DOC502
         loop = asyncio.get_running_loop()
         deadline = compute_deadline(timeout, loop.time())
+        observed = False
 
         while True:
             try:
                 payload = await self.get_resource(provider, resource, name)
             except httpx.HTTPStatusError as error:
-                if error.response.status_code == httpx.codes.NOT_FOUND:
+                if observed and error.response.status_code == httpx.codes.NOT_FOUND:
                     return
                 raise
+
+            observed = True
+
+            if payload.get("lifecycle_state") == LifecycleState.DELETED.value:
+                return
 
             raise_if_resource_failed(f"{self._project_id}::{provider}::{resource}::{name}", payload)
 
             if deadline is not None and loop.time() >= deadline:
                 raise TimeoutError(
-                    f"Resource {self._project_id}::{provider}::{resource}::{name} was not deleted within {timeout}s"
+                    f"Resource {self._project_id}::{provider}::{resource}::{name} "
+                    f"did not reach DELETED within {timeout}s"
                 )
 
             await asyncio.sleep(poll_interval)
