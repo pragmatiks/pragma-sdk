@@ -1,8 +1,4 @@
-"""Utilities for loading JSON schemas from provider packages.
-
-Used during the Docker build process to extract schemas for all
-resources in a provider package.
-"""
+"""Utilities for loading JSON schemas from provider packages."""
 
 from __future__ import annotations
 

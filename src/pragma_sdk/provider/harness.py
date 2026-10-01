@@ -35,6 +35,7 @@ Example:
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -49,6 +50,7 @@ class EventType(StrEnum):
     """Type of lifecycle operation being tested."""
 
     CREATE = "create"
+    OBSERVE = "observe"
     UPDATE = "update"
     DELETE = "delete"
     COPY = "copy"
@@ -107,12 +109,19 @@ class ProviderHarness:
         )
         assert create_result.success
 
+        observe_result = await harness.invoke_observe(
+            Database,
+            name="test-db",
+            config=DatabaseConfig(name="test-db")
+        )
+        assert observe_result.success
+        assert observe_result.outputs == create_result.outputs
+
         update_result = await harness.invoke_update(
             Database,
             name="test-db",
             config=DatabaseConfig(name="test-db", size_gb=20),
             previous_config=DatabaseConfig(name="test-db", size_gb=10),
-            current_outputs=create_result.outputs
         )
         assert update_result.success
 
@@ -162,6 +171,69 @@ class ProviderHarness:
         self._events.clear()
         self._results.clear()
 
+    async def invoke(
+        self,
+        event_type: EventType,
+        resource_class: type[Resource],
+        name: str,
+        config: Config,
+        previous_config: Config | None,
+        tags: list[str] | None,
+        handler: Callable[[Resource], Awaitable[Outputs | None]],
+    ) -> LifecycleResult:
+        """Run one lifecycle handler on a freshly built resource, recording the event and result.
+
+        Args:
+            event_type: Lifecycle operation being recorded.
+            resource_class: Resource subclass to test.
+            name: Resource instance name.
+            config: Configuration for the resource.
+            previous_config: Configuration recorded on the event as last applied.
+            tags: Tags to attach to the resource.
+            handler: Lifecycle method to await on the built resource.
+
+        Returns:
+            Result carrying the handler's outputs, or the exception it raised.
+        """
+        event = LifecycleEvent(
+            event_id=str(uuid4()),
+            event_type=event_type,
+            resource_class=resource_class,
+            name=name,
+            config=config,
+            previous_config=previous_config,
+        )
+        self._events.append(event)
+
+        resource = resource_class(
+            project_id=self._project_id,
+            name=name,
+            config=config,
+            outputs=None,
+            lifecycle_state=LifecycleState.PROCESSING,
+            tags=tags,
+        )
+
+        try:
+            with provider_name_scope(self._provider_name):
+                outputs = await handler(resource)
+            result = LifecycleResult(
+                success=True,
+                outputs=outputs,
+                resource=resource,
+                event=event,
+            )
+        except Exception as e:
+            result = LifecycleResult(
+                success=False,
+                error=e,
+                resource=resource,
+                event=event,
+            )
+
+        self._results.append(result)
+        return result
+
     async def invoke_create(
         self,
         resource_class: type[Resource],
@@ -180,51 +252,50 @@ class ProviderHarness:
         Returns:
             Result containing success status, outputs, and any error.
         """
-        event = LifecycleEvent(
-            event_id=str(uuid4()),
-            event_type=EventType.CREATE,
-            resource_class=resource_class,
-            name=name,
-            config=config,
-        )
-        self._events.append(event)
-
-        resource = resource_class(
-            project_id=self._project_id,
-            name=name,
-            config=config,
-            outputs=None,
-            lifecycle_state=LifecycleState.PROCESSING,
-            tags=tags,
+        return await self.invoke(
+            EventType.CREATE,
+            resource_class,
+            name,
+            config,
+            None,
+            tags,
+            lambda resource: resource.on_create(),
         )
 
-        try:
-            with provider_name_scope(self._provider_name):
-                outputs = await resource.on_create()
-            result = LifecycleResult(
-                success=True,
-                outputs=outputs,
-                resource=resource,
-                event=event,
-            )
-        except Exception as e:
-            result = LifecycleResult(
-                success=False,
-                error=e,
-                resource=resource,
-                event=event,
-            )
+    async def invoke_observe(
+        self,
+        resource_class: type[Resource],
+        name: str,
+        config: Config,
+        tags: list[str] | None = None,
+    ) -> LifecycleResult:
+        """Invoke the on_observe lifecycle method.
 
-        self._results.append(result)
-        return result
+        Args:
+            resource_class: Resource subclass to test.
+            name: Resource instance name.
+            config: Configuration the resource locates its object with.
+            tags: Tags to attach to the resource.
+
+        Returns:
+            Result whose ``outputs`` is ``None`` when the object is absent.
+        """
+        return await self.invoke(
+            EventType.OBSERVE,
+            resource_class,
+            name,
+            config,
+            None,
+            tags,
+            lambda resource: resource.on_observe(),
+        )
 
     async def invoke_update(
         self,
         resource_class: type[Resource],
         name: str,
         config: Config,
-        previous_config: Config,
-        current_outputs: Outputs | None = None,
+        previous_config: Config | None,
         tags: list[str] | None = None,
     ) -> LifecycleResult:
         """Invoke the on_update lifecycle method.
@@ -233,58 +304,27 @@ class ProviderHarness:
             resource_class: Resource subclass to test.
             name: Resource instance name.
             config: New configuration for the resource.
-            previous_config: Configuration passed to on_update for comparison.
-            current_outputs: Outputs to attach to the resource instance.
+            previous_config: Configuration passed to on_update, or ``None`` when unknown.
             tags: Tags to attach to the resource.
 
         Returns:
             Result containing success status, outputs, and any error.
         """
-        event = LifecycleEvent(
-            event_id=str(uuid4()),
-            event_type=EventType.UPDATE,
-            resource_class=resource_class,
-            name=name,
-            config=config,
-            previous_config=previous_config,
+        return await self.invoke(
+            EventType.UPDATE,
+            resource_class,
+            name,
+            config,
+            previous_config,
+            tags,
+            lambda resource: resource.on_update(previous_config),
         )
-        self._events.append(event)
-
-        resource = resource_class(
-            project_id=self._project_id,
-            name=name,
-            config=config,
-            lifecycle_state=LifecycleState.PROCESSING,
-            outputs=current_outputs,
-            tags=tags,
-        )
-
-        try:
-            with provider_name_scope(self._provider_name):
-                outputs = await resource.on_update(previous_config)
-            result = LifecycleResult(
-                success=True,
-                outputs=outputs,
-                resource=resource,
-                event=event,
-            )
-        except Exception as e:
-            result = LifecycleResult(
-                success=False,
-                error=e,
-                resource=resource,
-                event=event,
-            )
-
-        self._results.append(result)
-        return result
 
     async def invoke_delete(
         self,
         resource_class: type[Resource],
         name: str,
         config: Config,
-        current_outputs: Outputs | None = None,
         tags: list[str] | None = None,
     ) -> LifecycleResult:
         """Invoke the on_delete lifecycle method.
@@ -293,48 +333,20 @@ class ProviderHarness:
             resource_class: Resource subclass to test.
             name: Resource instance name.
             config: Configuration for the resource.
-            current_outputs: Outputs to attach to the resource instance.
             tags: Tags to attach to the resource.
 
         Returns:
             Result containing success status and any error.
         """
-        event = LifecycleEvent(
-            event_id=str(uuid4()),
-            event_type=EventType.DELETE,
-            resource_class=resource_class,
-            name=name,
-            config=config,
+        return await self.invoke(
+            EventType.DELETE,
+            resource_class,
+            name,
+            config,
+            None,
+            tags,
+            lambda resource: resource.on_delete(),
         )
-        self._events.append(event)
-
-        resource = resource_class(
-            project_id=self._project_id,
-            name=name,
-            config=config,
-            lifecycle_state=LifecycleState.PROCESSING,
-            outputs=current_outputs,
-            tags=tags,
-        )
-
-        try:
-            with provider_name_scope(self._provider_name):
-                await resource.on_delete()
-            result = LifecycleResult(
-                success=True,
-                resource=resource,
-                event=event,
-            )
-        except Exception as e:
-            result = LifecycleResult(
-                success=False,
-                error=e,
-                resource=resource,
-                event=event,
-            )
-
-        self._results.append(result)
-        return result
 
     async def invoke_copy(
         self,
@@ -342,7 +354,6 @@ class ProviderHarness:
         name: str,
         config: Config,
         context: CopyContext,
-        current_outputs: Outputs | None = None,
         tags: list[str] | None = None,
     ) -> LifecycleResult:
         """Invoke the on_copy lifecycle method.
@@ -352,7 +363,6 @@ class ProviderHarness:
             name: Source resource instance name.
             config: Configuration of the source resource.
             context: Copy context with target name, tags, strategy, and metadata.
-            current_outputs: Outputs of the source resource.
             tags: Tags on the source resource.
 
         Returns:
@@ -371,8 +381,8 @@ class ProviderHarness:
             project_id=self._project_id,
             name=name,
             config=config,
+            outputs=None,
             lifecycle_state=LifecycleState.PROCESSING,
-            outputs=current_outputs,
             tags=tags,
         )
 
@@ -402,7 +412,6 @@ class ProviderHarness:
         name: str,
         config: Config,
         patch: PatchDefinition,
-        current_outputs: Outputs | None = None,
         tags: list[str] | None = None,
     ) -> LifecycleResult:
         """Invoke the on_patch lifecycle method.
@@ -412,7 +421,6 @@ class ProviderHarness:
             name: Resource instance name.
             config: Configuration of the resource.
             patch: Patch definition to apply.
-            current_outputs: Current outputs of the resource.
             tags: Tags on the resource.
 
         Returns:
@@ -431,8 +439,8 @@ class ProviderHarness:
             project_id=self._project_id,
             name=name,
             config=config,
+            outputs=None,
             lifecycle_state=LifecycleState.PROCESSING,
-            outputs=current_outputs,
             tags=tags,
         )
 

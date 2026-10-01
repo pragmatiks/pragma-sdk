@@ -104,16 +104,19 @@ class BucketOutputs(Outputs):
 @gcp.resource("storage")
 class Bucket(Resource[BucketConfig, BucketOutputs]):
     async def on_create(self) -> BucketOutputs:
-        # Provision the bucket
+        """Provision the bucket."""
         return BucketOutputs(url=f"gs://{self.name}", created_at="...")
 
-    async def on_update(self, previous_config: BucketConfig) -> BucketOutputs:
-        # Handle config changes
-        return self.outputs
+    async def on_observe(self) -> BucketOutputs | None:
+        """Look the bucket up by identity; None when it does not exist."""
+        return BucketOutputs(url=f"gs://{self.name}", created_at="...")
+
+    async def on_update(self, previous_config: BucketConfig | None) -> BucketOutputs:
+        """Converge to self.config; previous_config is None when unknown."""
+        return BucketOutputs(url=f"gs://{self.name}", created_at="...")
 
     async def on_delete(self) -> None:
-        # Clean up
-        pass
+        """Delete the bucket; succeeds when it is already gone."""
 ```
 
 ## Field References
@@ -244,7 +247,8 @@ On the client itself, `AsyncPragmaClient` only.
 | Class | Description |
 |-------|-------------|
 | `Provider()` | Resource grouping with `@provider.resource()` decorator |
-| `Resource[ConfigT, OutputsT]` | Base class with `on_create`, `on_update`, `on_delete` |
+| `Resource[ConfigT, OutputsT]` | Base class with `on_create`, `on_observe`, `on_update`, `on_delete` |
+| `computed = True` | Class attribute for a resource with no external object; exempts it from `on_observe` |
 | `Config` | Base class for resource configuration (Pydantic model) |
 | `Outputs` | Base class for resource outputs (Pydantic model) |
 | `Field[T]` | Type alias for `T | FieldReference` |

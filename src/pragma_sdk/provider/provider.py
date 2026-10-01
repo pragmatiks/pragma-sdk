@@ -13,6 +13,21 @@ ResourceT = TypeVar("ResourceT", bound=Resource)
 RESOURCE_MARKER = "__pragma_resource__"
 
 
+class MissingObserveError(TypeError):
+    """Raised when a non-computed resource type does not define ``on_observe``."""
+
+    def __init__(self, resource_name: str) -> None:
+        """Build the error for a resource type.
+
+        Args:
+            resource_name: Registered name of the offending resource type.
+        """
+        super().__init__(
+            f'resource "{resource_name}" does not define on_observe. '
+            "Add it, or declare the resource computed, and publish a new version."
+        )
+
+
 class Provider:
     """Group Resource classes under a provider.
 
@@ -31,8 +46,11 @@ class Provider:
             async def on_create(self) -> DatabaseOutputs:
                 return DatabaseOutputs(connection_url=f"postgres://localhost/{self.config.name}")
 
-            async def on_update(self, previous_config: DatabaseConfig) -> DatabaseOutputs:
-                return self.outputs
+            async def on_observe(self) -> DatabaseOutputs | None:
+                return DatabaseOutputs(connection_url=f"postgres://localhost/{self.config.name}")
+
+            async def on_update(self, previous_config: DatabaseConfig | None) -> DatabaseOutputs:
+                return DatabaseOutputs(connection_url=f"postgres://localhost/{self.config.name}")
 
             async def on_delete(self) -> None:
                 pass
@@ -51,15 +69,29 @@ class Provider:
         Returns:
             Decorator function that registers the Resource class.
 
+        Raises:
+            TypeError: If the decorated object is not a Resource subclass or declares ``computed`` as a field.
+            MissingObserveError: If a non-computed class does not override ``on_observe``.
+            ValueError: If ``name`` is already registered on this provider.
+
         Example:
             @postgres.resource("database")
             class Database(Resource[DatabaseConfig, DatabaseOutputs]):
                 ...
-        """
+        """  # noqa: DOC502
 
         def decorator(cls: type[ResourceT]) -> type[ResourceT]:
             if not isinstance(cls, type) or not issubclass(cls, Resource):
                 raise TypeError(f"@resource() can only decorate Resource subclasses, got {cls!r}")
+
+            if "computed" in cls.model_fields:
+                raise TypeError(
+                    f'resource "{name}" declares computed as a field; '
+                    "write a bare `computed = True` without a type annotation."
+                )
+
+            if not cls.computed and cls.on_observe is Resource.on_observe:
+                raise MissingObserveError(name)
 
             cls.resource = name
 
