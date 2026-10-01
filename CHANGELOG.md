@@ -1,3 +1,14 @@
+## v14.0.0 (2026-10-01)
+
+### BREAKING CHANGE
+
+- non-computed resource types must implement on_observe,
+or importing the provider package fails at registration.
+
+### Feat
+
+- **provider**: make handlers observe-then-act with a mandatory on_observe
+
 ## v13.0.0 (2026-08-31)
 
 ### BREAKING CHANGE
