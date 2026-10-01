@@ -77,7 +77,7 @@ from pragma_sdk.models import (
     VersionStatus,
 )
 from pragma_sdk.models import Provider as ProviderModel
-from pragma_sdk.provider import Provider
+from pragma_sdk.provider import MissingObserveError, Provider
 from pragma_sdk.types import (
     CompatibilityConstraint,
     CopyContext,
@@ -119,6 +119,7 @@ __all__ = [
     "LifecycleEventFrame",
     "LifecycleState",
     "LogEntry",
+    "MissingObserveError",
     "Organization",
     "OrganizationStatus",
     "Outputs",

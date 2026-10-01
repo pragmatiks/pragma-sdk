@@ -136,6 +136,14 @@ class Dependency[ResourceT: "Resource"](_ResourceIdentityFields):
             return self._resolved
         raise RuntimeError(f"Dependency '{self.id}' not resolved. The dependent resource may not be READY yet.")
 
+    def set_resolved(self, instance: ResourceT) -> None:
+        """Set the instance that ``resolve()`` returns.
+
+        Args:
+            instance: Resolved resource this dependency points at.
+        """
+        self._resolved = instance
+
 
 type Field[T] = T | FieldReference
 """Config field that accepts a direct value or a FieldReference."""

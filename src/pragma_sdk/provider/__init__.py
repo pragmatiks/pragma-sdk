@@ -20,8 +20,11 @@ Example:
         async def on_create(self) -> DatabaseOutputs:
             return DatabaseOutputs(connection_url=f"postgres://localhost/{self.config.name}")
 
-        async def on_update(self, previous_config: DatabaseConfig) -> DatabaseOutputs:
-            return self.outputs
+        async def on_observe(self) -> DatabaseOutputs | None:
+            return DatabaseOutputs(connection_url=f"postgres://localhost/{self.config.name}")
+
+        async def on_update(self, previous_config: DatabaseConfig | None) -> DatabaseOutputs:
+            return DatabaseOutputs(connection_url=f"postgres://localhost/{self.config.name}")
 
         async def on_delete(self) -> None:
             pass
@@ -44,13 +47,14 @@ from pragma_sdk.provider.harness import (
     ProviderHarness,
 )
 from pragma_sdk.provider.loading import load_provider_schemas
-from pragma_sdk.provider.provider import RESOURCE_MARKER, Provider
+from pragma_sdk.provider.provider import RESOURCE_MARKER, MissingObserveError, Provider
 
 
 __all__ = [
     "EventType",
     "LifecycleEvent",
     "LifecycleResult",
+    "MissingObserveError",
     "Provider",
     "ProviderHarness",
     "RESOURCE_MARKER",

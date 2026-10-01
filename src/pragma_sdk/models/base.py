@@ -694,13 +694,16 @@ class Outputs(BaseModel):
 class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
     """Base class for provider-managed resources with lifecycle handlers.
 
-    Lifecycle handlers (on_create, on_update, on_delete) must be idempotent.
-    Events may be redelivered if the runtime crashes after processing but
-    before acknowledging the message. Design handlers to produce the same
-    result when called multiple times with the same input.
+    Subclasses must override ``on_observe`` unless they declare ``computed = True``.
+    Handlers must be idempotent, since events may be redelivered.
     """
 
     resource: ClassVar[str]
+    computed: ClassVar[bool] = False
+    """Whether this type has no external object and so needs no ``on_observe``.
+
+    Declare it as a bare ``computed = True``, without a type annotation.
+    """
 
     project_id: str
     name: str
@@ -760,8 +763,28 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         """Handle resource creation."""
         raise NotImplementedError(f"{self.__class__.__name__} must implement on_create()")
 
-    async def on_update(self, previous_config: ConfigT) -> OutputsT:
-        """Handle resource update with access to the previous configuration."""
+    async def on_observe(self) -> OutputsT | None:
+        """Report the external object this resource owns.
+
+        Locate it from identity and ``config`` alone; ``self.outputs`` is never populated.
+
+        Returns:
+            Outputs of the existing object, or ``None`` only when it does not exist.
+
+        Raises:
+            NotImplementedError: If the subclass does not override it.
+        """
+        raise NotImplementedError(f"{type(self).__name__} must implement on_observe")
+
+    async def on_update(self, previous_config: ConfigT | None) -> OutputsT:
+        """Converge the existing external object to ``self.config``.
+
+        Args:
+            previous_config: Configuration last applied, or ``None`` when unknown.
+
+        Returns:
+            Outputs of the converged object.
+        """
         raise NotImplementedError(f"{self.__class__.__name__} must implement on_update()")
 
     async def on_delete(self) -> None:
