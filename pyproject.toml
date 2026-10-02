@@ -4,7 +4,13 @@ version = "14.0.0"
 description = "Python SDK for the Pragmatiks platform"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = ["httpx>=0.28.1", "pydantic>=2.11.4", "pyyaml>=6.0", "structlog>=24.1.0"]
+dependencies = [
+    "httpx>=0.28.1",
+    "pydantic>=2.11.4",
+    "pydantic-settings>=2.9.1",
+    "pyyaml>=6.0",
+    "structlog>=24.1.0",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",

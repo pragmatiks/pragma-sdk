@@ -47,10 +47,12 @@ class RuntimeContext(Protocol):
             timeout: Maximum seconds to wait.
 
         Returns:
-            Resource data dict from the state notification.
+            A dict with exactly two keys: ``lifecycle_state``, the state the
+            resource reached, and ``outputs``, its outputs or ``None``.
 
         Raises:
-            TimeoutError: If target state not reached within timeout.
+            RuntimeError: If the host's wait fails, including when the target
+                state is not reached within ``timeout``.
         """
         ...
 
@@ -115,13 +117,16 @@ async def wait_for_resource_state(
     Args:
         resource_id: Unique resource ID (e.g., "provider/type/name").
         target_state: State to wait for (typically READY or FAILED).
-        timeout: Maximum seconds to wait before raising TimeoutError.
+        timeout: Maximum seconds to wait.
 
     Returns:
-        Resource data dict from the state notification.
+        A dict with exactly two keys: ``lifecycle_state``, the state the
+        resource reached, and ``outputs``, its outputs or ``None``.
 
     Raises:
-        RuntimeError: If called outside a lifecycle handler context.
+        RuntimeError: If called outside a lifecycle handler context, or the
+            host's wait fails, including when the target state is not reached
+            within ``timeout``.
 
     Example:
         ```python

@@ -36,20 +36,14 @@ from pragma_sdk.types import (
 )
 
 
-def _is_union_origin(origin: Any) -> bool:
-    """Check if a type origin represents a Union.
-
-    On Python 3.13, ``typing.Union`` and ``types.UnionType`` are distinct.
-    PEP 604 syntax (``X | Y``) produces ``types.UnionType``, while
-    ``typing.Union[X, Y]`` produces ``typing.Union``. Both must be handled.
-
-    On Python 3.14+, they are the same object so this is a no-op safety net.
+def is_union_origin(origin: Any) -> bool:
+    """Check whether a type origin is a union, from either ``typing.Union[X, Y]`` or ``X | Y``.
 
     Args:
         origin: The result of ``typing.get_origin(some_annotation)``.
 
     Returns:
-        True if the origin is either ``typing.Union`` or ``types.UnionType``.
+        True if the origin is ``typing.Union`` or ``types.UnionType``.
     """
     return origin is Union or origin is types.UnionType
 
@@ -163,7 +157,7 @@ def _find_dependency_forward_ref(annotation: Any) -> str | None:
 
         return None
 
-    if _is_union_origin(origin):
+    if is_union_origin(origin):
         for arg in typing.get_args(annotation):
             if arg is type(None):
                 continue
@@ -214,7 +208,7 @@ def _is_valid_config_field(annotation: Any) -> bool:
         if typing.get_origin(val) is Annotated:
             val = typing.get_args(val)[0]
 
-        if _is_union_origin(typing.get_origin(val)):
+        if is_union_origin(typing.get_origin(val)):
             union_args = typing.get_args(val)
 
             if FieldReference in union_args:
@@ -256,7 +250,7 @@ def _is_valid_config_field(annotation: Any) -> bool:
 
         return False
 
-    if _is_union_origin(origin):
+    if is_union_origin(origin):
         non_none_args = [a for a in typing.get_args(annotation) if a is not type(None)]
 
         if len(non_none_args) == 1:
@@ -476,7 +470,7 @@ def _collect_immutable_fields(cls: type[Config]) -> set[str]:
 
         if isinstance(origin, typing.TypeAliasType) and _has_immutable_marker(origin):
             immutable_fields.add(field_name)
-        elif _is_union_origin(origin):
+        elif is_union_origin(origin):
             non_none_args = [a for a in typing.get_args(annotation) if a is not type(None)]
 
             for arg in non_none_args:
@@ -539,7 +533,7 @@ def _collect_sensitive_fields(cls: type[Config]) -> set[str]:
 
         if isinstance(origin, typing.TypeAliasType) and _has_sensitive_marker(origin):
             sensitive_fields.add(field_name)
-        elif _is_union_origin(origin):
+        elif is_union_origin(origin):
             non_none_args = [a for a in typing.get_args(annotation) if a is not type(None)]
 
             for arg in non_none_args:
@@ -610,7 +604,7 @@ def _collect_sensitive_output_fields(cls: type[Outputs]) -> set[str]:
 
             if any(isinstance(arg, Sensitive) for arg in args[1:]):
                 sensitive_fields.add(field_name)
-        elif _is_union_origin(origin):
+        elif is_union_origin(origin):
             non_none_args = [a for a in typing.get_args(annotation) if a is not type(None)]
 
             for arg in non_none_args:
@@ -1021,15 +1015,21 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
     async def wait_ready(self, timeout: float = 60.0) -> Resource[ConfigT, OutputsT]:
         """Wait for this resource to reach READY state.
 
-        Subscribes to NATS state notifications and waits for the resource
-        to transition to READY. Updates self with the outputs from the
-        state notification.
+        Updates self with the lifecycle state and outputs the resource
+        reached.
 
         Args:
-            timeout: Maximum seconds to wait before raising TimeoutError.
+            timeout: Maximum seconds to wait.
 
         Returns:
             Self with updated outputs and lifecycle_state.
+
+        Raises:
+            RuntimeError: If called outside a lifecycle handler context, or the
+                host's wait fails, including when READY is not reached within
+                ``timeout``.
+            ValidationError: If the reached outputs do not match the
+                resource's Outputs class.
 
         Example:
             ```python
@@ -1039,14 +1039,14 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
                 await db.wait_ready(timeout=120.0)
                 return AppOutputs(db_url=db.outputs.connection_url)
             ```
-        """
+        """  # noqa: DOC502
         data = await wait_for_resource_state(self.id, LifecycleState.READY, timeout)
 
-        self.lifecycle_state = LifecycleState(data.get("lifecycle_state", "ready"))
+        self.lifecycle_state = LifecycleState(data["lifecycle_state"])
 
-        outputs_data = data.get("outputs")
+        outputs_data = data["outputs"]
         if outputs_data is not None:
-            outputs_type = self._outputs_type()
+            outputs_type = derive_outputs_class(type(self))
             if outputs_type is not None:
                 self.outputs = typing.cast("OutputsT", outputs_type.model_validate(outputs_data))
             else:
@@ -1054,32 +1054,33 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
         return self
 
-    def _outputs_type(self) -> type[Outputs] | None:
-        """Get the OutputsT type from the model fields annotation.
 
-        Returns:
-            The Outputs subclass type or None if not determinable.
-        """
-        outputs_field = self.__class__.model_fields.get("outputs")
-        if outputs_field is None:
-            return None
+def derive_outputs_class(resource_class: type[Resource]) -> type[Outputs] | None:
+    """Derive the Outputs subclass a Resource class's outputs field declares.
 
-        annotation = outputs_field.annotation
-        if annotation is None:
-            return None
+    Args:
+        resource_class: A Resource subclass.
 
-        origin = typing.get_origin(annotation)
-        if origin is type(None):
-            return None
+    Returns:
+        The Outputs subclass, also when the field is declared
+        ``OutputsT | None``, or None if the field declares none.
+    """
+    outputs_field = resource_class.model_fields.get("outputs")
 
-        if _is_union_origin(origin):
-            args = typing.get_args(annotation)
-            for arg in args:
-                if arg is not type(None) and isinstance(arg, type) and issubclass(arg, Outputs):
-                    return arg
-            return None
-
-        if isinstance(annotation, type) and issubclass(annotation, Outputs):
-            return annotation
-
+    if outputs_field is None:
         return None
+
+    annotation = outputs_field.annotation
+
+    if annotation is None:
+        return None
+
+    if isinstance(annotation, type) and issubclass(annotation, Outputs):
+        return annotation
+
+    if is_union_origin(typing.get_origin(annotation)):
+        for arg in typing.get_args(annotation):
+            if arg is not type(None) and isinstance(arg, type) and issubclass(arg, Outputs):
+                return arg
+
+    return None

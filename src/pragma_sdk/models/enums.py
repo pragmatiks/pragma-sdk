@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+from pragma_sdk.types import EventType as EventType
+
 
 class BuildStatus(StrEnum):
     """Status of a BuildKit build job."""
@@ -21,18 +23,6 @@ class DeploymentStatus(StrEnum):
     PROGRESSING = "progressing"
     AVAILABLE = "available"
     FAILED = "failed"
-
-
-class EventType(StrEnum):
-    """Resource lifecycle event type."""
-
-    CREATE = "CREATE"
-    UPDATE = "UPDATE"
-    DELETE = "DELETE"
-    COPY = "COPY"
-    PATCH = "PATCH"
-    MIGRATE_UP = "MIGRATE_UP"
-    MIGRATE_DOWN = "MIGRATE_DOWN"
 
 
 class ResponseStatus(StrEnum):
@@ -87,8 +77,8 @@ class OrganizationStatus(StrEnum):
     Mirrors the API's organization lifecycle: an organization is created in
     ``BOOTSTRAPPING`` while the bootstrap worker provisions its tenant
     namespace, reaches ``READY`` once usable, or lands in ``BOOTSTRAP_FAILED``
-    if provisioning exhausts its retries. ``DEACTIVATING`` and ``DELETED``
-    cover teardown.
+    if the bootstrap deadline passes before setup finishes. ``DEACTIVATING``
+    and ``DELETED`` cover teardown.
     """
 
     BOOTSTRAPPING = "bootstrapping"

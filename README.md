@@ -119,6 +119,27 @@ class Bucket(Resource[BucketConfig, BucketOutputs]):
         """Delete the bucket; succeeds when it is already gone."""
 ```
 
+### Declaring the provider
+
+A provider wheel declares itself with one entry point in the `pragma.provider` group, named after the provider and pointing at its importable package:
+
+```toml
+[project.entry-points."pragma.provider"]
+gcp = "gcp_provider"
+```
+
+The Pragmatiks platform finds the provider's resource types through this entry point. Only resource classes defined inside that package belong to the provider; resource classes it imports from another provider stay that provider's.
+
+To check what the platform will read from an installed wheel, run introspection in its environment:
+
+```bash
+PRAGMA_PROVIDER_DISTRIBUTION=<distribution> python -m pragma_sdk.introspection --output report.json
+```
+
+`<distribution>` is the `name` in the wheel's `[project]` table. When you publish, the platform republishes the wheel as `<organization>-<provider name you publish under>` and loads it under that name.
+
+The report lists the resource types with their schemas, or why the provider failed to load.
+
 ## Field References
 
 Reference outputs from other resources:

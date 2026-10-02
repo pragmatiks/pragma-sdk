@@ -27,6 +27,18 @@ class LifecycleState(StrEnum):
     DELETED = "deleted"
 
 
+class EventType(StrEnum):
+    """Resource lifecycle event type."""
+
+    CREATE = "CREATE"
+    UPDATE = "UPDATE"
+    DELETE = "DELETE"
+    COPY = "COPY"
+    PATCH = "PATCH"
+    MIGRATE_UP = "MIGRATE_UP"
+    MIGRATE_DOWN = "MIGRATE_DOWN"
+
+
 class LogEntry(BaseModel):
     """A single log entry from a resource."""
 
