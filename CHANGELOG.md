@@ -1,3 +1,19 @@
+## v15.0.0 (2026-10-02)
+
+### BREAKING CHANGE
+
+- discovery returns only resource types defined inside the
+provider's own package and registered on its Provider; imported and
+unregistered resource classes are left out. wait_for_resource_state
+returns only lifecycle_state and outputs, and a failed or timed-out host
+wait raises RuntimeError. MissingObserveError takes (resource,
+module_name). EventType moves to pragma_sdk.types. Dependency-resolution
+log events are renamed.
+
+### Feat
+
+- **worker**: move the provider worker and its protocol into the SDK
+
 ## v14.0.0 (2026-10-01)
 
 ### BREAKING CHANGE
