@@ -19,7 +19,6 @@ from pragma_sdk.models.base import Config, Outputs, Resource
 from pragma_sdk.models.enums import (
     BuildStatus,
     DeploymentStatus,
-    EventType,
     OrganizationStatus,
     ProviderScope,
     ResponseStatus,
@@ -61,6 +60,7 @@ from pragma_sdk.models.references import (
     is_dependency_marker,
     is_field_ref_marker,
 )
+from pragma_sdk.types import EventType
 
 
 __all__ = [

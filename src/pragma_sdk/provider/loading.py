@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import types
-import typing
 from typing import Any
 
 from pragma_sdk.docstrings import extract_short_description, parse_attributes_section
-from pragma_sdk.models import Config, Outputs, Resource
+from pragma_sdk.models import Config, Resource
+from pragma_sdk.models.base import derive_outputs_class
+from pragma_sdk.protocol.introspection import ResourceTypeSchema
 from pragma_sdk.provider.discovery import discover_resources
 
 
@@ -27,100 +27,104 @@ def derive_config_class(resource_class: type[Resource]) -> type[Config]:
     config_field = annotations.get("config")
 
     if config_field is None:
-        raise ValueError(f"Resource {resource_class.__name__} has no config field")
+        raise ValueError(
+            f"Resource {resource_class.__name__} has no config field. "
+            "Declare it as Resource[YourConfig, YourOutputs] with a Config subclass."
+        )
 
     config_type = config_field.annotation
 
     if not isinstance(config_type, type) or not issubclass(config_type, Config):
-        raise ValueError(f"Resource {resource_class.__name__} config field is not a Config subclass")
+        raise ValueError(
+            f"Resource {resource_class.__name__} config field is not a Config subclass. "
+            "Declare it as Resource[YourConfig, YourOutputs] with a Config subclass."
+        )
 
     return config_type
 
 
-def derive_outputs_class(resource_class: type[Resource]) -> type[Outputs] | None:
-    """Derive Outputs subclass from Resource's outputs field annotation.
-
-    Handles ``OutputsT | None`` union types by unwrapping the Optional.
+def build_resource_type_schema(resource_class: type[Resource]) -> ResourceTypeSchema:
+    """Build the schemas and descriptions of a resource type.
 
     Args:
-        resource_class: A Resource subclass.
+        resource_class: A registered Resource subclass.
 
     Returns:
-        Outputs subclass type, or None if not determinable.
+        The resource type's config and outputs schemas, its description from
+        the class docstring, and field descriptions from the ``Attributes``
+        sections of the config and outputs docstrings.
+
+    Raises:
+        ValueError: If the resource class has no Config-typed config field.
+        PydanticInvalidForJsonSchema: If the config or outputs type cannot be
+            expressed as JSON schema.
+    """  # noqa: DOC502
+    config_type = derive_config_class(resource_class)
+    outputs_type = derive_outputs_class(resource_class)
+
+    outputs_schema = None
+    output_descriptions: dict[str, str] = {}
+
+    if outputs_type is not None:
+        outputs_schema = outputs_type.model_json_schema()
+        output_descriptions = parse_attributes_section(outputs_type.__doc__)
+
+    return ResourceTypeSchema(
+        resource=resource_class.resource,
+        description=extract_short_description(resource_class.__doc__),
+        config_schema=config_type.model_json_schema(),
+        field_descriptions=parse_attributes_section(config_type.__doc__),
+        outputs_schema=outputs_schema,
+        output_descriptions=output_descriptions,
+    )
+
+
+def build_catalog_schema_entry(schema: ResourceTypeSchema, catalog_name: str) -> dict[str, Any]:
+    """Build the catalog entry of a resource type schema.
+
+    Args:
+        schema: Schemas and descriptions of the resource type.
+        catalog_name: Catalog name of the provider (e.g., "pragmatiks/gcp").
+
+    Returns:
+        The entry with ``provider``, ``resource`` and ``config_schema`` keys,
+        plus ``description``, ``field_descriptions``, ``outputs_schema`` and
+        ``output_descriptions`` only when they carry a value.
     """
-    outputs_field = resource_class.model_fields.get("outputs")
+    optional_fields = schema.model_dump(
+        include={"description", "field_descriptions", "outputs_schema", "output_descriptions"}
+    )
 
-    if outputs_field is None:
-        return None
-
-    annotation = outputs_field.annotation
-
-    if annotation is None:
-        return None
-
-    if isinstance(annotation, type) and issubclass(annotation, Outputs):
-        return annotation
-
-    origin = typing.get_origin(annotation)
-
-    if origin is typing.Union or origin is types.UnionType:
-        for arg in typing.get_args(annotation):
-            if arg is not type(None) and isinstance(arg, type) and issubclass(arg, Outputs):
-                return arg
-
-    return None
+    return {
+        "provider": catalog_name,
+        "resource": schema.resource,
+        "config_schema": schema.config_schema,
+        **{name: value for name, value in optional_fields.items() if value},
+    }
 
 
 def load_provider_schemas(package_name: str, catalog_name: str) -> list[dict[str, Any]]:
-    """Load JSON schemas for all resources in a provider package.
-
-    Discovers all Resource classes in the package and loads their
-    config schemas using Pydantic's model_json_schema().
+    """Load the catalog schemas of every resource type a provider package defines.
 
     Args:
         package_name: Python package name to scan (e.g., "postgres_provider").
         catalog_name: Catalog name of the provider (e.g., "pragmatiks/gcp").
 
     Returns:
-        List of schema dictionaries with provider, resource, and config_schema keys.
-    """
-    schemas: list[dict[str, Any]] = []
+        One catalog entry per resource type, as built by
+        :func:`build_catalog_schema_entry`.
 
-    resources = discover_resources(package_name)
+    Raises:
+        ValueError: If a resource class has no Config-typed config field.
+        PydanticInvalidForJsonSchema: If a config or outputs type cannot be
+            expressed as JSON schema.
+        MissingObserveError: If a non-computed resource type in a module the
+            package imports defines no ``on_observe``. Any other exception a
+            module of the package raises on import propagates.
+    """  # noqa: DOC502
+    resource_classes = discover_resources(package_name).values()
 
-    for resource_name, cls in resources.items():
-        try:
-            config_type = derive_config_class(cls)
-            config_schema = config_type.model_json_schema()
-
-            entry: dict[str, Any] = {
-                "provider": catalog_name,
-                "resource": resource_name,
-                "config_schema": config_schema,
-            }
-
-            description = extract_short_description(cls.__doc__)
-
-            if description is not None:
-                entry["description"] = description
-
-            config_field_descriptions = parse_attributes_section(config_type.__doc__)
-
-            if config_field_descriptions:
-                entry["field_descriptions"] = config_field_descriptions
-
-            outputs_type = derive_outputs_class(cls)
-
-            if outputs_type is not None:
-                entry["outputs_schema"] = outputs_type.model_json_schema()
-
-                output_field_descriptions = parse_attributes_section(outputs_type.__doc__)
-
-                if output_field_descriptions:
-                    entry["output_descriptions"] = output_field_descriptions
-
-            schemas.append(entry)
-        except ValueError:
-            continue
-
-    return schemas
+    return [
+        build_catalog_schema_entry(build_resource_type_schema(resource_class), catalog_name)
+        for resource_class in resource_classes
+    ]

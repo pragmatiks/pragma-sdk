@@ -14,18 +14,23 @@ RESOURCE_MARKER = "__pragma_resource__"
 
 
 class MissingObserveError(TypeError):
-    """Raised when a non-computed resource type does not define ``on_observe``."""
+    """Raised when a non-computed resource type does not define ``on_observe``.
 
-    def __init__(self, resource_name: str) -> None:
+    Attributes:
+        resource: Registered name of the offending resource type.
+        module_name: Module defining the offending resource class.
+    """
+
+    def __init__(self, resource: str, module_name: str) -> None:
         """Build the error for a resource type.
 
         Args:
-            resource_name: Registered name of the offending resource type.
+            resource: Registered name of the offending resource type.
+            module_name: Module defining the offending resource class.
         """
-        super().__init__(
-            f'resource "{resource_name}" does not define on_observe. '
-            "Add it, or declare the resource computed, and publish a new version."
-        )
+        self.resource = resource
+        self.module_name = module_name
+        super().__init__(f'resource "{resource}" does not define on_observe. Add it, or declare the resource computed.')
 
 
 class Provider:
@@ -91,7 +96,7 @@ class Provider:
                 )
 
             if not cls.computed and cls.on_observe is Resource.on_observe:
-                raise MissingObserveError(name)
+                raise MissingObserveError(name, cls.__module__)
 
             cls.resource = name
 

@@ -11,12 +11,11 @@ from pydantic import Field as PydanticField
 from pragma_sdk.models.enums import (
     BuildStatus,
     DeploymentStatus,
-    EventType,
     OrganizationStatus,
     ResponseStatus,
     TeardownAction,
 )
-from pragma_sdk.types import LifecycleState
+from pragma_sdk.types import EventType, LifecycleState
 
 
 class BuildInfo(BaseModel):

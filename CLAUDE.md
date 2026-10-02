@@ -12,8 +12,15 @@ pragma-sdk/
     ├── client.py          # PragmaClient (sync) and AsyncPragmaClient
     ├── models/            # Pydantic models (shared with API)
     ├── resources/         # Resource-specific client methods
-    └── provider/          # Provider authoring (Provider, Resource, Config, Outputs)
+    ├── provider/          # Provider authoring (Provider, Resource, Config, Outputs)
+    ├── protocol/          # Host <-> worker protocol: frames, codec, handshake, introspection report
+    ├── declaration/       # Provider declared by a distribution's `pragma.provider` entry point
+    ├── diagnostics/       # Log output and secret-free error descriptions for worker and introspection
+    ├── worker/            # `python -m pragma_sdk.worker --socket <path>`: runs lifecycle methods
+    └── introspection/     # `python -m pragma_sdk.introspection --output <path>`: writes the report
 ```
+
+`protocol/` imports nothing from the SDK but `types`; the Pragmatiks host speaks only it. Changing a frame shape, the introspection report, or the worker's method set is a new `PROTOCOL_VERSION`.
 
 ## Features
 
@@ -23,12 +30,15 @@ pragma-sdk/
 
 **Testing Harness**: `ProviderHarness` for local lifecycle testing without deployment.
 
+**Worker and Introspection**: The Pragmatiks host runs a provider in its own venv through `python -m pragma_sdk.worker` and reads its schemas through `python -m pragma_sdk.introspection`; both find the provider from `PRAGMA_PROVIDER_DISTRIBUTION` and the distribution's `pragma.provider` entry point.
+
 **Auto-discovery**: Credentials resolved from env vars, context-specific tokens, or `~/.config/pragma/credentials`.
 
 ## Dependencies
 
 - `httpx` - Async HTTP client
 - `pydantic` - Data validation and serialization
+- `pydantic-settings` - Worker and introspection settings from `PRAGMA_PROVIDER_*` environment variables
 - `pyyaml` - YAML parsing for resource definitions
 
 ## Development
