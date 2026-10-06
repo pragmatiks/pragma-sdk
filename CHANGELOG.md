@@ -1,3 +1,19 @@
+## v16.0.0 (2026-10-06)
+
+### BREAKING CHANGE
+
+- publish_provider no longer takes name, version, schemas
+or metadata, and a 409 raises httpx.HTTPStatusError instead of the
+removed ProviderVersionConflictError. VersionStatus BUILDING and YANKED
+are replaced by PENDING. ProviderVersion.package_name becomes
+distribution_name and package; entrypoint, source_hash and build_id are
+removed. ProviderVersionMetadata, BuildInfo, BuildStatus and PushResult
+are removed.
+
+### Feat
+
+- **client**: publish a provider from its wheel alone and follow its admission
+
 ## v15.0.0 (2026-10-02)
 
 ### BREAKING CHANGE
