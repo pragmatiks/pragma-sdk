@@ -1,7 +1,6 @@
 """Pragma SDK data models."""
 
 from pragma_sdk.models.api import (
-    BuildInfo,
     DeploymentResult,
     LifecycleEventFrame,
     Organization,
@@ -9,7 +8,6 @@ from pragma_sdk.models.api import (
     ProviderInfo,
     ProviderResponse,
     ProviderStatus,
-    PushResult,
     ResourceSchema,
     TeardownImpact,
     TeardownResponse,
@@ -17,7 +15,7 @@ from pragma_sdk.models.api import (
 )
 from pragma_sdk.models.base import Config, Outputs, Resource
 from pragma_sdk.models.enums import (
-    BuildStatus,
+    AdmissionFailureCategory,
     DeploymentStatus,
     OrganizationStatus,
     ProviderScope,
@@ -40,7 +38,6 @@ from pragma_sdk.models.provider import (
     ProviderAuthor,
     ProviderInstallation,
     ProviderVersion,
-    ProviderVersionMetadata,
 )
 from pragma_sdk.models.references import (
     Dependency,
@@ -64,8 +61,7 @@ from pragma_sdk.types import EventType
 
 
 __all__ = [
-    "BuildInfo",
-    "BuildStatus",
+    "AdmissionFailureCategory",
     "Config",
     "CreateProjectRequest",
     "DeleteProjectRequest",
@@ -98,8 +94,6 @@ __all__ = [
     "ProviderScope",
     "ProviderStatus",
     "ProviderVersion",
-    "ProviderVersionMetadata",
-    "PushResult",
     "Resource",
     "ResourceIdentity",
     "ResourceReference",

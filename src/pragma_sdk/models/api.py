@@ -1,4 +1,4 @@
-"""API response models for build, deployment, provider, and user operations."""
+"""API response models for deployment, provider, and user operations."""
 
 from __future__ import annotations
 
@@ -9,45 +9,12 @@ from pydantic import BaseModel, ConfigDict
 from pydantic import Field as PydanticField
 
 from pragma_sdk.models.enums import (
-    BuildStatus,
     DeploymentStatus,
     OrganizationStatus,
     ResponseStatus,
     TeardownAction,
 )
 from pragma_sdk.types import EventType, LifecycleState
-
-
-class BuildInfo(BaseModel):
-    """Build information for a provider version.
-
-    Attributes:
-        provider_id: Provider identifier.
-        version: CalVer version string (YYYYMMDD.HHMMSS).
-        status: Current build status.
-        error_message: Error message (set on failure).
-        created_at: When the build was created.
-    """
-
-    provider_id: str
-    version: str
-    status: BuildStatus
-    error_message: str | None = None
-    created_at: datetime
-
-
-class PushResult(BaseModel):
-    """Result from pushing provider code to start a build.
-
-    Attributes:
-        version: CalVer version for the build (YYYYMMDD.HHMMSS).
-        status: Initial build status (typically pending).
-        message: Status message from the API.
-    """
-
-    version: str
-    status: BuildStatus
-    message: str
 
 
 class DeploymentResult(BaseModel):

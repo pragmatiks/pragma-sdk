@@ -12,7 +12,7 @@ Core exports for API consumers:
     AsyncPragmaClient: Asynchronous HTTP client.
 
 Additional imports available from submodules:
-    pragma_sdk.models: Data models (BuildInfo, ProviderStatus, etc.)
+    pragma_sdk.models: Data models (ProviderVersion, ProviderStatus, etc.)
     pragma_sdk.types: Type definitions (LifecycleState, HealthStatus, LogEntry)
     pragma_sdk.context: Runtime context utilities
     pragma_sdk.platform: Platform resource types (SecretConfig, etc.)
@@ -27,12 +27,10 @@ from pragma_sdk.client import (
 from pragma_sdk.exceptions import (
     ProjectHasResourcesError,
     ProjectMismatchError,
-    ProviderVersionConflictError,
     ResourceFailedError,
 )
 from pragma_sdk.models import (
-    BuildInfo,
-    BuildStatus,
+    AdmissionFailureCategory,
     Config,
     CreateProjectRequest,
     DeleteProjectRequest,
@@ -60,8 +58,6 @@ from pragma_sdk.models import (
     ProviderInstallation,
     ProviderScope,
     ProviderVersion,
-    ProviderVersionMetadata,
-    PushResult,
     Resource,
     ResourceIdentity,
     ResourceSchema,
@@ -92,10 +88,9 @@ from pragma_sdk.types import (
 
 
 __all__ = [
+    "AdmissionFailureCategory",
     "AsyncPragmaClient",
     "AsyncProjectResources",
-    "BuildInfo",
-    "BuildStatus",
     "CompatibilityConstraint",
     "Config",
     "CopyContext",
@@ -139,9 +134,6 @@ __all__ = [
     "ProviderModel",
     "ProviderScope",
     "ProviderVersion",
-    "ProviderVersionConflictError",
-    "ProviderVersionMetadata",
-    "PushResult",
     "Resource",
     "ResourceFailedError",
     "ResourceIdentity",
