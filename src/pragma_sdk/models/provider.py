@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, computed_field
 
-from pragma_sdk.models.enums import ProviderScope, UpgradePolicy, VersionStatus
+from pragma_sdk.models.enums import AdmissionFailureCategory, ProviderScope, UpgradePolicy, VersionStatus
 
 
 class ProviderAuthor(BaseModel):
@@ -61,28 +61,63 @@ class Provider(BaseModel):
 
 
 class ProviderVersion(BaseModel):
-    """A published version of a provider.
+    """A version of a provider, from publish through admission.
+
+    Publishing returns the version ``pending`` while the organization's
+    provider host admits it. Admission ends it ``published``, which fills
+    the fields read from the admitted wheel, or ``failed``, which sets
+    ``failure_category`` and ``error_message``.
 
     Attributes:
-        wheel_sha256: SHA-256 digest of the wheel bytes, computed
-            server-side at publish time as a catalog audit field.
-        package_name: Importable Python package name inside the
-            published wheel. ``None`` when the runtime must infer it
-            from installed wheel metadata.
+        distribution_name: Distribution name the wheel is published under,
+            derived from the organization slug and the provider's short name.
+        wheel_filename: Filename the wheel is stored under, carrying
+            ``distribution_name``.
+        wheel_sha256: SHA-256 digest of the wheel as stored under
+            ``distribution_name``; it differs from the digest of the
+            uploaded file.
+        package: Importable Python package the provider's entry point names.
+        summary: Summary from the wheel's metadata; it becomes the catalog
+            description when this version creates the provider.
+        keywords: Keywords from the wheel's metadata; they become the catalog
+            tags when this version creates the provider.
+        python_version: Python minor version admission resolved the provider
+            on, such as ``"3.14"``. ``None`` until admitted.
+        sdk_version: Pragmatiks SDK version the provider was admitted with.
+            ``None`` until admitted.
+        protocol_versions: Host protocol versions the provider speaks.
+            Empty until admitted; ``status`` says whether it was.
+        embedded_providers: Pragmatiks providers installed with this one,
+            mapping distribution name to version. Empty until admitted.
+        schemas: Resource type schemas the provider declares. ``None`` until
+            admitted.
+        operation_deadline_at: When admission must finish. ``None`` until the
+            organization's provider host takes the version.
+        status: Where the version is between publish and admission.
+        failure_category: Why admission failed. Set only when ``status``
+            is ``failed``.
+        error_message: Human-readable reason the version failed, ready to show.
     """
 
     prefix: str = Field(frozen=True)
     name: str = Field(frozen=True)
     version: str = Field(frozen=True)
+    distribution_name: str = Field(frozen=True)
+    wheel_filename: str | None = None
     wheel_sha256: str | None = None
-    package_name: str | None = None
-    entrypoint: list[str] | None = None
-    source_hash: str | None = None
-    build_id: str | None = None
+    package: str | None = None
+    summary: str | None = None
+    keywords: list[str] = Field(default_factory=list)
+    python_version: str | None = None
+    sdk_version: str | None = None
+    protocol_versions: list[int] = Field(default_factory=list)
+    embedded_providers: dict[str, str] = Field(default_factory=dict)
     schemas: list[dict[str, Any]] | None = None
+    operation_deadline_at: datetime | None = None
     changelog: str | None = None
     status: VersionStatus
     published_at: datetime | None = None
+    failure_category: AdmissionFailureCategory | None = None
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -96,22 +131,6 @@ class ProviderVersion(BaseModel):
             Display form of the provider identity this version belongs to.
         """
         return f"{self.prefix}/{self.name}"
-
-
-class ProviderVersionMetadata(BaseModel):
-    """Catalog display fields recorded on the provider catalog row.
-
-    Attributes:
-        display_name: Human-facing label shown in catalog listings.
-        description: Long-form description of the provider.
-        icon_url: Optional URL to an icon shown alongside the listing.
-        tags: Optional list of catalog tags.
-    """
-
-    display_name: str
-    description: str
-    icon_url: str | None = None
-    tags: list[str] = Field(default_factory=list)
 
 
 class ProviderInstallation(BaseModel):
