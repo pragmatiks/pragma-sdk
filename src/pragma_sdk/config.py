@@ -38,7 +38,7 @@ def load_credentials(context: str) -> str | None:
     try:
         for line in creds_file.read_text().splitlines():
             line = line.strip()
-            if not line or line.startswith("#"):  # Skip empty lines and comments
+            if not line or line.startswith("#"):
                 continue
             if "=" in line:
                 key, value = line.split("=", 1)

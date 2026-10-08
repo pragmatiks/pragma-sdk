@@ -901,9 +901,14 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
         Raises:
             NotImplementedError: Subclass must implement this method.
+
+        Note:
+            Overrides must be async generators (``async def`` with ``yield``).
+            The default raises ``NotImplementedError`` on first iteration, not
+            when called.
         """
         raise NotImplementedError("Subclass must implement logs()")
-        yield  # For type checker
+        yield
 
     async def health(self) -> HealthStatus:
         """Override to provide health status for this resource.
