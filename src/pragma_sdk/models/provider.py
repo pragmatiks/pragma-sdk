@@ -81,8 +81,9 @@ class ProviderVersion(BaseModel):
             description when this version creates the provider.
         keywords: Keywords from the wheel's metadata; they become the catalog
             tags when this version creates the provider.
-        python_version: Python minor version admission resolved the provider
-            on, such as ``"3.14"``. ``None`` until admitted.
+        python_version: Exact Python version admission resolved the provider
+            on, such as ``"3.14.2"``; installs use this same patch release.
+            ``None`` until admitted.
         sdk_version: Pragmatiks SDK version the provider was admitted with.
             ``None`` until admitted.
         protocol_versions: Host protocol versions the provider speaks.
