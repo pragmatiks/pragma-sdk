@@ -20,6 +20,7 @@ from pragma_sdk.exceptions import (
     ResourceFailedError,
 )
 from pragma_sdk.models import (
+    DeclaredProviderVersion,
     DeploymentResult,
     LifecycleEventFrame,
     Organization,
@@ -28,11 +29,13 @@ from pragma_sdk.models import (
     ProviderInstallation,
     ProviderScope,
     ProviderVersion,
+    ProviderVersionDeclaration,
     Resource,
     ResourceSchema,
     TeardownResponse,
     UpgradePolicy,
     UserInfo,
+    VersionStatus,
 )
 from pragma_sdk.models.identity import _validate_segment
 from pragma_sdk.models.project import (
@@ -42,6 +45,7 @@ from pragma_sdk.models.project import (
     UpdateProjectRequest,
 )
 from pragma_sdk.types import LifecycleState
+from pragma_sdk.wheel import read_wheel_declaration
 
 
 def _validate_provider_name(provider_name: str) -> str:
@@ -572,7 +576,8 @@ class PragmaClient(BaseClient):
 
         A version still being admitted, or one that failed admission, is
         visible to the organization that published it, so a publisher can
-        follow its own version from ``pending`` to ``published`` or ``failed``.
+        follow its own version from ``awaiting_wheel`` to ``published`` or
+        ``failed``.
 
         Args:
             provider_name: Namespaced provider name ('org/name').
@@ -618,46 +623,109 @@ class PragmaClient(BaseClient):
         path = _validate_provider_name(provider_name)
         self._request("DELETE", f"/providers/{path}")
 
+    def declare_provider_version(self, declaration: ProviderVersionDeclaration) -> DeclaredProviderVersion:
+        """Declare a provider version before uploading its wheel.
+
+        Sends the declaration to ``POST /providers/publish``. The wheel's
+        ``pragma.provider`` entry point names the provider and its core
+        metadata carries the version. A new declaration answers HTTP 201 with
+        the version ``awaiting_wheel`` and the ``operation_id`` to upload the
+        wheel under; a declaration identical to the one already in flight
+        answers HTTP 200 with that version, in whatever status it is in.
+
+        Args:
+            declaration: What the wheel claims, as
+                :func:`~pragma_sdk.wheel.read_wheel_declaration`
+                reads it.
+
+        Returns:
+            The declared version with the ``operation_id`` its wheel is
+            uploaded under.
+
+        Raises:
+            httpx.HTTPStatusError: If the API refuses the declaration; the
+                response body's ``detail`` says why and what to change.
+        """  # noqa: DOC502
+        response = self._request("POST", "/providers/publish", json_data=declaration.model_dump(mode="json"))
+        return DeclaredProviderVersion.model_validate(response)
+
+    def upload_provider_wheel(self, operation_id: str, wheel_path: Path | str) -> ProviderVersion:
+        """Upload the wheel of a declared provider version and start its admission.
+
+        Streams the wheel as the raw request body to
+        ``PUT /providers/publish/{operation_id}/wheel``. The API answers HTTP
+        202 once the wheel is staged for the organization's provider host,
+        or HTTP 200 when this operation's wheel was already uploaded. The
+        host then admits the version, ending it ``published`` or ``failed``;
+        follow it with :meth:`get_provider_version`.
+
+        Args:
+            operation_id: The declared version's ``operation_id``.
+            wheel_path: Path to the declared ``.whl``. Streamed from disk,
+                never read fully into memory.
+
+        Returns:
+            The version after the upload.
+
+        Raises:
+            httpx.HTTPStatusError: If the API refuses the upload: 409 when this
+                publish was replaced or its version has settled, so the wheel
+                must be published again; 422 when the operation id is not a
+                UUID or the body is not the wheel this publish declared,
+                leaving the version unchanged, or when the wheel's own
+                ``.dist-info`` files differ from its declaration, failing the
+                version; 400 when the upload is not a readable wheel and 413
+                when its contents expand too far, both failing the version;
+                503 when the wheel cannot be taken right now, leaving the
+                version unchanged so the upload can be retried later.
+        """  # noqa: DOC502
+        with Path(wheel_path).open("rb") as wheel_file:
+            response = self._request(
+                "PUT",
+                f"/providers/publish/{quote(operation_id, safe='')}/wheel",
+                content=wheel_file,
+                headers={"Content-Type": "application/octet-stream"},
+                timeout=600.0,
+            )
+
+        return ProviderVersion.model_validate(response)
+
     def publish_provider_version(
         self,
         wheel_path: Path | str,
         *,
         changelog: str | None = None,
     ) -> ProviderVersion:
-        """Upload a provider wheel and start its admission.
+        """Publish a provider wheel: declare its version, then upload it.
 
-        Streams the wheel to ``POST /providers/publish``. The wheel alone
-        identifies the provider: its ``pragma.provider`` entry point names the
-        provider and its core metadata carries the version. The API accepts
-        the upload with HTTP 202 and returns the version ``pending``; the
-        organization's provider host then admits it, ending it ``published``
-        or ``failed``. Follow it with :meth:`get_provider_version`.
+        Reads the wheel's declaration, declares it with
+        :meth:`declare_provider_version`, and uploads the wheel with
+        :meth:`upload_provider_wheel` only while the declared version is
+        ``awaiting_wheel``.
 
         Args:
-            wheel_path: Path to the built ``.whl`` to upload. Streamed from
-                disk, never read fully into memory.
+            wheel_path: Path to the built ``.whl`` to publish.
             changelog: Optional release notes for this version.
 
         Returns:
-            The ``pending`` version the organization's provider host now admits.
+            The version after the declaration, and after the upload when one
+            was needed.
 
         Raises:
-            httpx.HTTPStatusError: If the API refuses the wheel; the response
-                body's ``detail`` says why and what to change.
+            ValueError: If the wheel has no single top-level ``.dist-info``
+                directory or no ``METADATA`` file in it.
+            zipfile.BadZipFile: If the file is not a zip archive.
+            httpx.HTTPStatusError: If the API refuses the declaration or the
+                upload; the response body's ``detail`` says why and what to
+                change.
         """  # noqa: DOC502
-        wheel_path = Path(wheel_path)
-        data = {"changelog": changelog} if changelog is not None else None
+        declaration = read_wheel_declaration(wheel_path, changelog)
+        version = self.declare_provider_version(declaration)
 
-        with wheel_path.open("rb") as wheel_file:
-            response = self._request(
-                "POST",
-                "/providers/publish",
-                data=data,
-                files={"wheel": (wheel_path.name, wheel_file, "application/octet-stream")},
-                timeout=600.0,
-            )
+        if version.status != VersionStatus.AWAITING_WHEEL:
+            return version
 
-        return ProviderVersion.model_validate(response)
+        return self.upload_provider_wheel(version.operation_id, wheel_path)
 
     def install_provider(
         self,
@@ -1300,6 +1368,61 @@ class AsyncPragmaClient(BaseClient):
         path = _validate_provider_name(provider_name)
         await self._request("DELETE", f"/providers/{path}")
 
+    async def declare_provider_version(self, declaration: ProviderVersionDeclaration) -> DeclaredProviderVersion:
+        """Async mirror of :meth:`PragmaClient.declare_provider_version`.
+
+        Args:
+            declaration: What the wheel claims, as
+                :func:`~pragma_sdk.wheel.read_wheel_declaration`
+                reads it.
+
+        Returns:
+            The declared version with the ``operation_id`` its wheel is
+            uploaded under.
+
+        Raises:
+            httpx.HTTPStatusError: If the API refuses the declaration; the
+                response body's ``detail`` says why and what to change.
+        """  # noqa: DOC502
+        response = await self._request("POST", "/providers/publish", json_data=declaration.model_dump(mode="json"))
+        return DeclaredProviderVersion.model_validate(response)
+
+    async def upload_provider_wheel(self, operation_id: str, wheel_path: Path | str) -> ProviderVersion:
+        """Async mirror of :meth:`PragmaClient.upload_provider_wheel`.
+
+        Args:
+            operation_id: The declared version's ``operation_id``.
+            wheel_path: Path to the declared ``.whl``. Streamed from disk,
+                never read fully into memory.
+
+        Returns:
+            The version after the upload.
+
+        Raises:
+            httpx.HTTPStatusError: If the API refuses the upload: 409 when this
+                publish was replaced or its version has settled, so the wheel
+                must be published again; 422 when the operation id is not a
+                UUID or the body is not the wheel this publish declared,
+                leaving the version unchanged, or when the wheel's own
+                ``.dist-info`` files differ from its declaration, failing the
+                version; 400 when the upload is not a readable wheel and 413
+                when its contents expand too far, both failing the version;
+                503 when the wheel cannot be taken right now, leaving the
+                version unchanged so the upload can be retried later.
+        """  # noqa: DOC502
+        wheel_path = Path(wheel_path)
+        response = await self._request(
+            "PUT",
+            f"/providers/publish/{quote(operation_id, safe='')}/wheel",
+            content=read_file_chunks(wheel_path),
+            headers={
+                "Content-Type": "application/octet-stream",
+                "Content-Length": str(wheel_path.stat().st_size),
+            },
+            timeout=600.0,
+        )
+        return ProviderVersion.model_validate(response)
+
     async def publish_provider_version(
         self,
         wheel_path: Path | str,
@@ -1309,30 +1432,28 @@ class AsyncPragmaClient(BaseClient):
         """Async mirror of :meth:`PragmaClient.publish_provider_version`.
 
         Args:
-            wheel_path: Path to the built ``.whl`` to upload. Streamed from
-                disk, never read fully into memory.
+            wheel_path: Path to the built ``.whl`` to publish.
             changelog: Optional release notes for this version.
 
         Returns:
-            The ``pending`` version the organization's provider host now admits.
+            The version after the declaration, and after the upload when one
+            was needed.
 
         Raises:
-            httpx.HTTPStatusError: If the API refuses the wheel; the response
-                body's ``detail`` says why and what to change.
+            ValueError: If the wheel has no single top-level ``.dist-info``
+                directory or no ``METADATA`` file in it.
+            zipfile.BadZipFile: If the file is not a zip archive.
+            httpx.HTTPStatusError: If the API refuses the declaration or the
+                upload; the response body's ``detail`` says why and what to
+                change.
         """  # noqa: DOC502
-        wheel_path = Path(wheel_path)
-        data = {"changelog": changelog} if changelog is not None else None
+        declaration = await asyncio.to_thread(read_wheel_declaration, wheel_path, changelog)
+        version = await self.declare_provider_version(declaration)
 
-        with wheel_path.open("rb") as wheel_file:
-            response = await self._request(
-                "POST",
-                "/providers/publish",
-                data=data,
-                files={"wheel": (wheel_path.name, wheel_file, "application/octet-stream")},
-                timeout=600.0,
-            )
+        if version.status != VersionStatus.AWAITING_WHEEL:
+            return version
 
-        return ProviderVersion.model_validate(response)
+        return await self.upload_provider_wheel(version.operation_id, wheel_path)
 
     async def install_provider(
         self,
@@ -1593,6 +1714,21 @@ def compute_deadline(timeout: float | None, now: float) -> float | None:
         Deadline on the caller's clock, or None when the caller waits forever.
     """
     return now + timeout if timeout else None
+
+
+async def read_file_chunks(path: Path, chunk_size: int = 1024 * 1024) -> AsyncGenerator[bytes]:
+    """Stream a file from disk in chunks without blocking the event loop.
+
+    Args:
+        path: File to read.
+        chunk_size: Largest number of bytes yielded at once.
+
+    Yields:
+        Consecutive chunks of the file until its end.
+    """
+    with path.open("rb") as file:
+        while chunk := await asyncio.to_thread(file.read, chunk_size):
+            yield chunk
 
 
 def raise_if_resource_failed(resource_id: str, payload: dict[str, Any]) -> None:

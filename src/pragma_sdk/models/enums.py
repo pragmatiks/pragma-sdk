@@ -24,22 +24,38 @@ class ResponseStatus(StrEnum):
 
 
 class VersionStatus(StrEnum):
-    """Admission status of a provider version.
+    """Where a provider version is between its declaration and admission.
 
-    A publish leaves the version ``PENDING`` until the organization's provider
-    host admits it; admission ends it ``PUBLISHED``, which makes it
-    installable, or ``FAILED``. A failed version can be published again.
+    Declaring a version leaves it ``AWAITING_WHEEL`` until its wheel is
+    uploaded. The upload stages the wheel (``STAGED``) and queues it for the
+    organization's provider host (``QUEUED``); the host takes it
+    (``ADMITTING``) and, once admitted, the platform publishes it
+    (``PROMOTING``). Admission ends the version ``PUBLISHED``, which makes it
+    installable, or ``FAILED``, after which the version can be published
+    again. Every other status means admission is still in flight.
     """
 
-    PENDING = "pending"
+    AWAITING_WHEEL = "awaiting_wheel"
+    STAGED = "staged"
+    QUEUED = "queued"
+    ADMITTING = "admitting"
+    PROMOTING = "promoting"
     PUBLISHED = "published"
     FAILED = "failed"
+
+
+SETTLED_VERSION_STATUSES = frozenset({VersionStatus.PUBLISHED, VersionStatus.FAILED})
+"""Statuses that end an admission attempt.
+
+``PUBLISHED`` is final; ``FAILED`` lasts until the version is published again.
+"""
 
 
 class AdmissionFailureCategory(StrEnum):
     """Why a provider version failed admission."""
 
-    UPLOAD_FAILED = "upload_failed"
+    WHEEL_REFUSED = "wheel_refused"
+    WHEEL_LOST = "wheel_lost"
     DIGEST_MISMATCH = "digest_mismatch"
     PYTHON_UNAVAILABLE = "python_unavailable"
     DEPENDENCY_RESOLUTION_FAILED = "dependency_resolution_failed"

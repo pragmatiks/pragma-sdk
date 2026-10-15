@@ -15,6 +15,7 @@ from pragma_sdk.models.api import (
 )
 from pragma_sdk.models.base import Config, Outputs, Resource
 from pragma_sdk.models.enums import (
+    SETTLED_VERSION_STATUSES,
     AdmissionFailureCategory,
     DeploymentStatus,
     OrganizationStatus,
@@ -33,11 +34,13 @@ from pragma_sdk.models.project import (
     UpdateProjectRequest,
 )
 from pragma_sdk.models.provider import (
+    DeclaredProviderVersion,
     PaginatedResponse,
     Provider,
     ProviderAuthor,
     ProviderInstallation,
     ProviderVersion,
+    ProviderVersionDeclaration,
 )
 from pragma_sdk.models.references import (
     Dependency,
@@ -61,9 +64,11 @@ from pragma_sdk.types import EventType
 
 
 __all__ = [
+    "SETTLED_VERSION_STATUSES",
     "AdmissionFailureCategory",
     "Config",
     "CreateProjectRequest",
+    "DeclaredProviderVersion",
     "DeleteProjectRequest",
     "Dependency",
     "DeploymentResult",
@@ -94,6 +99,7 @@ __all__ = [
     "ProviderScope",
     "ProviderStatus",
     "ProviderVersion",
+    "ProviderVersionDeclaration",
     "Resource",
     "ResourceIdentity",
     "ResourceReference",

@@ -51,13 +51,13 @@ from pragma_sdk.provider.provider import RESOURCE_MARKER, MissingObserveError, P
 
 
 __all__ = [
+    "RESOURCE_MARKER",
     "EventType",
     "LifecycleEvent",
     "LifecycleResult",
     "MissingObserveError",
     "Provider",
     "ProviderHarness",
-    "RESOURCE_MARKER",
     "discover_resources",
     "is_registered_resource",
     "load_provider_schemas",

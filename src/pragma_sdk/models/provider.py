@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import Base64Bytes, BaseModel, Field, computed_field
 
 from pragma_sdk.models.enums import AdmissionFailureCategory, ProviderScope, UpgradePolicy, VersionStatus
 
@@ -61,12 +61,16 @@ class Provider(BaseModel):
 
 
 class ProviderVersion(BaseModel):
-    """A version of a provider, from publish through admission.
+    """A version of a provider, from its declaration through admission.
 
-    Publishing returns the version ``pending`` while the organization's
-    provider host admits it. Admission ends it ``published``, which fills
-    the fields read from the admitted wheel, or ``failed``, which sets
-    ``failure_category`` and ``error_message``.
+    Declaring the version returns it ``awaiting_wheel``, as a
+    :class:`DeclaredProviderVersion` carrying the ``operation_id`` its wheel
+    is uploaded under. The upload moves it through ``staged`` and
+    ``queued``; the organization's provider host then admits it
+    (``admitting``) and the platform publishes it (``promoting``). Admission
+    ends it ``published``, which fills the fields read from the admitted
+    wheel, or ``failed``, which sets ``failure_category`` and
+    ``error_message``.
 
     Attributes:
         distribution_name: Distribution name the wheel is published under,
@@ -132,6 +136,49 @@ class ProviderVersion(BaseModel):
             Display form of the provider identity this version belongs to.
         """
         return f"{self.prefix}/{self.name}"
+
+
+class DeclaredProviderVersion(ProviderVersion):
+    """A provider version as its publish declaration returns it.
+
+    Only the declaration response carries ``operation_id``; every other
+    response leaves it out.
+
+    Attributes:
+        operation_id: Publish operation the version's wheel is uploaded to,
+            at ``PUT /providers/publish/{operation_id}/wheel``.
+    """
+
+    operation_id: str = Field(min_length=1)
+
+
+class ProviderVersionDeclaration(BaseModel):
+    """What a provider wheel claims about itself, declared before it is uploaded.
+
+    ``POST /providers/publish`` checks the declaration and records the version
+    ``awaiting_wheel``; the wheel uploaded afterwards must match it.
+    ``metadata`` and ``entry_points`` are given as base64 text, hold the
+    decoded bytes, and serialize back to base64 text.
+
+    Attributes:
+        wheel_filename: Filename of the built wheel.
+        wheel_sha256: Hex SHA-256 digest of the wheel file.
+        wheel_size: Size of the wheel file in bytes.
+        dist_info_directory: Name of the wheel's ``.dist-info`` directory,
+            such as ``postgresql-1.0.0.dist-info``.
+        metadata: Contents of the wheel's ``METADATA`` file.
+        entry_points: Contents of the wheel's ``entry_points.txt``, or
+            ``None`` when the wheel has none.
+        changelog: Release notes for this version, or ``None``.
+    """
+
+    wheel_filename: str
+    wheel_sha256: str
+    wheel_size: int
+    dist_info_directory: str
+    metadata: Base64Bytes
+    entry_points: Base64Bytes | None = None
+    changelog: str | None = None
 
 
 class ProviderInstallation(BaseModel):
