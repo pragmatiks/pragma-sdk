@@ -712,9 +712,16 @@ class PragmaClient(BaseClient):
             was needed.
 
         Raises:
+            OSError: If the file cannot be opened, such as when it does not
+                exist or is not readable.
             ValueError: If the wheel has no single top-level ``.dist-info``
                 directory or no ``METADATA`` file in it.
-            zipfile.BadZipFile: If the file is not a zip archive.
+            zipfile.BadZipFile: If the file is not a readable zip archive, or
+                reading the archive or a member the declaration needs fails,
+                whatever the cause: a damaged directory or header, a CRC
+                mismatch, a corrupt or truncated compressed stream, an
+                encrypted member, or a compression method this Python cannot
+                decompress.
             httpx.HTTPStatusError: If the API refuses the declaration or the
                 upload; the response body's ``detail`` says why and what to
                 change.
@@ -1440,9 +1447,16 @@ class AsyncPragmaClient(BaseClient):
             was needed.
 
         Raises:
+            OSError: If the file cannot be opened, such as when it does not
+                exist or is not readable.
             ValueError: If the wheel has no single top-level ``.dist-info``
                 directory or no ``METADATA`` file in it.
-            zipfile.BadZipFile: If the file is not a zip archive.
+            zipfile.BadZipFile: If the file is not a readable zip archive, or
+                reading the archive or a member the declaration needs fails,
+                whatever the cause: a damaged directory or header, a CRC
+                mismatch, a corrupt or truncated compressed stream, an
+                encrypted member, or a compression method this Python cannot
+                decompress.
             httpx.HTTPStatusError: If the API refuses the declaration or the
                 upload; the response body's ``detail`` says why and what to
                 change.
