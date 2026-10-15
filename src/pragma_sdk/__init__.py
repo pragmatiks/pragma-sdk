@@ -30,9 +30,11 @@ from pragma_sdk.exceptions import (
     ResourceFailedError,
 )
 from pragma_sdk.models import (
+    SETTLED_VERSION_STATUSES,
     AdmissionFailureCategory,
     Config,
     CreateProjectRequest,
+    DeclaredProviderVersion,
     DeleteProjectRequest,
     Dependency,
     DeploymentResult,
@@ -58,6 +60,7 @@ from pragma_sdk.models import (
     ProviderInstallation,
     ProviderScope,
     ProviderVersion,
+    ProviderVersionDeclaration,
     Resource,
     ResourceIdentity,
     ResourceSchema,
@@ -85,9 +88,11 @@ from pragma_sdk.types import (
     PatchDefinition,
     PatchResult,
 )
+from pragma_sdk.wheel import read_wheel_declaration
 
 
 __all__ = [
+    "SETTLED_VERSION_STATUSES",
     "AdmissionFailureCategory",
     "AsyncPragmaClient",
     "AsyncProjectResources",
@@ -97,6 +102,7 @@ __all__ = [
     "CopyResult",
     "CopyStrategy",
     "CreateProjectRequest",
+    "DeclaredProviderVersion",
     "DeleteProjectRequest",
     "Dependency",
     "DeploymentResult",
@@ -134,6 +140,7 @@ __all__ = [
     "ProviderModel",
     "ProviderScope",
     "ProviderVersion",
+    "ProviderVersionDeclaration",
     "Resource",
     "ResourceFailedError",
     "ResourceIdentity",
@@ -148,4 +155,5 @@ __all__ = [
     "UpdateProjectRequest",
     "UpgradePolicy",
     "VersionStatus",
+    "read_wheel_declaration",
 ]

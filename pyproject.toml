@@ -45,6 +45,7 @@ select = [
     "UP",      # Pyupgrade
     "D",       # pydocstyle - docstring conventions
     "DOC",     # Ruff's docstring checks (parameters match signature)
+    "RUF022",  # unsorted __all__
 ]
 
 [tool.ruff.lint.pydocstyle]
