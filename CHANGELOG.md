@@ -1,3 +1,16 @@
+## v17.0.0 (2026-10-15)
+
+### BREAKING CHANGE
+
+- the single-step multipart publish, VersionStatus.PENDING
+and AdmissionFailureCategory.UPLOAD_FAILED are removed. Callers move to
+declare_provider_version and upload_provider_wheel, or keep using
+publish_provider_version.
+
+### Feat
+
+- publish provider versions as a declaration, then a wheel upload
+
 ## v16.0.0 (2026-10-06)
 
 ### BREAKING CHANGE
