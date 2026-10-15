@@ -1,3 +1,9 @@
+## v17.0.1 (2026-10-15)
+
+### Fix
+
+- **wheel**: name the wheel in every error reading its declaration
+
 ## v17.0.0 (2026-10-15)
 
 ### BREAKING CHANGE
