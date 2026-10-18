@@ -1,3 +1,16 @@
+## v18.0.0 (2026-10-18)
+
+### BREAKING CHANGE
+
+- upload_provider_wheel(operation_id, wheel_path) ->
+ProviderVersion is now upload_provider_wheel(wheel_upload, wheel_path) ->
+WheelUploadOutcome, and wheels go to the signed address instead of the
+API. It needs a hub that answers declarations with wheel_upload.
+
+### Feat
+
+- rename the provider wheel and upload it straight to storage
+
 ## v17.0.1 (2026-10-15)
 
 ### Fix
