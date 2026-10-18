@@ -136,7 +136,7 @@ To check what the platform will read from an installed wheel, run introspection 
 PRAGMA_PROVIDER_DISTRIBUTION=<distribution> python -m pragma_sdk.introspection --output report.json
 ```
 
-`<distribution>` is the `name` in the wheel's `[project]` table. When you publish, the platform republishes the wheel as `<organization>-<provider name you publish under>` and loads it under that name.
+`<distribution>` is the `name` in the wheel's `[project]` table. When you publish, the wheel is renamed to `<organization>-<provider name you publish under>` before it is uploaded, and the platform loads it under that name.
 
 The report lists the resource types with their schemas, or why the provider failed to load.
 

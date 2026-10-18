@@ -14,8 +14,9 @@ import sys
 from pathlib import Path
 
 import structlog
+from packaging.utils import canonicalize_name
 
-from pragma_sdk.declaration.provider import load_declared_provider, normalize_distribution_name
+from pragma_sdk.declaration.provider import load_declared_provider
 from pragma_sdk.declaration.settings import load_provider_settings
 from pragma_sdk.diagnostics.structured_logging import configure_logging
 from pragma_sdk.introspection.report import build_introspection_failure, build_introspection_success
@@ -53,7 +54,7 @@ def introspect_provider() -> IntrospectionSuccess | IntrospectionFailure:
     """
     try:
         settings = load_provider_settings()
-        structlog.contextvars.bind_contextvars(distribution=normalize_distribution_name(settings.distribution))
+        structlog.contextvars.bind_contextvars(distribution=canonicalize_name(settings.distribution))
 
         return build_introspection_success(load_declared_provider(settings.distribution))
     except (Exception, SystemExit) as error:

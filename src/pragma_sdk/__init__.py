@@ -27,7 +27,11 @@ from pragma_sdk.client import (
 from pragma_sdk.exceptions import (
     ProjectHasResourcesError,
     ProjectMismatchError,
+    RenamedWheelWriteError,
     ResourceFailedError,
+    WheelExpansionLimitError,
+    WheelUploadError,
+    WheelUploadExpiredError,
 )
 from pragma_sdk.models import (
     SETTLED_VERSION_STATUSES,
@@ -74,6 +78,8 @@ from pragma_sdk.models import (
     UpdateProjectRequest,
     UpgradePolicy,
     VersionStatus,
+    WheelUploadAddress,
+    WheelUploadOutcome,
 )
 from pragma_sdk.models import Provider as ProviderModel
 from pragma_sdk.provider import MissingObserveError, Provider
@@ -89,6 +95,7 @@ from pragma_sdk.types import (
     PatchResult,
 )
 from pragma_sdk.wheel import read_wheel_declaration
+from pragma_sdk.wheel_rename import rename_provider_wheel
 
 
 __all__ = [
@@ -141,6 +148,7 @@ __all__ = [
     "ProviderScope",
     "ProviderVersion",
     "ProviderVersionDeclaration",
+    "RenamedWheelWriteError",
     "Resource",
     "ResourceFailedError",
     "ResourceIdentity",
@@ -155,5 +163,11 @@ __all__ = [
     "UpdateProjectRequest",
     "UpgradePolicy",
     "VersionStatus",
+    "WheelExpansionLimitError",
+    "WheelUploadAddress",
+    "WheelUploadError",
+    "WheelUploadExpiredError",
+    "WheelUploadOutcome",
     "read_wheel_declaration",
+    "rename_provider_wheel",
 ]

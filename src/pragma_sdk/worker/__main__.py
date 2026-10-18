@@ -17,8 +17,9 @@ from contextlib import suppress
 from functools import partial
 
 import structlog
+from packaging.utils import canonicalize_name
 
-from pragma_sdk.declaration.provider import DeclaredProvider, load_declared_provider, normalize_distribution_name
+from pragma_sdk.declaration.provider import DeclaredProvider, load_declared_provider
 from pragma_sdk.declaration.settings import load_provider_settings
 from pragma_sdk.diagnostics.structured_logging import configure_logging
 from pragma_sdk.protocol.codec import FrameError, JsonRpcCodec
@@ -61,7 +62,7 @@ def load_provider() -> DeclaredProvider:
     """
     try:
         settings = load_provider_settings()
-        structlog.contextvars.bind_contextvars(distribution=normalize_distribution_name(settings.distribution))
+        structlog.contextvars.bind_contextvars(distribution=canonicalize_name(settings.distribution))
 
         return load_declared_provider(settings.distribution)
     except (Exception, SystemExit) as error:

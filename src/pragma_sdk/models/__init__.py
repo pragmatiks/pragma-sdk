@@ -24,6 +24,7 @@ from pragma_sdk.models.enums import (
     TeardownAction,
     UpgradePolicy,
     VersionStatus,
+    WheelUploadOutcome,
 )
 from pragma_sdk.models.file import FileReference
 from pragma_sdk.models.identity import InvalidResourceIdentityError, ResourceIdentity
@@ -41,6 +42,7 @@ from pragma_sdk.models.provider import (
     ProviderInstallation,
     ProviderVersion,
     ProviderVersionDeclaration,
+    WheelUploadAddress,
 )
 from pragma_sdk.models.references import (
     Dependency,
@@ -116,6 +118,8 @@ __all__ = [
     "UpgradePolicy",
     "UserInfo",
     "VersionStatus",
+    "WheelUploadAddress",
+    "WheelUploadOutcome",
     "is_dependency_marker",
     "is_field_ref_marker",
 ]

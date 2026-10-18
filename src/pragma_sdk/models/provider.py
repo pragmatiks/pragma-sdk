@@ -2,12 +2,27 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
-from pydantic import Base64Bytes, BaseModel, Field, computed_field
+import httpx
+from pydantic import Base64Bytes, BaseModel, ConfigDict, Field, SecretStr, computed_field, field_validator
 
 from pragma_sdk.models.enums import AdmissionFailureCategory, ProviderScope, UpgradePolicy, VersionStatus
+
+
+UPLOAD_URL_SCHEMES = frozenset({"http", "https"})
+"""URL schemes a signed upload address may use."""
+
+UPLOAD_HEADER_NAME_PATTERN = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
+"""An upload header name httpx can send: an HTTP token."""
+
+UPLOAD_HEADER_VALUE_PATTERN = re.compile(r"(?:[!-~]+(?:[ \t]+[!-~]+)*)?")
+"""An upload header value httpx can send.
+
+Empty, or printable ASCII words joined by spaces or tabs, with none around them.
+"""
 
 
 class ProviderAuthor(BaseModel):
@@ -64,22 +79,25 @@ class ProviderVersion(BaseModel):
     """A version of a provider, from its declaration through admission.
 
     Declaring the version returns it ``awaiting_wheel``, as a
-    :class:`DeclaredProviderVersion` carrying the ``operation_id`` its wheel
-    is uploaded under. The upload moves it through ``staged`` and
-    ``queued``; the organization's provider host then admits it
-    (``admitting``) and the platform publishes it (``promoting``). Admission
-    ends it ``published``, which fills the fields read from the admitted
-    wheel, or ``failed``, which sets ``failure_category`` and
+    :class:`DeclaredProviderVersion` carrying the address its wheel is
+    uploaded to. Once the wheel is in storage the platform records it
+    ``staged`` and ``queued``; the organization's provider host then admits
+    it (``admitting``) and the platform publishes it (``promoting``).
+    Admission ends it ``published``, which fills the fields read from the
+    admitted wheel, or ``failed``, which sets ``failure_category`` and
     ``error_message``.
 
     Attributes:
         distribution_name: Distribution name the wheel is published under,
             derived from the organization slug and the provider's short name.
+        operation_id: Publish operation that declared the version; a new
+            declaration of the same version replaces it. Set only when the
+            caller's organization authored the version, ``None`` for every
+            other reader.
         wheel_filename: Filename the wheel is stored under, carrying
             ``distribution_name``.
-        wheel_sha256: SHA-256 digest of the wheel as stored under
-            ``distribution_name``; it differs from the digest of the
-            uploaded file.
+        wheel_sha256: Declared SHA-256 digest of the wheel, renamed to
+            ``distribution_name`` before it was declared.
         package: Importable Python package the provider's entry point names.
         summary: Summary from the wheel's metadata; it becomes the catalog
             description when this version creates the provider.
@@ -108,6 +126,7 @@ class ProviderVersion(BaseModel):
     name: str = Field(frozen=True)
     version: str = Field(frozen=True)
     distribution_name: str = Field(frozen=True)
+    operation_id: str | None = None
     wheel_filename: str | None = None
     wheel_sha256: str | None = None
     package: str | None = None
@@ -138,34 +157,128 @@ class ProviderVersion(BaseModel):
         return f"{self.prefix}/{self.name}"
 
 
+class WheelUploadAddress(BaseModel):
+    """Where a declared wheel is uploaded, straight to storage.
+
+    The wheel is sent as the body of one ``PUT`` to ``url`` carrying
+    ``headers`` verbatim; the storage accepts exactly the declared size,
+    once.
+
+    Whoever holds ``url`` can write the declared wheel's bytes until
+    ``expires_at``, so it is a :class:`~pydantic.SecretStr`, masked in the
+    model's representation and JSON serialization, and a failed validation's
+    ``str()`` and ``repr()`` leave the input out; its ``errors()`` and
+    ``json()`` keep the input unless called with ``include_input=False``.
+    A JSON-serialized address carries the mask, not the address, so it does
+    not validate back; a Python-mode ``model_dump()`` keeps the ``SecretStr``
+    and validates back to the address.
+
+    Validation refuses a ``url`` that is not an ``http`` or ``https`` URL
+    with a host, and ``headers`` whose names or values httpx cannot send;
+    neither refusal's message carries the address.
+
+    Attributes:
+        url: Signed address the wheel is uploaded to; ``get_secret_value()``
+            gives it.
+        headers: Headers the upload must send unchanged; the address is
+            signed over them.
+        expires_at: When the address stops accepting the upload.
+    """
+
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    url: SecretStr
+    headers: dict[str, str]
+    expires_at: datetime
+
+    @field_validator("url")
+    @classmethod
+    def require_http_url(cls, url: SecretStr) -> SecretStr:
+        """Refuse an address that is not an ``http`` or ``https`` URL with a host.
+
+        Args:
+            url: The signed address.
+
+        Returns:
+            The address, unchanged.
+
+        Raises:
+            ValueError: When httpx cannot parse the address, or it has
+                another scheme or no host; the message never carries the
+                address.
+        """
+        try:
+            parsed_url: httpx.URL | None = httpx.URL(url.get_secret_value())
+        except httpx.InvalidURL:
+            parsed_url = None
+
+        if parsed_url is None or parsed_url.scheme not in UPLOAD_URL_SCHEMES or not parsed_url.host:
+            raise ValueError("The upload address must be an http or https URL with a host")
+
+        return url
+
+    @field_validator("headers")
+    @classmethod
+    def require_sendable_headers(cls, headers: dict[str, str]) -> dict[str, str]:
+        """Refuse headers whose names or values httpx cannot send.
+
+        Args:
+            headers: The headers the upload must send unchanged.
+
+        Returns:
+            The headers, unchanged.
+
+        Raises:
+            ValueError: When a name is not an HTTP token, or a value is
+                neither empty nor printable ASCII words joined by spaces or
+                tabs, with none around them; the message names the header,
+                not its value.
+        """
+        for name, value in headers.items():
+            if not UPLOAD_HEADER_NAME_PATTERN.fullmatch(name) or not UPLOAD_HEADER_VALUE_PATTERN.fullmatch(value):
+                raise ValueError(f"The upload header {name!r} cannot be sent in an HTTP request")
+
+        return headers
+
+
 class DeclaredProviderVersion(ProviderVersion):
     """A provider version as its publish declaration returns it.
 
-    Only the declaration response carries ``operation_id``; every other
-    response leaves it out.
+    Its input carries the signed upload address, which a failed validation
+    shows, and its serialization carries, as :class:`WheelUploadAddress`
+    describes; a malformed address fails its validation.
 
     Attributes:
-        operation_id: Publish operation the version's wheel is uploaded to,
-            at ``PUT /providers/publish/{operation_id}/wheel``.
+        operation_id: Publish operation the declaration issued; the wheel is
+            staged under it.
+        wheel_upload: Address the wheel is uploaded to, set only while the
+            version is ``awaiting_wheel``; ``None`` once the wheel was
+            received.
     """
 
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     operation_id: str = Field(min_length=1)
+    wheel_upload: WheelUploadAddress | None = None
 
 
 class ProviderVersionDeclaration(BaseModel):
     """What a provider wheel claims about itself, declared before it is uploaded.
 
     ``POST /providers/publish`` checks the declaration and records the version
-    ``awaiting_wheel``; the wheel uploaded afterwards must match it.
+    ``awaiting_wheel``; the wheel uploaded afterwards must match it. The
+    wheel is declared already renamed to its distribution name, as
+    :func:`~pragma_sdk.wheel_rename.rename_provider_wheel` renames it.
     ``metadata`` and ``entry_points`` are given as base64 text, hold the
     decoded bytes, and serialize back to base64 text.
 
     Attributes:
-        wheel_filename: Filename of the built wheel.
-        wheel_sha256: Hex SHA-256 digest of the wheel file.
-        wheel_size: Size of the wheel file in bytes.
-        dist_info_directory: Name of the wheel's ``.dist-info`` directory,
-            such as ``postgresql-1.0.0.dist-info``.
+        wheel_filename: Filename of the renamed wheel, such as
+            ``fubar_postgresql-1.0.0-py3-none-any.whl``.
+        wheel_sha256: Hex SHA-256 digest of the renamed wheel file.
+        wheel_size: Size of the renamed wheel file in bytes.
+        dist_info_directory: Name of the renamed wheel's ``.dist-info``
+            directory, such as ``fubar_postgresql-1.0.0.dist-info``.
         metadata: Contents of the wheel's ``METADATA`` file.
         entry_points: Contents of the wheel's ``entry_points.txt``, or
             ``None`` when the wheel has none.

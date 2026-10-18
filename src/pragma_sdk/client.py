@@ -13,6 +13,7 @@ from urllib.parse import quote
 import httpx
 
 from pragma_sdk.auth import BearerAuth
+from pragma_sdk.blocking import run_in_worker_thread
 from pragma_sdk.config import get_token_for_context
 from pragma_sdk.exceptions import (
     ProjectHasResourcesError,
@@ -35,7 +36,8 @@ from pragma_sdk.models import (
     TeardownResponse,
     UpgradePolicy,
     UserInfo,
-    VersionStatus,
+    WheelUploadAddress,
+    WheelUploadOutcome,
 )
 from pragma_sdk.models.identity import _validate_segment
 from pragma_sdk.models.project import (
@@ -46,6 +48,14 @@ from pragma_sdk.models.project import (
 )
 from pragma_sdk.types import LifecycleState
 from pragma_sdk.wheel import read_wheel_declaration
+from pragma_sdk.wheel_publish import (
+    build_version_without_upload_address,
+    noting_declared_version,
+    temporary_renamed_wheel_directory,
+    temporary_renamed_wheel_directory_async,
+)
+from pragma_sdk.wheel_rename import rename_provider_wheel
+from pragma_sdk.wheel_upload import upload_wheel, upload_wheel_async
 
 
 def _validate_provider_name(provider_name: str) -> str:
@@ -180,13 +190,28 @@ class PragmaClient(BaseClient):
         auth_token: str | None | object = ...,
         context: str | None = None,
         require_auth: bool = False,
+        upload_transport: httpx.BaseTransport | None = None,
     ):
         """Initialize the synchronous Pragma client.
 
-        See BaseClient for parameter documentation.
-        """
+        Args:
+            base_url: API URL. Defaults to PRAGMA_API_URL env var or https://api.pragmatiks.io.
+            timeout: Request timeout in seconds.
+            auth_token: Bearer token. Omit for auto-discovery, pass None to disable auth.
+            context: Named context for token lookup (e.g., 'production').
+            require_auth: Raise if no token can be discovered.
+            upload_transport: Transport that sends wheel uploads to their
+                signed storage addresses, bypassing the API client so no API
+                credentials reach storage and no address is logged; closes
+                with this client. Defaults to a plain ``httpx.HTTPTransport``,
+                which applies no proxy from the environment.
+
+        Raises:
+            ValueError: If require_auth is True and no token is found.
+        """  # noqa: DOC502
         super().__init__(base_url, timeout, auth_token, context, require_auth)
         self._client = httpx.Client(base_url=self.base_url, timeout=self.timeout, auth=self._auth)
+        self.upload_transport = upload_transport or httpx.HTTPTransport()
 
     def __enter__(self):
         """Enter context manager.
@@ -201,8 +226,11 @@ class PragmaClient(BaseClient):
         self.close()
 
     def close(self):
-        """Close the underlying HTTP client."""
-        self._client.close()
+        """Close the API client and the upload transport, the transport even when closing the client fails."""
+        try:
+            self._client.close()
+        finally:
+            self.upload_transport.close()
 
     def _request(
         self,
@@ -628,10 +656,13 @@ class PragmaClient(BaseClient):
 
         Sends the declaration to ``POST /providers/publish``. The wheel's
         ``pragma.provider`` entry point names the provider and its core
-        metadata carries the version. A new declaration answers HTTP 201 with
-        the version ``awaiting_wheel`` and the ``operation_id`` to upload the
-        wheel under; a declaration identical to the one already in flight
-        answers HTTP 200 with that version, in whatever status it is in.
+        metadata carries the version; the wheel must already be renamed to
+        the organization's distribution name, as
+        :func:`~pragma_sdk.wheel_rename.rename_provider_wheel` renames it. A
+        new declaration answers HTTP 201 with the version ``awaiting_wheel``;
+        a declaration identical to the one already in flight answers HTTP 200
+        with that version, in whatever status it is in. Either carries
+        ``wheel_upload`` while the version is ``awaiting_wheel``.
 
         Args:
             declaration: What the wheel claims, as
@@ -639,56 +670,59 @@ class PragmaClient(BaseClient):
                 reads it.
 
         Returns:
-            The declared version with the ``operation_id`` its wheel is
-            uploaded under.
+            The declared version, with the address to upload its wheel to
+            while it is ``awaiting_wheel``.
 
         Raises:
             httpx.HTTPStatusError: If the API refuses the declaration; the
-                response body's ``detail`` says why and what to change.
+                response body's ``detail`` says why and what to change. A 503
+                leaves the version ``awaiting_wheel``; declaring again answers
+                with a fresh upload address.
+            pydantic.ValidationError: If the answer is not a declared
+                version, such as when its upload address is not an ``http``
+                or ``https`` URL with a host or carries a header httpx cannot
+                send; the error shows the address as
+                :class:`~pragma_sdk.models.WheelUploadAddress` describes.
         """  # noqa: DOC502
         response = self._request("POST", "/providers/publish", json_data=declaration.model_dump(mode="json"))
         return DeclaredProviderVersion.model_validate(response)
 
-    def upload_provider_wheel(self, operation_id: str, wheel_path: Path | str) -> ProviderVersion:
-        """Upload the wheel of a declared provider version and start its admission.
+    def upload_provider_wheel(self, wheel_upload: WheelUploadAddress, wheel_path: Path | str) -> WheelUploadOutcome:
+        """Upload the wheel of a declared provider version straight to storage.
 
-        Streams the wheel as the raw request body to
-        ``PUT /providers/publish/{operation_id}/wheel``. The API answers HTTP
-        202 once the wheel is staged for the organization's provider host,
-        or HTTP 200 when this operation's wheel was already uploaded. The
-        host then admits the version, ending it ``published`` or ``failed``;
-        follow it with :meth:`get_provider_version`.
+        Streams the wheel as the body of one ``PUT`` to the signed address,
+        with the address's headers unchanged and no API credentials, through
+        the upload transport, so the address's signed query, its signature,
+        is neither logged nor carried by an error's message or attributes;
+        a traceback's frame locals still hold it. The whole wheel must reach
+        storage before the address's ``expires_at``. Storage answering HTTP
+        412 means the wheel is already stored under this address, which
+        counts as uploaded. The platform then records the version ``staged``
+        and admits it, ending it ``published`` or ``failed``; follow it with
+        :meth:`get_provider_version`.
 
         Args:
-            operation_id: The declared version's ``operation_id``.
+            wheel_upload: The declared version's ``wheel_upload``.
             wheel_path: Path to the declared ``.whl``. Streamed from disk,
                 never read fully into memory.
 
         Returns:
-            The version after the upload.
+            Whether this upload stored the wheel or found it already stored.
 
         Raises:
-            httpx.HTTPStatusError: If the API refuses the upload: 409 when this
-                publish was replaced or its version has settled, so the wheel
-                must be published again; 422 when the operation id is not a
-                UUID or the body is not the wheel this publish declared,
-                leaving the version unchanged, or when the wheel's own
-                ``.dist-info`` files differ from its declaration, failing the
-                version; 400 when the upload is not a readable wheel and 413
-                when its contents expand too far, both failing the version;
-                503 when the wheel cannot be taken right now, leaving the
-                version unchanged so the upload can be retried later.
+            OSError: If the wheel cannot be read.
+            WheelUploadExpiredError: If the address expired before storage
+                received the whole wheel; publish the wheel again for a fresh
+                address.
+            WheelUploadError: If storage refuses the upload otherwise; it
+                carries the HTTP status, storage's error code and request id,
+                never the address.
+            httpx.TransportError: If the upload cannot reach storage or a
+                connect, write or read takes longer than
+                :data:`~pragma_sdk.wheel_upload.WHEEL_UPLOAD_TIMEOUT_SECONDS`;
+                its request carries the address without its signed query.
         """  # noqa: DOC502
-        with Path(wheel_path).open("rb") as wheel_file:
-            response = self._request(
-                "PUT",
-                f"/providers/publish/{quote(operation_id, safe='')}/wheel",
-                content=wheel_file,
-                headers={"Content-Type": "application/octet-stream"},
-                timeout=600.0,
-            )
-
-        return ProviderVersion.model_validate(response)
+        return upload_wheel(self.upload_transport, wheel_upload, wheel_path)
 
     def publish_provider_version(
         self,
@@ -696,43 +730,75 @@ class PragmaClient(BaseClient):
         *,
         changelog: str | None = None,
     ) -> ProviderVersion:
-        """Publish a provider wheel: declare its version, then upload it.
+        """Publish a provider wheel under the caller's organization's distribution name.
 
-        Reads the wheel's declaration, declares it with
-        :meth:`declare_provider_version`, and uploads the wheel with
-        :meth:`upload_provider_wheel` only while the declared version is
-        ``awaiting_wheel``.
+        The wheel is renamed as
+        :func:`~pragma_sdk.wheel_rename.rename_provider_wheel` renames it,
+        then declared, and uploaded while the version is ``awaiting_wheel``.
+        A wheel without exactly one ``pragma.provider`` entry point is
+        declared unchanged for the API to judge. The renamed copy is written
+        to a directory of its own in the system's temporary directory, which
+        ``TMPDIR`` names, so that directory must hold a copy the size of the
+        wheel; removing the copy is best effort and never fails a publish
+        whose declaration and upload succeeded, and what cannot be removed is
+        logged as a warning. An error the upload raises carries a note naming
+        the declared provider, as ``prefix/name``, its version and the
+        publish operation; the note is one of the error's ``__notes__``,
+        which a traceback and a logger given the exception show, and
+        ``str()`` does not. The caller's organization is read from the API
+        before the wheel is opened, so a missing or unreadable wheel surfaces
+        only once that read succeeds.
 
         Args:
             wheel_path: Path to the built ``.whl`` to publish.
             changelog: Optional release notes for this version.
 
         Returns:
-            The version after the declaration, and after the upload when one
-            was needed.
+            The version as declared, without its upload address or the
+            upload's :class:`~pragma_sdk.models.WheelUploadOutcome`; a caller
+            needing the outcome runs :meth:`declare_provider_version` and
+            :meth:`upload_provider_wheel` itself. Its status is the
+            declaration's: an upload does not change it, since the platform
+            records the version ``staged`` only once it finds the wheel in
+            storage. Poll :meth:`get_provider_version` for the current status.
 
         Raises:
             OSError: If the file cannot be opened, such as when it does not
                 exist or is not readable.
-            ValueError: If the wheel has no single top-level ``.dist-info``
-                directory or no ``METADATA`` file in it.
+            RenamedWheelWriteError: If the renamed copy of the wheel, or the
+                temporary directory it is written to, cannot be written.
+            ValueError: If the wheel cannot be renamed or declared, as
+                :func:`~pragma_sdk.wheel_rename.rename_provider_wheel` and
+                :func:`~pragma_sdk.wheel.read_wheel_declaration` describe, or
+                the declaration's answer is not a declared version, the
+                :class:`pydantic.ValidationError` that
+                :meth:`declare_provider_version` describes.
+            WheelExpansionLimitError: If the wheel's members expand past the
+                platform's limit.
             zipfile.BadZipFile: If the file is not a readable zip archive, or
-                reading the archive or a member the declaration needs fails,
-                whatever the cause: a damaged directory or header, a CRC
-                mismatch, a corrupt or truncated compressed stream, an
-                encrypted member, or a compression method this Python cannot
-                decompress.
-            httpx.HTTPStatusError: If the API refuses the declaration or the
-                upload; the response body's ``detail`` says why and what to
-                change.
+                reading the archive or a member fails, whatever the cause: a
+                damaged directory or header, a CRC mismatch, a corrupt or
+                truncated compressed stream, an encrypted member, or a
+                compression method other than stored or deflate.
+            httpx.HTTPStatusError: If the API refuses to name the caller's
+                organization or refuses the declaration; the response body's
+                ``detail`` says why and what to change.
+            WheelUploadError: If storage refuses the upload, as
+                :meth:`upload_provider_wheel` describes.
+            httpx.TransportError: If the API or storage cannot be reached.
         """  # noqa: DOC502
-        declaration = read_wheel_declaration(wheel_path, changelog)
-        version = self.declare_provider_version(declaration)
+        organization = self.get_current_organization()
 
-        if version.status != VersionStatus.AWAITING_WHEEL:
-            return version
+        with temporary_renamed_wheel_directory() as renamed_wheel_directory:
+            renamed_path = rename_provider_wheel(wheel_path, organization.slug, renamed_wheel_directory)
+            declaration = read_wheel_declaration(renamed_path, changelog)
+            version = self.declare_provider_version(declaration)
 
-        return self.upload_provider_wheel(version.operation_id, wheel_path)
+            if version.wheel_upload is not None:
+                with noting_declared_version(version):
+                    self.upload_provider_wheel(version.wheel_upload, renamed_path)
+
+        return build_version_without_upload_address(version)
 
     def install_provider(
         self,
@@ -940,13 +1006,29 @@ class AsyncPragmaClient(BaseClient):
         auth_token: str | None | object = ...,
         context: str | None = None,
         require_auth: bool = False,
+        upload_transport: httpx.AsyncBaseTransport | None = None,
     ):
         """Initialize the asynchronous Pragma client.
 
-        See BaseClient for parameter documentation.
-        """
+        Args:
+            base_url: API URL. Defaults to PRAGMA_API_URL env var or https://api.pragmatiks.io.
+            timeout: Request timeout in seconds.
+            auth_token: Bearer token. Omit for auto-discovery, pass None to disable auth.
+            context: Named context for token lookup (e.g., 'production').
+            require_auth: Raise if no token can be discovered.
+            upload_transport: Transport that sends wheel uploads to their
+                signed storage addresses, bypassing the API client so no API
+                credentials reach storage and no address is logged; closes
+                with this client. Defaults to a plain
+                ``httpx.AsyncHTTPTransport``, which applies no proxy from the
+                environment.
+
+        Raises:
+            ValueError: If require_auth is True and no token is found.
+        """  # noqa: DOC502
         super().__init__(base_url, timeout, auth_token, context, require_auth)
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout, auth=self._auth)
+        self.upload_transport = upload_transport or httpx.AsyncHTTPTransport()
 
     async def __aenter__(self):
         """Enter async context manager.
@@ -954,16 +1036,24 @@ class AsyncPragmaClient(BaseClient):
         Returns:
             Self for use in async with statement.
         """
-        await self._client.__aenter__()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Exit async context manager and close client."""
-        await self._client.__aexit__(exc_type, exc_val, exc_tb)
+    async def __aexit__(self, _exc_type, _exc_val, _exc_tb):
+        """Exit the async context manager, closing the client as :meth:`close` does.
+
+        Args:
+            _exc_type: Exception type raised in the block, if any.
+            _exc_val: Exception raised in the block, if any.
+            _exc_tb: Its traceback, if any.
+        """
+        await self.close()
 
     async def close(self):
-        """Close the underlying HTTP client."""
-        await self._client.aclose()
+        """Close the API client and the upload transport, the transport even when closing the client fails."""
+        try:
+            await self._client.aclose()
+        finally:
+            await self.upload_transport.aclose()
 
     async def _request(
         self,
@@ -1384,51 +1474,50 @@ class AsyncPragmaClient(BaseClient):
                 reads it.
 
         Returns:
-            The declared version with the ``operation_id`` its wheel is
-            uploaded under.
+            The declared version, with the address to upload its wheel to
+            while it is ``awaiting_wheel``.
 
         Raises:
             httpx.HTTPStatusError: If the API refuses the declaration; the
-                response body's ``detail`` says why and what to change.
+                response body's ``detail`` says why and what to change. A 503
+                leaves the version ``awaiting_wheel``; declaring again answers
+                with a fresh upload address.
+            pydantic.ValidationError: If the answer is not a declared
+                version, such as when its upload address is not an ``http``
+                or ``https`` URL with a host or carries a header httpx cannot
+                send; the error shows the address as
+                :class:`~pragma_sdk.models.WheelUploadAddress` describes.
         """  # noqa: DOC502
         response = await self._request("POST", "/providers/publish", json_data=declaration.model_dump(mode="json"))
         return DeclaredProviderVersion.model_validate(response)
 
-    async def upload_provider_wheel(self, operation_id: str, wheel_path: Path | str) -> ProviderVersion:
+    async def upload_provider_wheel(
+        self, wheel_upload: WheelUploadAddress, wheel_path: Path | str
+    ) -> WheelUploadOutcome:
         """Async mirror of :meth:`PragmaClient.upload_provider_wheel`.
 
         Args:
-            operation_id: The declared version's ``operation_id``.
+            wheel_upload: The declared version's ``wheel_upload``.
             wheel_path: Path to the declared ``.whl``. Streamed from disk,
                 never read fully into memory.
 
         Returns:
-            The version after the upload.
+            Whether this upload stored the wheel or found it already stored.
 
         Raises:
-            httpx.HTTPStatusError: If the API refuses the upload: 409 when this
-                publish was replaced or its version has settled, so the wheel
-                must be published again; 422 when the operation id is not a
-                UUID or the body is not the wheel this publish declared,
-                leaving the version unchanged, or when the wheel's own
-                ``.dist-info`` files differ from its declaration, failing the
-                version; 400 when the upload is not a readable wheel and 413
-                when its contents expand too far, both failing the version;
-                503 when the wheel cannot be taken right now, leaving the
-                version unchanged so the upload can be retried later.
+            OSError: If the wheel cannot be read.
+            WheelUploadExpiredError: If the address expired before storage
+                received the whole wheel; publish the wheel again for a fresh
+                address.
+            WheelUploadError: If storage refuses the upload otherwise; it
+                carries the HTTP status, storage's error code and request id,
+                never the address.
+            httpx.TransportError: If the upload cannot reach storage or a
+                connect, write or read takes longer than
+                :data:`~pragma_sdk.wheel_upload.WHEEL_UPLOAD_TIMEOUT_SECONDS`;
+                its request carries the address without its signed query.
         """  # noqa: DOC502
-        wheel_path = Path(wheel_path)
-        response = await self._request(
-            "PUT",
-            f"/providers/publish/{quote(operation_id, safe='')}/wheel",
-            content=read_file_chunks(wheel_path),
-            headers={
-                "Content-Type": "application/octet-stream",
-                "Content-Length": str(wheel_path.stat().st_size),
-            },
-            timeout=600.0,
-        )
-        return ProviderVersion.model_validate(response)
+        return await upload_wheel_async(self.upload_transport, wheel_upload, wheel_path)
 
     async def publish_provider_version(
         self,
@@ -1438,36 +1527,64 @@ class AsyncPragmaClient(BaseClient):
     ) -> ProviderVersion:
         """Async mirror of :meth:`PragmaClient.publish_provider_version`.
 
+        File work runs off the event loop; a cancelled publish, however often
+        it is cancelled, raises only after its file work has stopped and the
+        renamed copy has been removed. Under an anyio cancel scope the event
+        loop stays busy while that file work finishes, as
+        :func:`~pragma_sdk.blocking.run_in_worker_thread` notes.
+
         Args:
             wheel_path: Path to the built ``.whl`` to publish.
             changelog: Optional release notes for this version.
 
         Returns:
-            The version after the declaration, and after the upload when one
-            was needed.
+            The version as declared, without its upload address or the
+            upload's :class:`~pragma_sdk.models.WheelUploadOutcome`; a caller
+            needing the outcome runs :meth:`declare_provider_version` and
+            :meth:`upload_provider_wheel` itself. Its status is the
+            declaration's: an upload does not change it, since the platform
+            records the version ``staged`` only once it finds the wheel in
+            storage. Poll :meth:`get_provider_version` for the current status.
 
         Raises:
             OSError: If the file cannot be opened, such as when it does not
                 exist or is not readable.
-            ValueError: If the wheel has no single top-level ``.dist-info``
-                directory or no ``METADATA`` file in it.
+            RenamedWheelWriteError: If the renamed copy of the wheel, or the
+                temporary directory it is written to, cannot be written.
+            ValueError: If the wheel cannot be renamed or declared, as
+                :func:`~pragma_sdk.wheel_rename.rename_provider_wheel` and
+                :func:`~pragma_sdk.wheel.read_wheel_declaration` describe, or
+                the declaration's answer is not a declared version, the
+                :class:`pydantic.ValidationError` that
+                :meth:`declare_provider_version` describes.
+            WheelExpansionLimitError: If the wheel's members expand past the
+                platform's limit.
             zipfile.BadZipFile: If the file is not a readable zip archive, or
-                reading the archive or a member the declaration needs fails,
-                whatever the cause: a damaged directory or header, a CRC
-                mismatch, a corrupt or truncated compressed stream, an
-                encrypted member, or a compression method this Python cannot
-                decompress.
-            httpx.HTTPStatusError: If the API refuses the declaration or the
-                upload; the response body's ``detail`` says why and what to
-                change.
+                reading the archive or a member fails, whatever the cause: a
+                damaged directory or header, a CRC mismatch, a corrupt or
+                truncated compressed stream, an encrypted member, or a
+                compression method other than stored or deflate.
+            httpx.HTTPStatusError: If the API refuses to name the caller's
+                organization or refuses the declaration; the response body's
+                ``detail`` says why and what to change.
+            WheelUploadError: If storage refuses the upload, as
+                :meth:`PragmaClient.upload_provider_wheel` describes.
+            httpx.TransportError: If the API or storage cannot be reached.
         """  # noqa: DOC502
-        declaration = await asyncio.to_thread(read_wheel_declaration, wheel_path, changelog)
-        version = await self.declare_provider_version(declaration)
+        organization = await self.get_current_organization()
 
-        if version.status != VersionStatus.AWAITING_WHEEL:
-            return version
+        async with temporary_renamed_wheel_directory_async() as renamed_wheel_directory:
+            renamed_path = await run_in_worker_thread(
+                rename_provider_wheel, wheel_path, organization.slug, renamed_wheel_directory
+            )
+            declaration = await run_in_worker_thread(read_wheel_declaration, renamed_path, changelog)
+            version = await self.declare_provider_version(declaration)
 
-        return await self.upload_provider_wheel(version.operation_id, wheel_path)
+            if version.wheel_upload is not None:
+                with noting_declared_version(version):
+                    await self.upload_provider_wheel(version.wheel_upload, renamed_path)
+
+        return build_version_without_upload_address(version)
 
     async def install_provider(
         self,
@@ -1728,21 +1845,6 @@ def compute_deadline(timeout: float | None, now: float) -> float | None:
         Deadline on the caller's clock, or None when the caller waits forever.
     """
     return now + timeout if timeout else None
-
-
-async def read_file_chunks(path: Path, chunk_size: int = 1024 * 1024) -> AsyncGenerator[bytes]:
-    """Stream a file from disk in chunks without blocking the event loop.
-
-    Args:
-        path: File to read.
-        chunk_size: Largest number of bytes yielded at once.
-
-    Yields:
-        Consecutive chunks of the file until its end.
-    """
-    with path.open("rb") as file:
-        while chunk := await asyncio.to_thread(file.read, chunk_size):
-            yield chunk
 
 
 def raise_if_resource_failed(resource_id: str, payload: dict[str, Any]) -> None:
