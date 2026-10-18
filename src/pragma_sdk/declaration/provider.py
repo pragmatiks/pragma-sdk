@@ -1,32 +1,22 @@
-"""The provider an installed wheel distribution declares through its entry point.
-
-A provider wheel declares itself with one entry point in the
-``pragma.provider`` group, named after the provider and pointing at its
-importable package::
-
-    [project.entry-points."pragma.provider"]
-    postgres = "postgres_provider"
-"""
+"""The provider an installed wheel distribution declares through its ``pragma.provider`` entry point."""
 
 from __future__ import annotations
 
 import importlib
 import importlib.metadata
-import re
 from dataclasses import dataclass
+
+from packaging.utils import canonicalize_name
 
 from pragma_sdk.models import Resource
 from pragma_sdk.protocol.constants import OFFERED_PROTOCOL_VERSIONS
 from pragma_sdk.protocol.frames import HandshakeParams, ResourceTypeCapabilities
 from pragma_sdk.provider.discovery import discover_resources, is_module_in_package
 from pragma_sdk.provider.provider import MissingObserveError
+from pragma_sdk.provider_entry_point import ENTRY_POINT_DECLARATION, PROVIDER_ENTRY_POINT_GROUP, parse_provider_package
 
-
-PROVIDER_ENTRY_POINT_GROUP = "pragma.provider"
 
 SDK_DISTRIBUTION = "pragmatiks-sdk"
-
-ENTRY_POINT_DECLARATION = '[project.entry-points."pragma.provider"] <name> = "<package>"'
 
 
 class ProviderDeclarationError(Exception):
@@ -104,15 +94,16 @@ def load_declared_provider(distribution: str) -> DeclaredProvider:
 
     Raises:
         ProviderDeclarationError: If the distribution is not installed, does
-            not declare exactly one ``pragma.provider`` entry point, names an
-            object or a plain module instead of a package, defines no
-            resource types, or a resource type the package imports from
-            outside itself defines no ``on_observe``.
+            not declare exactly one ``pragma.provider`` entry point, its
+            entry point's reference is not a module path, carries extras, or
+            names an object or a plain module instead of a package, its
+            package defines no resource types, or a resource type the package
+            imports from outside itself defines no ``on_observe``.
         MissingObserveError: If a non-computed resource type the package
             defines has no ``on_observe``. Any other exception the provider
             package raises while it is imported propagates unchanged.
     """  # noqa: DOC502
-    normalized_distribution = normalize_distribution_name(distribution)
+    normalized_distribution = canonicalize_name(distribution)
 
     try:
         distribution_version = importlib.metadata.version(distribution)
@@ -122,13 +113,14 @@ def load_declared_provider(distribution: str) -> DeclaredProvider:
     sdk_version = importlib.metadata.version(SDK_DISTRIBUTION)
     entry_points = importlib.metadata.entry_points(group=PROVIDER_ENTRY_POINT_GROUP)
     entry_point = find_declared_entry_point(normalized_distribution, entry_points)
+    package = parse_declared_package(normalized_distribution, entry_point)
 
-    resource_types = discover_declared_resources(normalized_distribution, entry_point.module)
+    resource_types = discover_declared_resources(normalized_distribution, package)
 
     return DeclaredProvider(
         distribution=normalized_distribution,
         short_name=entry_point.name,
-        package=entry_point.module,
+        package=package,
         distribution_version=distribution_version,
         sdk_version=sdk_version,
         resource_types=resource_types,
@@ -148,8 +140,8 @@ def find_declared_entry_point(
         The distribution's entry point.
 
     Raises:
-        ProviderDeclarationError: If the distribution declares no entry point,
-            more than one, or one naming an object instead of a package.
+        ProviderDeclarationError: If the distribution declares no entry point
+            or more than one.
     """
     declared = [
         entry_point
@@ -170,15 +162,28 @@ def find_declared_entry_point(
             f"entry points ({', '.join(names)}). Keep exactly one."
         )
 
-    entry_point = declared[0]
+    return declared[0]
 
-    if entry_point.attr is not None:
-        raise ProviderDeclarationError(
-            f"Entry point {entry_point.name!r} of {normalized_distribution!r} must name a package, "
-            f"not {entry_point.value!r}. Declare it as {ENTRY_POINT_DECLARATION}."
-        )
 
-    return entry_point
+def parse_declared_package(normalized_distribution: str, entry_point: importlib.metadata.EntryPoint) -> str:
+    """Parse the package a distribution's ``pragma.provider`` entry point names.
+
+    Args:
+        normalized_distribution: PEP 503-normalized distribution name.
+        entry_point: The distribution's entry point.
+
+    Returns:
+        The package, as :func:`~pragma_sdk.provider_entry_point.parse_provider_package` parses it.
+
+    Raises:
+        ProviderDeclarationError: If the entry point's reference is not a
+            module path, carries extras, or names an object instead of a
+            package.
+    """
+    try:
+        return parse_provider_package(entry_point.name, entry_point.value)
+    except ValueError as error:
+        raise ProviderDeclarationError(f"Distribution {normalized_distribution!r}: {error}") from error
 
 
 def discover_declared_resources(normalized_distribution: str, package: str) -> dict[str, type[Resource]]:
@@ -241,16 +246,4 @@ def read_entry_point_distribution_name(entry_point: importlib.metadata.EntryPoin
     if entry_point.dist is None:
         return None
 
-    return normalize_distribution_name(entry_point.dist.name)
-
-
-def normalize_distribution_name(name: str) -> str:
-    """Normalize a distribution name the way PEP 503 compares them.
-
-    Args:
-        name: Distribution name.
-
-    Returns:
-        The name lowercased, with runs of ``-``, ``_`` and ``.`` collapsed to ``-``.
-    """
-    return re.sub(r"[-_.]+", "-", name).lower()
+    return canonicalize_name(entry_point.dist.name)

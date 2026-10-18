@@ -17,8 +17,18 @@ pragma-sdk/
     ├── declaration/       # Provider declared by a distribution's `pragma.provider` entry point
     ├── diagnostics/       # Log output and secret-free error descriptions for worker and introspection
     ├── worker/            # `python -m pragma_sdk.worker --socket <path>`: runs lifecycle methods
-    └── introspection/     # `python -m pragma_sdk.introspection --output <path>`: writes the report
+    ├── introspection/     # `python -m pragma_sdk.introspection --output <path>`: writes the report
+    ├── provider_entry_point.py  # The `pragma.provider` entry point group and its package parsing
+    ├── wheel.py           # Bounded wheel archive reads and the publish declaration read
+    ├── wheel_check.py     # `.dist-info` refusal check against a declaration
+    ├── wheel_names.py     # Distribution, filename and `.dist-info` naming contract
+    ├── wheel_rename.py    # Renaming a wheel to its organization's distribution name
+    ├── wheel_upload.py    # Direct wheel upload to the signed storage address
+    ├── wheel_publish.py   # Renamed wheel directory and declared-version note of the publish composite
+    └── blocking.py        # Cancel-shielded worker-thread runner for the async client
 ```
+
+`wheel.py`, `wheel_check.py`, `wheel_names.py`, `provider_entry_point.py` and the `WheelExpansionLimitError` and `build_wheel_too_large_message` parts of `exceptions.py` are the wheel contract the hub's admission imports: changing them changes what the platform admits.
 
 `protocol/` imports nothing from the SDK but `types`; the Pragmatiks host speaks only it. Changing a frame shape, the introspection report, or the worker's method set is a new `PROTOCOL_VERSION`.
 
@@ -37,6 +47,7 @@ pragma-sdk/
 ## Dependencies
 
 - `httpx` - Async HTTP client
+- `packaging` - Wheel filename, version and distribution-name rules when reading and renaming provider wheels
 - `pydantic` - Data validation and serialization
 - `pydantic-settings` - Worker and introspection settings from `PRAGMA_PROVIDER_*` environment variables
 - `pyyaml` - YAML parsing for resource definitions
@@ -249,7 +260,7 @@ Identifiers use full words. No `k8s`, `cfg`, `db`, `req`, `res`, `ctx`, `tmp`, `
 Provider event `on_delete` stays (provider deletes external object).
 
 **User-facing surfaces** (HTTP API, OpenAPI, SDK, CLI, web UI, docs):
-- API mirrors CLI: route noun + verb match CLI command (`pragma providers publish` ↔ `POST /providers/publish`), and reverse. Mismatch = finding, not REST-purist path. A sub-route under a command's noun belongs to that command: `PUT /providers/publish/{operation_id}/wheel` is part of `pragma providers publish`.
+- API mirrors CLI: route noun + verb match CLI command (`pragma providers publish` ↔ `POST /providers/publish`), and reverse. Mismatch = finding, not REST-purist path. A sub-route under a command's noun belongs to that command.
 - No internal infrastructure terms (Kubernetes, pod, namespace, NATS, JetStream, SurrealDB internals) or vendor names (Clerk) in route summaries, descriptions, schema field docs, error strings, UI copy. OpenAPI spec feeds public docs verbatim — fix at source.
 - Failure reasons written to a resource's terminal `FAILED` state: no blame ("provider failed to…"), no internal jargon (queue, outbox, dispatch, event id), end with shared `RECOVERY_GUIDANCE` constant — reuse existing reason constants, never per-path prose. Other failures (publication, install) end with the recovery wording their decision doc defines.
 

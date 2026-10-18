@@ -27,12 +27,13 @@ class VersionStatus(StrEnum):
     """Where a provider version is between its declaration and admission.
 
     Declaring a version leaves it ``AWAITING_WHEEL`` until its wheel is
-    uploaded. The upload stages the wheel (``STAGED``) and queues it for the
-    organization's provider host (``QUEUED``); the host takes it
-    (``ADMITTING``) and, once admitted, the platform publishes it
-    (``PROMOTING``). Admission ends the version ``PUBLISHED``, which makes it
-    installable, or ``FAILED``, after which the version can be published
-    again. Every other status means admission is still in flight.
+    uploaded. Once the wheel is in storage the platform records it
+    (``STAGED``) and queues it for the organization's provider host
+    (``QUEUED``); the host takes it (``ADMITTING``) and, once admitted, the
+    platform publishes it (``PROMOTING``). Admission ends the version
+    ``PUBLISHED``, which makes it installable, or ``FAILED``, after which the
+    version can be published again. Every other status means admission is
+    still in flight.
     """
 
     AWAITING_WHEEL = "awaiting_wheel"
@@ -55,6 +56,7 @@ class AdmissionFailureCategory(StrEnum):
     """Why a provider version failed admission."""
 
     WHEEL_REFUSED = "wheel_refused"
+    WHEEL_TOO_LARGE = "wheel_too_large"
     WHEEL_LOST = "wheel_lost"
     DIGEST_MISMATCH = "digest_mismatch"
     PYTHON_UNAVAILABLE = "python_unavailable"
@@ -69,6 +71,16 @@ class AdmissionFailureCategory(StrEnum):
     DEADLINE_EXCEEDED = "deadline_exceeded"
     PLATFORM_ERROR = "platform_error"
     ORGANIZATION_DELETED = "organization_deleted"
+
+
+class WheelUploadOutcome(StrEnum):
+    """How storage took a wheel uploaded to its address.
+
+    Either outcome leaves the wheel stored under the address.
+    """
+
+    STORED = "stored"
+    ALREADY_STORED = "already_stored"
 
 
 class UpgradePolicy(StrEnum):
