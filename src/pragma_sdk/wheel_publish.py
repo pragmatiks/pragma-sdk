@@ -19,7 +19,7 @@ from pragma_sdk.wheel_rename import log_path_not_removed
 
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable, Iterator
+    from collections.abc import AsyncGenerator, Callable, Generator
 
     from pragma_sdk.models import DeclaredProviderVersion
 
@@ -79,7 +79,7 @@ def log_removal_failure(_function: Callable[..., object], path: str, error: Base
 
 
 @contextlib.contextmanager
-def temporary_renamed_wheel_directory() -> Iterator[str]:
+def temporary_renamed_wheel_directory() -> Generator[str]:
     """Create the temporary directory a publish writes the renamed copy of its wheel to, and remove it on exit.
 
     Yields:
@@ -97,7 +97,7 @@ def temporary_renamed_wheel_directory() -> Iterator[str]:
 
 
 @contextlib.asynccontextmanager
-async def temporary_renamed_wheel_directory_async() -> AsyncIterator[str]:
+async def temporary_renamed_wheel_directory_async() -> AsyncGenerator[str]:
     """Async mirror of :func:`temporary_renamed_wheel_directory`, off the event loop.
 
     A directory created while the caller was being cancelled is removed too.
@@ -117,7 +117,7 @@ async def temporary_renamed_wheel_directory_async() -> AsyncIterator[str]:
 
 
 @contextlib.contextmanager
-def noting_declared_version(version: DeclaredProviderVersion) -> Iterator[None]:
+def noting_declared_version(version: DeclaredProviderVersion) -> Generator[None]:
     """Add a note naming a declared version to any error raised inside the block.
 
     The note names the provider, as ``prefix/name``, the version and the
