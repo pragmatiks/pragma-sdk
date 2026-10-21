@@ -8,7 +8,7 @@ tasks:
     desc: Install the locked toolchain, the dependencies and the git hooks
     cmds:
       - task: install:mise-ceiling
-      - mise install --locked
+      - mise install
       - uv sync --all-groups
       - task: install:hooks
 
