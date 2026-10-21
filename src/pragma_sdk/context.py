@@ -20,7 +20,7 @@ from pragma_sdk.types import LifecycleState
 
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator
 
     from pragma_sdk.models.references import OwnerReference
 
@@ -78,7 +78,7 @@ _provider_name: ContextVar[str | None] = ContextVar("_provider_name", default=No
 
 
 @contextmanager
-def runtime_context_scope(context: RuntimeContext) -> Iterator[None]:
+def runtime_context_scope(context: RuntimeContext) -> Generator[None]:
     """Bind the runtime context for the duration of the ``with`` block.
 
     Called by the runtime before invoking lifecycle methods. The previous
@@ -184,7 +184,7 @@ async def apply_resource(resource_data: dict[str, Any]) -> None:
 
 
 @contextmanager
-def resource_owner_scope(owner: OwnerReference) -> Iterator[None]:
+def resource_owner_scope(owner: OwnerReference) -> Generator[None]:
     """Bind the executing resource as owner for child resources.
 
     Called by the runtime before invoking lifecycle methods. When a child
@@ -212,7 +212,7 @@ def resource_owner() -> OwnerReference | None:
 
 
 @contextmanager
-def provider_name_scope(name: str) -> Iterator[None]:
+def provider_name_scope(name: str) -> Generator[None]:
     """Bind the provider name for the duration of the ``with`` block.
 
     Called by the runtime before invoking lifecycle methods. The previous

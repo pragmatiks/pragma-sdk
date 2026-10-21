@@ -54,10 +54,16 @@ pragma-sdk/
 
 ## Development
 
+mise is the only toolchain source: `mise.toml` pins python, uv, task, pre-commit, commitizen and yq, and `mise.lock` plus `.mise/locks/` lock them for macOS arm64 and Linux x64.
+
+On a fresh clone run `mise trust && mise install --locked` first (task comes from mise), then `task install`.
+
 Always use `task` commands:
 
 | Command | Purpose |
 |---------|---------|
+| `task install` | Install the locked toolchain, dependencies and git hooks |
+| `task lock:toolchain` | Re-lock the toolchain after editing `mise.toml` (needs mise at `MISE_VERSION_PIN`) |
 | `task format` | Format with ruff |
 | `task check` | Lint + type check |
 
