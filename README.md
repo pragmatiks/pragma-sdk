@@ -25,10 +25,7 @@ with PragmaClient() as client:
     # Apply a resource
     client.apply_resource(
         Resource(
-            provider="gcp",
-            resource="storage",
-            name="my-bucket",
-            config={"location": "US", "storage_class": "STANDARD"}
+            provider="gcp", resource="storage", name="my-bucket", config={"location": "US", "storage_class": "STANDARD"}
         )
     )
 
@@ -43,6 +40,7 @@ with PragmaClient() as client:
 import asyncio
 from pragma_sdk import AsyncPragmaClient, Resource
 
+
 async def main():
     async with AsyncPragmaClient() as client:
         # Apply a resource
@@ -51,13 +49,14 @@ async def main():
                 provider="gcp",
                 resource="storage",
                 name="my-bucket",
-                config={"location": "US", "storage_class": "STANDARD"}
+                config={"location": "US", "storage_class": "STANDARD"},
             )
         )
 
         # Get resource status
         bucket = await client.get_resource("gcp", "storage", "my-bucket")
         print(bucket.outputs)
+
 
 asyncio.run(main())
 ```
@@ -93,13 +92,16 @@ from pragma_sdk import Provider, Resource, Config, Outputs, Field
 
 gcp = Provider()
 
+
 class BucketConfig(Config):
     location: Field[str]
     storage_class: Field[str] = "STANDARD"
 
+
 class BucketOutputs(Outputs):
     url: str
     created_at: str
+
 
 @gcp.resource("storage")
 class Bucket(Resource[BucketConfig, BucketOutputs]):
@@ -148,12 +150,7 @@ Reference outputs from other resources:
 from pragma_sdk import FieldReference
 
 config = AppConfig(
-    database_url=FieldReference(
-        provider="postgres",
-        resource="database",
-        name="my-db",
-        field="outputs.connection_url"
-    )
+    database_url=FieldReference(provider="postgres", resource="database", name="my-db", field="outputs.connection_url")
 )
 ```
 
@@ -164,14 +161,11 @@ Test lifecycle methods locally with `ProviderHarness`:
 ```python
 from pragma_sdk.provider import ProviderHarness
 
+
 async def test_bucket_creation():
     harness = ProviderHarness()
 
-    result = await harness.invoke_create(
-        Bucket,
-        name="test-bucket",
-        config=BucketConfig(location="US")
-    )
+    result = await harness.invoke_create(Bucket, name="test-bucket", config=BucketConfig(location="US"))
 
     assert result.success
     assert "gs://test-bucket" in result.outputs.url
@@ -278,14 +272,14 @@ On the client itself, `AsyncPragmaClient` only.
 ## Development
 
 ```bash
-# Run tests
-task sdk:test
+# Install the toolchain, dependencies and git hooks
+mise run install
 
 # Format code
-task sdk:format
+mise run format
 
 # Type check and lint
-task sdk:check
+mise run check
 ```
 
 ## License

@@ -1,0 +1,34 @@
+[install]
+description = "Install the locked toolchain, the Python dependencies and the git hooks"
+extends = "bash"
+run = [
+  { task = "install:mise-ceiling" },
+  "mise install",
+  { task = "install:python" },
+  { task = "install:hooks" },
+]
+
+["install:mise-ceiling"]
+description = "Write the gitignored .miserc.toml that keeps mise in .claude/worktrees checkouts from loading the primary checkout's config"
+file = "scripts/tasks/install_mise_ceiling.sh"
+
+["install:hooks"]
+description = "Install the pre-commit and commit-msg git hooks into the shared hooks directory"
+file = "scripts/tasks/install_hooks.sh"
+
+["lock:toolchain"]
+description = "Re-resolve mise.lock and .mise/locks/ for macOS arm64 and Linux x64 without bumping any tool; needs mise at the min_version in mise.toml"
+file = "scripts/tasks/lock_toolchain.sh"
+
+[format]
+description = "Format Python code with ruff"
+extends = "bash"
+run = "uv run ruff format ."
+
+[check]
+description = "Check Python code with ruff and ty"
+extends = "bash"
+run = [
+  "uv run ruff check --fix .",
+  "uv run ty check",
+]
