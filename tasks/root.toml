@@ -30,5 +30,5 @@ description = "Check Python code with ruff and ty"
 extends = "bash"
 run = [
   "uv run ruff check --fix .",
-  "uvx ty check",
+  "uv run ty check",
 ]
