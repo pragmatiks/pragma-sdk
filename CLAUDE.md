@@ -74,6 +74,15 @@ Use mise tasks (`mise tasks` lists them all):
 - httpx for HTTP calls
 - Type hints on all public interfaces
 
+## Delivery
+
+Canonical: pragma-kit `project-instructions.md` (Delivery, Cloud threads). In short:
+
+- **Land it** by default: commit, push, open the pull request, and rebase-merge it once CI and review are clean.
+- **PR it** (push, open the pull request, stop) only when the work departs from the agreed plan: an architecture change, a new pattern, a new library, or a changed design decision. Name the departure and wait for the founder. The founder saying "PR it" or "land it" sets the mode for that task.
+- Branch from the latest `origin/main` as `<feat|fix|chore>/PRA-<n>_<snake_case_summary>`; the branch is deleted on merge.
+- Commits carry the founder's git identity, with no `Co-Authored-By`, `Claude-Session` or other Claude trailers.
+
 ## Evidence-based development
 
 Fact-check with live lookups before writing code. The cost of a query is far less than a debugging cycle on stale assumptions.
@@ -362,7 +371,7 @@ The correct developer flow:
 1. Make your changes on a feature branch.
 2. Use conventional commits (`feat:`, `fix:`, `refactor:`, etc.). Do not touch the `version` field in `pyproject.toml` and do not edit `CHANGELOG.md`.
 3. Open a PR.
-4. After review, squash-merge to main.
+4. Rebase-merge to main per Delivery.
 5. CI bumps (pushed by pragma-ci-bot with `[skip ci]`), tags, builds, publishes, and cascades.
 
 ### Tag format
