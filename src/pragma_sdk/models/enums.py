@@ -7,15 +7,6 @@ from enum import StrEnum
 from pragma_sdk.types import EventType as EventType
 
 
-class DeploymentStatus(StrEnum):
-    """Status of a provider deployment."""
-
-    PENDING = "pending"
-    PROGRESSING = "progressing"
-    AVAILABLE = "available"
-    FAILED = "failed"
-
-
 class ResponseStatus(StrEnum):
     """Provider response status: SUCCESS or FAILURE."""
 
@@ -83,13 +74,6 @@ class WheelUploadOutcome(StrEnum):
     ALREADY_STORED = "already_stored"
 
 
-class UpgradePolicy(StrEnum):
-    """Upgrade policy for installed providers."""
-
-    AUTO = "auto"
-    MANUAL = "manual"
-
-
 class TeardownAction(StrEnum):
     """What a teardown does to one resource its cascade reaches.
 
@@ -104,6 +88,36 @@ class TeardownAction(StrEnum):
     WALK_THROUGH = "walk_through"
     RELEASED = "released"
     DEPENDENT_WAITING = "dependent_waiting"
+
+
+class InstallationLifecycleState(StrEnum):
+    """Where a provider installation is.
+
+    An operation is requested (``PENDING``), the provider host starts its
+    version (``PROCESSING``) and the installation ends ``READY`` or
+    ``FAILED``; ``DELETING`` lasts until an uninstall removes it.
+    """
+
+    PENDING = "pending"
+    PROCESSING = "processing"
+    READY = "ready"
+    FAILED = "failed"
+    DELETING = "deleting"
+
+
+class InstallationOperationType(StrEnum):
+    """Kind of operation a provider installation runs or last ran.
+
+    ``INSTALL`` installs it, or installs a failed one again; ``UPGRADE`` and
+    ``DOWNGRADE`` move it to a newer or an older version; ``START`` starts a
+    ready installation on a new provider host; ``UNINSTALL`` removes it.
+    """
+
+    INSTALL = "install"
+    UPGRADE = "upgrade"
+    DOWNGRADE = "downgrade"
+    START = "start"
+    UNINSTALL = "uninstall"
 
 
 class ProviderScope(StrEnum):

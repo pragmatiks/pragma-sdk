@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from pydantic import Base64Bytes, BaseModel, ConfigDict, Field, SecretStr, computed_field, field_validator
 
-from pragma_sdk.models.enums import AdmissionFailureCategory, ProviderScope, UpgradePolicy, VersionStatus
+from pragma_sdk.models.enums import (
+    AdmissionFailureCategory,
+    InstallationLifecycleState,
+    InstallationOperationType,
+    ProviderScope,
+    VersionStatus,
+)
 
 
 UPLOAD_URL_SCHEMES = frozenset({"http", "https"})
@@ -295,18 +301,38 @@ class ProviderVersionDeclaration(BaseModel):
 
 
 class ProviderInstallation(BaseModel):
-    """A provider installed in the current tenant."""
+    """A provider installed in the current tenant.
+
+    Attributes:
+        prefix: Namespace token of the installed provider.
+        name: Provider short name within the prefix.
+        installed_version: Version the installation last served, or ``None``
+            when no operation has reached ``ready`` yet.
+        config: Environment variables passed only to this provider.
+        installed_at: When the provider was first installed.
+        created_at: Creation timestamp.
+        updated_at: Last update timestamp.
+        lifecycle_state: Where the installation is: ``pending``,
+            ``processing``, ``ready``, ``failed`` or ``deleting``.
+        operation_type: The installation's latest operation: ``install``,
+            ``upgrade``, ``downgrade``, ``start`` or ``uninstall``.
+        operation_version: Version the latest operation targets; installing
+            again without a version installs it.
+        failure_message: Why the latest operation failed, set only while the
+            installation is ``failed``.
+    """
 
     prefix: str = Field(frozen=True)
     name: str = Field(frozen=True)
-    installed_version: str
-    upgrade_policy: UpgradePolicy
+    installed_version: str | None = None
     config: dict[str, str] | None = None
-    current_version: str | None = None
-    current_image: str | None = None
     installed_at: datetime
     created_at: datetime
     updated_at: datetime
+    lifecycle_state: InstallationLifecycleState | None = None
+    operation_type: InstallationOperationType | None = None
+    operation_version: str | None = None
+    failure_message: str | None = None
 
     @computed_field
     @property
@@ -318,6 +344,38 @@ class ProviderInstallation(BaseModel):
             targets.
         """
         return f"{self.prefix}/{self.name}"
+
+
+class ProviderInstallationEvent(BaseModel):
+    """One entry of an installation's history, kept for 30 days.
+
+    The history outlives an uninstall, so it still answers after the
+    installation row is gone.
+
+    Attributes:
+        from_state: State the installation left.
+        to_state: State the installation entered, or ``uninstalled`` when the
+            uninstall removed it.
+        operation_id: Operation that caused the transition.
+        operation_type: Kind of that operation: ``install``, ``upgrade``,
+            ``downgrade``, ``start`` or ``uninstall``.
+        version: Version that operation targets.
+        message: What happened, such as ``started``, ``stopped: host
+            restarted`` or the failure text; ``None`` for a transition that
+            needs none.
+        cause: Detail behind a failure, such as the build step's output, or
+            ``None``.
+        occurred_at: When the transition happened.
+    """
+
+    from_state: InstallationLifecycleState | None = None
+    to_state: InstallationLifecycleState | Literal["uninstalled"]
+    operation_id: str | None = None
+    operation_type: InstallationOperationType | None = None
+    version: str | None = None
+    message: str | None = None
+    cause: str | None = None
+    occurred_at: datetime
 
 
 class PaginatedResponse[T](BaseModel):
