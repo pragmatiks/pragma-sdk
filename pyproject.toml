@@ -1,6 +1,6 @@
 [project]
 name = "pragmatiks-sdk"
-version = "18.0.0"
+version = "19.0.0"
 description = "Python SDK for the Pragmatiks platform"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -68,7 +68,7 @@ exclude = ["**/__pycache__/**"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "18.0.0"
+version = "19.0.0"
 version_files = ["pyproject.toml:^version"]
 tag_format = "v$version"
 bump_message = "bump: version $current_version → $new_version [skip ci]"

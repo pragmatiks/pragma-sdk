@@ -1,3 +1,15 @@
+## v19.0.0 (2026-10-28)
+
+### BREAKING CHANGE
+
+- deploy_provider, get_deployment_status and the
+upgrade_policy install option are removed with the endpoints behind
+them; follow an operation with list_provider_history instead.
+
+### Feat
+
+- installation lifecycle states and history (PRA-510)
+
 ## v18.0.0 (2026-10-18)
 
 ### BREAKING CHANGE
