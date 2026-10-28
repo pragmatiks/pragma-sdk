@@ -1,4 +1,4 @@
-"""API response models for deployment, provider, and user operations."""
+"""API response models for provider, organization, and user operations."""
 
 from __future__ import annotations
 
@@ -9,73 +9,11 @@ from pydantic import BaseModel, ConfigDict
 from pydantic import Field as PydanticField
 
 from pragma_sdk.models.enums import (
-    DeploymentStatus,
     OrganizationStatus,
     ResponseStatus,
     TeardownAction,
 )
 from pragma_sdk.types import EventType, LifecycleState
-
-
-class DeploymentResult(BaseModel):
-    """Result of a deployment operation (deploy/rollback).
-
-    Contains internal K8s details needed for deployment commands.
-
-    Attributes:
-        deployment_name: Name of the Kubernetes Deployment.
-        status: Current deployment status.
-        available_replicas: Number of available replicas.
-        ready_replicas: Number of ready replicas.
-        version: Deployed version (CalVer format YYYYMMDD.HHMMSS).
-        image: Container image reference (internal, may not be exposed).
-        updated_at: Last update timestamp from deployment conditions.
-        message: Status message or error details.
-    """
-
-    deployment_name: str
-    status: DeploymentStatus
-    available_replicas: int = 0
-    ready_replicas: int = 0
-    version: str | None = None
-    image: str | None = None
-    updated_at: datetime | None = None
-    message: str | None = None
-
-
-class ProviderStatus(BaseModel):
-    """User-facing provider deployment status.
-
-    Minimal representation without internal K8s details like replica
-    counts, deployment names, or container images.
-
-    Attributes:
-        status: Current deployment status.
-        version: CalVer version string of deployed build.
-        updated_at: Last update timestamp.
-        healthy: Whether the provider is healthy (available with ready replicas).
-    """
-
-    status: DeploymentStatus
-    version: str | None = None
-    updated_at: datetime | None = None
-    healthy: bool = False
-
-
-class ProviderInfo(BaseModel):
-    """Provider information from API list endpoint.
-
-    Attributes:
-        provider_id: Unique identifier for the provider.
-        current_version: CalVer of currently deployed build (None if never deployed).
-        deployment_status: Current deployment status (None if not deployed).
-        updated_at: Timestamp of last provider update (typically last deployment).
-    """
-
-    provider_id: str
-    current_version: str | None = None
-    deployment_status: DeploymentStatus | None = None
-    updated_at: datetime | None = None
 
 
 class ProviderDeleteResult(BaseModel):

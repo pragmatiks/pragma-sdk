@@ -22,19 +22,18 @@ from pragma_sdk.exceptions import (
 )
 from pragma_sdk.models import (
     DeclaredProviderVersion,
-    DeploymentResult,
     LifecycleEventFrame,
     Organization,
     PaginatedResponse,
     Provider,
     ProviderInstallation,
+    ProviderInstallationEvent,
     ProviderScope,
     ProviderVersion,
     ProviderVersionDeclaration,
     Resource,
     ResourceSchema,
     TeardownResponse,
-    UpgradePolicy,
     UserInfo,
     WheelUploadAddress,
     WheelUploadOutcome,
@@ -804,7 +803,6 @@ class PragmaClient(BaseClient):
         self,
         provider_name: str,
         version: str | None = None,
-        upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
         config: dict[str, str] | None = None,
     ) -> ProviderInstallation:
         """Install a provider from the catalog.
@@ -812,9 +810,8 @@ class PragmaClient(BaseClient):
         Args:
             provider_name: Namespaced provider name ('org/name').
             version: Specific version to install (latest if None).
-            upgrade_policy: Upgrade policy for the installation.
-            config: Key-value pairs injected as environment variables
-                on the provider deployment.
+            config: Key-value pairs passed as environment variables
+                only to this provider.
 
         Returns:
             Installed provider info.
@@ -823,10 +820,7 @@ class PragmaClient(BaseClient):
             httpx.HTTPStatusError: If installation fails.
         """  # noqa: DOC502
         _validate_provider_name(provider_name)
-        data: dict = {
-            "provider_name": provider_name,
-            "upgrade_policy": upgrade_policy,
-        }
+        data: dict = {"provider_name": provider_name}
 
         if version is not None:
             data["version"] = version
@@ -912,43 +906,23 @@ class PragmaClient(BaseClient):
         response = self._request("POST", f"/providers/installed/{path}/downgrade", json_data=data)
         return ProviderInstallation.model_validate(response)
 
-    def deploy_provider(self, provider_name: str, version: str | None = None) -> DeploymentResult:
-        """Deploy or redeploy an installed provider.
+    def list_provider_history(self, provider_name: str) -> list[ProviderInstallationEvent]:
+        """List the history of an installed provider, newest first.
 
-        Args:
-            provider_name: Namespaced provider name ('org/name').
-            version: Version to deploy. If None, uses the installed version.
-
-        Returns:
-            DeploymentResult with deployment state and replica info.
-
-        Raises:
-            httpx.HTTPStatusError: If deploy fails.
-        """  # noqa: DOC502
-        path = _validate_provider_name(provider_name)
-        data: dict = {}
-
-        if version is not None:
-            data["version"] = version
-
-        response = self._request("POST", f"/providers/installed/{path}/deploy", json_data=data)
-        return DeploymentResult.model_validate(response)
-
-    def get_deployment_status(self, provider_name: str) -> DeploymentResult:
-        """Get deployment status for an installed provider.
+        The history keeps 30 days of transitions and outlives an uninstall.
 
         Args:
             provider_name: Namespaced provider name ('org/name').
 
         Returns:
-            DeploymentResult with status, version, replicas, and update timestamp.
+            History entries, newest first; empty when the provider has none.
 
         Raises:
-            httpx.HTTPStatusError: If deployment not found or request fails.
+            httpx.HTTPStatusError: If the request fails.
         """  # noqa: DOC502
         path = _validate_provider_name(provider_name)
-        response = self._request("GET", f"/providers/installed/{path}/deployment")
-        return DeploymentResult.model_validate(response)
+        response = self._request("GET", f"/providers/installed/{path}/history")
+        return [ProviderInstallationEvent.model_validate(item) for item in response]
 
     def list_organizations(self) -> list[Organization]:
         """List all organizations accessible to the current user.
@@ -1590,7 +1564,6 @@ class AsyncPragmaClient(BaseClient):
         self,
         provider_name: str,
         version: str | None = None,
-        upgrade_policy: UpgradePolicy | str = UpgradePolicy.MANUAL,
         config: dict[str, str] | None = None,
     ) -> ProviderInstallation:
         """Install a provider from the catalog.
@@ -1598,9 +1571,8 @@ class AsyncPragmaClient(BaseClient):
         Args:
             provider_name: Namespaced provider name ('org/name').
             version: Specific version to install (latest if None).
-            upgrade_policy: Upgrade policy for the installation.
-            config: Key-value pairs injected as environment variables
-                on the provider deployment.
+            config: Key-value pairs passed as environment variables
+                only to this provider.
 
         Returns:
             Installed provider info.
@@ -1609,10 +1581,7 @@ class AsyncPragmaClient(BaseClient):
             httpx.HTTPStatusError: If installation fails.
         """  # noqa: DOC502
         _validate_provider_name(provider_name)
-        data: dict = {
-            "provider_name": provider_name,
-            "upgrade_policy": upgrade_policy,
-        }
+        data: dict = {"provider_name": provider_name}
 
         if version is not None:
             data["version"] = version
@@ -1698,43 +1667,23 @@ class AsyncPragmaClient(BaseClient):
         response = await self._request("POST", f"/providers/installed/{path}/downgrade", json_data=data)
         return ProviderInstallation.model_validate(response)
 
-    async def deploy_provider(self, provider_name: str, version: str | None = None) -> DeploymentResult:
-        """Deploy or redeploy an installed provider.
+    async def list_provider_history(self, provider_name: str) -> list[ProviderInstallationEvent]:
+        """List the history of an installed provider, newest first.
 
-        Args:
-            provider_name: Namespaced provider name ('org/name').
-            version: Version to deploy. If None, uses the installed version.
-
-        Returns:
-            DeploymentResult with deployment state and replica info.
-
-        Raises:
-            httpx.HTTPStatusError: If deploy fails.
-        """  # noqa: DOC502
-        path = _validate_provider_name(provider_name)
-        data: dict = {}
-
-        if version is not None:
-            data["version"] = version
-
-        response = await self._request("POST", f"/providers/installed/{path}/deploy", json_data=data)
-        return DeploymentResult.model_validate(response)
-
-    async def get_deployment_status(self, provider_name: str) -> DeploymentResult:
-        """Get deployment status for an installed provider.
+        The history keeps 30 days of transitions and outlives an uninstall.
 
         Args:
             provider_name: Namespaced provider name ('org/name').
 
         Returns:
-            DeploymentResult with status, version, replicas, and update timestamp.
+            History entries, newest first; empty when the provider has none.
 
         Raises:
-            httpx.HTTPStatusError: If deployment not found or request fails.
+            httpx.HTTPStatusError: If the request fails.
         """  # noqa: DOC502
         path = _validate_provider_name(provider_name)
-        response = await self._request("GET", f"/providers/installed/{path}/deployment")
-        return DeploymentResult.model_validate(response)
+        response = await self._request("GET", f"/providers/installed/{path}/history")
+        return [ProviderInstallationEvent.model_validate(item) for item in response]
 
     async def list_organizations(self) -> list[Organization]:
         """List all organizations accessible to the current user.

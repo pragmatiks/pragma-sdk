@@ -77,7 +77,7 @@ uv add pragmatiks-sdk
 
 - **HTTP Clients** - Sync and async clients for the Pragmatiks API
 - **Provider Authoring** - Build custom providers with type-safe Config and Outputs
-- **Provider Deployment** - Push, build, deploy, and rollback providers programmatically
+- **Provider Publishing and Installation** - Publish provider versions, install, upgrade and downgrade them, and read an installation's history
 - **Dead-Letter Queue** - Inspect and retry failed events for debugging and recovery
 - **Field References** - Reference outputs from other resources dynamically
 - **Testing Harness** - Test provider lifecycle methods locally without deployment
@@ -229,15 +229,23 @@ On the client itself, `AsyncPragmaClient` only.
 
 | Method | Description |
 |--------|-------------|
-| `list_providers()` | List all providers for the current tenant |
-| `push_provider(provider_id, tarball)` | Push provider code and trigger a build |
-| `deploy_provider(provider_id, version)` | Deploy a provider (latest build if no version) |
-| `rollback_provider(provider_id, version)` | Rollback to a previous build version |
-| `delete_provider(provider_id, cascade)` | Delete a provider and associated resources |
-| `get_deployment_status(provider_id)` | Get deployment status for a provider |
-| `list_builds(provider_id)` | List builds for a provider |
-| `get_build_status(provider_id, version)` | Get status of a specific build |
-| `stream_build_logs(provider_id, version)` | Stream logs from a build |
+| `list_providers(query, scope, tags, limit, offset)` | Browse and search the provider catalog |
+| `get_provider(provider_name)` | Get a provider from the catalog |
+| `list_provider_versions(provider_name)` | List a provider's versions |
+| `get_provider_version(provider_name, version)` | Get one version of a provider, in any status |
+| `publish_provider_version(wheel_path, changelog=None)` | Rename, declare and upload a provider wheel |
+| `delete_provider(provider_name)` | Delete a provider from the catalog |
+
+#### Installed Providers
+
+| Method | Description |
+|--------|-------------|
+| `install_provider(provider_name, version=None, config=None)` | Install a provider; installing a failed installation again reuses its stored version and config |
+| `list_installations()` | List installed providers with their state, latest operation and its target version, and failure message |
+| `upgrade_provider(provider_name, target_version=None)` | Upgrade an installed provider (latest version if none) |
+| `downgrade_provider(provider_name, target_version)` | Downgrade an installed provider |
+| `uninstall_provider(provider_name, cascade=False)` | Uninstall a provider |
+| `list_provider_history(provider_name)` | List an installation's history, newest first; kept 30 days, also after an uninstall |
 
 #### Dead-Letter Queue
 

@@ -12,7 +12,7 @@ Core exports for API consumers:
     AsyncPragmaClient: Asynchronous HTTP client.
 
 Additional imports available from submodules:
-    pragma_sdk.models: Data models (ProviderVersion, ProviderStatus, etc.)
+    pragma_sdk.models: Data models (ProviderVersion, ProviderInstallation, etc.)
     pragma_sdk.types: Type definitions (LifecycleState, HealthStatus, LogEntry)
     pragma_sdk.context: Runtime context utilities
     pragma_sdk.platform: Platform resource types (SecretConfig, etc.)
@@ -41,8 +41,6 @@ from pragma_sdk.models import (
     DeclaredProviderVersion,
     DeleteProjectRequest,
     Dependency,
-    DeploymentResult,
-    DeploymentStatus,
     Field,
     FieldReference,
     FileField,
@@ -51,6 +49,8 @@ from pragma_sdk.models import (
     ImmutableDependency,
     ImmutableField,
     ImmutableSensitiveField,
+    InstallationLifecycleState,
+    InstallationOperationType,
     InvalidResourceIdentityError,
     LifecycleEventFrame,
     Organization,
@@ -60,8 +60,8 @@ from pragma_sdk.models import (
     Project,
     ProviderAuthor,
     ProviderDeleteResult,
-    ProviderInfo,
     ProviderInstallation,
+    ProviderInstallationEvent,
     ProviderScope,
     ProviderVersion,
     ProviderVersionDeclaration,
@@ -76,7 +76,6 @@ from pragma_sdk.models import (
     TeardownImpact,
     TeardownResponse,
     UpdateProjectRequest,
-    UpgradePolicy,
     VersionStatus,
     WheelUploadAddress,
     WheelUploadOutcome,
@@ -112,8 +111,6 @@ __all__ = [
     "DeclaredProviderVersion",
     "DeleteProjectRequest",
     "Dependency",
-    "DeploymentResult",
-    "DeploymentStatus",
     "Field",
     "FieldReference",
     "FileField",
@@ -123,6 +120,8 @@ __all__ = [
     "ImmutableDependency",
     "ImmutableField",
     "ImmutableSensitiveField",
+    "InstallationLifecycleState",
+    "InstallationOperationType",
     "InvalidResourceIdentityError",
     "LifecycleEventFrame",
     "LifecycleState",
@@ -142,8 +141,8 @@ __all__ = [
     "Provider",
     "ProviderAuthor",
     "ProviderDeleteResult",
-    "ProviderInfo",
     "ProviderInstallation",
+    "ProviderInstallationEvent",
     "ProviderModel",
     "ProviderScope",
     "ProviderVersion",
@@ -161,7 +160,6 @@ __all__ = [
     "TeardownImpact",
     "TeardownResponse",
     "UpdateProjectRequest",
-    "UpgradePolicy",
     "VersionStatus",
     "WheelExpansionLimitError",
     "WheelUploadAddress",
