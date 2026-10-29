@@ -75,6 +75,9 @@ bump_message = "bump: version $current_version → $new_version [skip ci]"
 update_changelog_on_bump = true
 changelog_file = "CHANGELOG.md"
 
+[tool.uv]
+required-version = "==0.12.20"
+
 [tool.uv.build-backend]
 module-name = "pragma_sdk"
 

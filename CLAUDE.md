@@ -56,6 +56,8 @@ pragma-sdk/
 
 mise is the only toolchain source: `mise.toml` pins python, uv, pre-commit, commitizen and yq, and `mise.lock` plus `.mise/locks/` lock them for macOS arm64 and Linux x64.
 
+`[tool.uv] required-version` in `pyproject.toml` equals the uv pin in `mise.toml`; uv refuses to run at any other version, and the `Toolchain` workflow fails a pull request where they differ.
+
 On a fresh clone run `mise trust`, then `mise run install`.
 
 Use mise tasks (`mise tasks` lists them all):
