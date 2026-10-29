@@ -318,8 +318,12 @@ class ProviderInstallation(BaseModel):
             ``upgrade``, ``downgrade``, ``start`` or ``uninstall``.
         operation_version: Version the latest operation targets; installing
             again without a version installs it.
-        failure_message: Why the latest operation failed, set only while the
-            installation is ``failed``.
+        failure_message: User-facing reason of the last failed operation:
+            set while the installation is ``failed``, and while it is
+            ``ready`` after an upgrade or downgrade failed with the previous
+            version still serving (that text reads "Upgrading <provider> to
+            <version> failed: <what went wrong> The installed version keeps
+            serving; <recovery>"); ``None`` otherwise.
     """
 
     prefix: str = Field(frozen=True)
@@ -359,7 +363,10 @@ class ProviderInstallationEvent(BaseModel):
         operation_id: Operation that caused the transition.
         operation_type: Kind of that operation: ``install``, ``upgrade``,
             ``downgrade``, ``start`` or ``uninstall``.
-        version: Version that operation targets.
+        version: Version the installation runs once the event's change is
+            done; for a failed upgrade or downgrade that keeps the installed
+            version serving, that installed version (its message names the
+            target that failed).
         message: What happened, such as ``started``, ``stopped: host
             restarted`` or the failure text; ``None`` for a transition that
             needs none.
