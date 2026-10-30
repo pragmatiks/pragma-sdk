@@ -19,7 +19,7 @@ from functools import partial
 import structlog
 from packaging.utils import canonicalize_name
 
-from pragma_sdk.declaration.provider import DeclaredProvider, load_declared_provider
+from pragma_sdk.declaration.provider import DeclaredProvider, load_declared_provider, load_package_catalog_names
 from pragma_sdk.declaration.settings import load_provider_settings
 from pragma_sdk.diagnostics.structured_logging import configure_logging
 from pragma_sdk.protocol.codec import FrameError, JsonRpcCodec
@@ -95,6 +95,7 @@ async def serve_host(socket_path: str, declared_provider: DeclaredProvider) -> N
         runtime_context_factory=partial(
             RuntimeContextProxy, writer=writer, pending_responses=pending_responses, codec=codec
         ),
+        package_catalog_names_loader=load_package_catalog_names,
     )
 
     try:

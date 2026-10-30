@@ -8,7 +8,7 @@ body of at most :data:`MAXIMUM_FRAME_BYTES`.
 from __future__ import annotations
 
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 OFFERED_PROTOCOL_VERSIONS = [PROTOCOL_VERSION]
 
 JSONRPC_VERSION = "2.0"

@@ -41,7 +41,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from uuid import uuid4
 
-from pragma_sdk.context import provider_name_scope
+from pragma_sdk.context import package_catalog_names_scope
 from pragma_sdk.models import Config, Outputs, Resource
 from pragma_sdk.types import CopyContext, CopyResult, LifecycleState, PatchDefinition, PatchResult
 
@@ -93,6 +93,24 @@ class LifecycleResult:
         return not self.success
 
 
+def build_package_catalog_names(
+    resource_class: type[Resource], provider_name: str, package_catalog_names: dict[str, str]
+) -> dict[str, str]:
+    """Build the package catalog names bound while a harness runs a lifecycle method of a resource class.
+
+    Args:
+        resource_class: The Resource subclass under test.
+        provider_name: Catalog name of the provider under test.
+        package_catalog_names: Catalog name of each other provider package,
+            keyed by package.
+
+    Returns:
+        ``package_catalog_names`` with the tested class's top-level package
+        mapped to ``provider_name``.
+    """
+    return {**package_catalog_names, resource_class.__module__.partition(".")[0]: provider_name}
+
+
 class ProviderHarness:
     """Mock runtime for local provider development and testing.
 
@@ -137,17 +155,27 @@ class ProviderHarness:
         self,
         provider_name: str = "test/local",
         project_id: str = "harness-test",
+        package_catalog_names: dict[str, str] | None = None,
     ) -> None:
         """Initialize harness for testing.
 
         Args:
-            provider_name: Provider name to set in context during lifecycle
-                calls. Defaults to "test/local".
+            provider_name: Provider catalog name a resource of a class from
+                the tested class's top-level package carries during
+                lifecycle calls. Defaults to "test/local".
             project_id: Project identifier stamped on all resources
                 constructed inside the harness. Defaults to ``"harness-test"``.
+            package_catalog_names: Provider catalog name of each other
+                provider package whose resource classes the tested class
+                builds, keyed by package (e.g., ``{"gcp_provider":
+                "pragmatiks/gcp"}``), as the runtime names the providers a
+                provider embeds. A resource of a class from a package neither
+                here nor the tested class's raises ``RuntimeError`` on
+                ``provider``. Defaults to none.
         """
         self._provider_name = provider_name
         self._project_id = project_id
+        self.package_catalog_names = dict(package_catalog_names or {})
         self._events: list[LifecycleEvent] = []
         self._results: list[LifecycleResult] = []
 
@@ -215,7 +243,9 @@ class ProviderHarness:
         )
 
         try:
-            with provider_name_scope(self._provider_name):
+            with package_catalog_names_scope(
+                build_package_catalog_names(resource_class, self._provider_name, self.package_catalog_names)
+            ):
                 outputs = await handler(resource)
             result = LifecycleResult(
                 success=True,
@@ -387,7 +417,9 @@ class ProviderHarness:
         )
 
         try:
-            with provider_name_scope(self._provider_name):
+            with package_catalog_names_scope(
+                build_package_catalog_names(resource_class, self._provider_name, self.package_catalog_names)
+            ):
                 copy_result = await resource.on_copy(context)
             result = LifecycleResult(
                 success=True,
@@ -445,7 +477,9 @@ class ProviderHarness:
         )
 
         try:
-            with provider_name_scope(self._provider_name):
+            with package_catalog_names_scope(
+                build_package_catalog_names(resource_class, self._provider_name, self.package_catalog_names)
+            ):
                 patch_result = await resource.on_patch(patch)
             result = LifecycleResult(
                 success=True,

@@ -11,9 +11,14 @@ from packaging.utils import canonicalize_name
 from pragma_sdk.models import Resource
 from pragma_sdk.protocol.constants import OFFERED_PROTOCOL_VERSIONS
 from pragma_sdk.protocol.frames import HandshakeParams, ResourceTypeCapabilities
-from pragma_sdk.provider.discovery import discover_resources, is_module_in_package
+from pragma_sdk.provider.discovery import discover_resources
 from pragma_sdk.provider.provider import MissingObserveError
-from pragma_sdk.provider_entry_point import ENTRY_POINT_DECLARATION, PROVIDER_ENTRY_POINT_GROUP, parse_provider_package
+from pragma_sdk.provider_entry_point import (
+    ENTRY_POINT_DECLARATION,
+    PROVIDER_ENTRY_POINT_GROUP,
+    is_module_in_package,
+    parse_provider_package,
+)
 
 
 SDK_DISTRIBUTION = "pragmatiks-sdk"
@@ -247,3 +252,55 @@ def read_entry_point_distribution_name(entry_point: importlib.metadata.EntryPoin
         return None
 
     return canonicalize_name(entry_point.dist.name)
+
+
+def load_package_catalog_names(distribution_catalog_names: dict[str, str]) -> dict[str, str]:
+    """Load the provider catalog name of the package each installed provider distribution declares.
+
+    Args:
+        distribution_catalog_names: Provider catalog name of each provider
+            distribution, keyed by PEP 503-normalized distribution name.
+
+    Returns:
+        The same catalog names, keyed by the importable package each
+        distribution's ``pragma.provider`` entry point names.
+
+    Raises:
+        ProviderDeclarationError: If a distribution is not installed,
+            declares no ``pragma.provider`` entry point or more than one, its
+            entry point's reference is not a module path, carries extras, or
+            names an object instead of a package, or two distributions
+            declare the same package under different catalog names.
+    """  # noqa: DOC502
+    entry_points = importlib.metadata.entry_points(group=PROVIDER_ENTRY_POINT_GROUP)
+    package_catalog_names: dict[str, str] = {}
+
+    for distribution, catalog_name in distribution_catalog_names.items():
+        check_distribution_installed(distribution)
+        entry_point = find_declared_entry_point(distribution, entry_points)
+        package = parse_declared_package(distribution, entry_point)
+        mapped_catalog_name = package_catalog_names.setdefault(package, catalog_name)
+
+        if mapped_catalog_name != catalog_name:
+            raise ProviderDeclarationError(
+                f"Distribution {distribution!r} declares package {package!r}, which another provider distribution "
+                f"declares too, under catalog name {mapped_catalog_name!r} instead of {catalog_name!r}. "
+                "Give each provider its own package."
+            )
+
+    return package_catalog_names
+
+
+def check_distribution_installed(normalized_distribution: str) -> None:
+    """Check that a distribution is installed.
+
+    Args:
+        normalized_distribution: PEP 503-normalized distribution name.
+
+    Raises:
+        ProviderDeclarationError: If the distribution is not installed.
+    """
+    try:
+        importlib.metadata.distribution(normalized_distribution)
+    except importlib.metadata.PackageNotFoundError as error:
+        raise ProviderDeclarationError(f"Distribution {normalized_distribution!r} is not installed") from error

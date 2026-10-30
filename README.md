@@ -132,6 +132,8 @@ gcp = "gcp_provider"
 
 The Pragmatiks platform finds the provider's resource types through this entry point. Only resource classes defined inside that package belong to the provider; resource classes it imports from another provider stay that provider's.
 
+A resource always names the provider whose package defines its class. When a provider builds or applies a resource of a type it imports from another provider, that resource, its identity and its owner references name the other provider, and that provider manages it. Declare that provider as a dependency, so it is embedded, and install it in the organization too: the organization's installation of it is what manages those resources.
+
 To check what the platform will read from an installed wheel, run introspection in its environment:
 
 ```bash
@@ -141,6 +143,10 @@ PRAGMA_PROVIDER_DISTRIBUTION=<distribution> python -m pragma_sdk.introspection -
 `<distribution>` is the `name` in the wheel's `[project]` table. When you publish, the wheel is renamed to `<organization>-<provider name you publish under>` before it is uploaded, and the platform loads it under that name.
 
 The report lists the resource types with their schemas, or why the provider failed to load.
+
+### Reading other versions' data
+
+`Outputs` ignore properties the class does not declare, so outputs a newer version of the provider recorded still read. `Config` stays strict for the resource being processed. A dependency's config is read with the unknown top-level fields of a strict `Config` ignored, so a dependency managed by a newer version of its provider still resolves.
 
 ## Field References
 
@@ -169,6 +175,12 @@ async def test_bucket_creation():
 
     assert result.success
     assert "gs://test-bucket" in result.outputs.url
+```
+
+Inside the harness, a resource of a class from the tested class's top-level package carries the harness's `provider_name` (`test/local` by default). When the tested class builds resources of an embedded provider's types, name that provider's package the way the platform does, or reading their `provider` or `id` raises:
+
+```python
+harness = ProviderHarness(package_catalog_names={"gcp_provider": "pragmatiks/gcp"})
 ```
 
 ## Authentication

@@ -6,7 +6,7 @@ from typing import assert_never
 
 from pydantic import BaseModel
 
-from pragma_sdk.context import RuntimeContext, provider_name_scope, resource_owner_scope, runtime_context_scope
+from pragma_sdk.context import RuntimeContext, resource_owner_scope, runtime_context_scope
 from pragma_sdk.models import Config, Resource
 from pragma_sdk.models.references import OwnerReference
 from pragma_sdk.protocol.frames import DispatchParams, MigrateParams, MigrateResult, ResourceQueryParams
@@ -30,8 +30,8 @@ class RequestHandlers:
     async def run_dispatch(self, params: DispatchParams, context: RuntimeContext) -> BaseModel | None:
         """Build the resource and run the lifecycle method the event names.
 
-        The runtime context, the owner of applied resources and the provider
-        name are bound for the duration of the method.
+        The runtime context and the owner of applied resources are bound for
+        the duration of the method.
 
         Args:
             params: The dispatch parameters.
@@ -52,11 +52,7 @@ class RequestHandlers:
         resource = self.resource_builder.build_resource(resource_class, params.target, params.resolved_files)
         owner_reference = OwnerReference.model_validate(params.owner_reference.model_dump())
 
-        with (
-            runtime_context_scope(context),
-            resource_owner_scope(owner_reference),
-            provider_name_scope(params.provider),
-        ):
+        with runtime_context_scope(context), resource_owner_scope(owner_reference):
             return await self.invoke_handler(params, resource, resource_class)
 
     async def invoke_handler(
@@ -147,8 +143,6 @@ class RequestHandlers:
     async def run_resource_logs(self, params: ResourceQueryParams) -> list[LogEntry]:
         """Collect a resource's log entries.
 
-        The provider name is bound while the resource's ``logs`` runs.
-
         Args:
             params: The query parameters.
 
@@ -165,13 +159,10 @@ class RequestHandlers:
         """  # noqa: DOC502
         resource = self.build_queried_resource(params)
 
-        with provider_name_scope(params.provider):
-            return [entry async for entry in resource.logs(since=params.since, tail=params.tail)]
+        return [entry async for entry in resource.logs(since=params.since, tail=params.tail)]
 
     async def run_resource_health(self, params: ResourceQueryParams) -> HealthStatus:
         """Read a resource's health.
-
-        The provider name is bound while the resource's ``health`` runs.
 
         Args:
             params: The query parameters.
@@ -189,8 +180,7 @@ class RequestHandlers:
         """  # noqa: DOC502
         resource = self.build_queried_resource(params)
 
-        with provider_name_scope(params.provider):
-            return await resource.health()
+        return await resource.health()
 
     def build_queried_resource(self, params: ResourceQueryParams) -> Resource:
         """Build the resource a logs or health query targets.

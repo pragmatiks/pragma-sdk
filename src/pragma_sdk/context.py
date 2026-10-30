@@ -16,6 +16,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, Protocol
 
+from pragma_sdk.provider_entry_point import is_module_in_package
 from pragma_sdk.types import LifecycleState
 
 
@@ -74,7 +75,7 @@ class RuntimeContext(Protocol):
 
 _runtime_context: ContextVar[RuntimeContext | None] = ContextVar("_runtime_context", default=None)
 _resource_owner: ContextVar[OwnerReference | None] = ContextVar("_resource_owner", default=None)
-_provider_name: ContextVar[str | None] = ContextVar("_provider_name", default=None)
+_package_catalog_names: ContextVar[dict[str, str] | None] = ContextVar("_package_catalog_names", default=None)
 
 
 @contextmanager
@@ -212,26 +213,61 @@ def resource_owner() -> OwnerReference | None:
 
 
 @contextmanager
-def provider_name_scope(name: str) -> Generator[None]:
-    """Bind the provider name for the duration of the ``with`` block.
+def package_catalog_names_scope(package_catalog_names: dict[str, str]) -> Generator[None]:
+    """Bind which provider catalog defines the resource classes of each package, for the ``with`` block.
 
-    Called by the runtime before invoking lifecycle methods. The previous
-    provider name is restored on exit, even if the block raises.
+    The previous binding is restored on exit, even if the block raises.
 
     Args:
-        name: Catalog name of the provider (e.g., "pragmatiks/gcp").
+        package_catalog_names: Provider catalog name (e.g., "pragmatiks/gcp")
+            of each importable package a provider distribution declares,
+            keyed by package (e.g., "gcp_provider").
     """
-    token = _provider_name.set(name)
+    token = _package_catalog_names.set(package_catalog_names)
     try:
         yield
     finally:
-        _provider_name.reset(token)
+        _package_catalog_names.reset(token)
 
 
-def provider_name() -> str | None:
-    """Get the current provider name, if any.
+def compute_defining_provider(resource_class: type) -> str:
+    """Compute the catalog name of the provider whose distribution defines a resource class.
+
+    The class's module is matched against the packages bound by
+    :func:`package_catalog_names_scope`; the longest package that is the
+    module or one of its parents wins, so a class keeps its defining
+    provider wherever an embedding provider uses it.
+
+    Args:
+        resource_class: The resource class.
 
     Returns:
-        Catalog name of the provider, or None if not in a runtime context.
+        Provider catalog name (e.g., "pragmatiks/gcp").
+
+    Raises:
+        RuntimeError: If no package catalog names are bound, or no bound
+            package holds the class's module.
     """
-    return _provider_name.get()
+    package_catalog_names = _package_catalog_names.get()
+
+    if package_catalog_names is None:
+        raise RuntimeError(
+            f"The provider of {resource_class.__qualname__} is known only inside a lifecycle method the "
+            "Pragmatiks runtime or the ProviderHarness runs. Read it from such a lifecycle method."
+        )
+
+    module = resource_class.__module__
+    package = max(
+        (package for package in package_catalog_names if is_module_in_package(module, package)),
+        key=len,
+        default=None,
+    )
+
+    if package is None:
+        raise RuntimeError(
+            f"{resource_class.__qualname__} is defined in module {module!r}, which belongs neither to the "
+            "provider nor to a provider it embeds. Depend on the provider defining it, so that provider is "
+            "declared under pragma.embeds, then publish again."
+        )
+
+    return package_catalog_names[package]

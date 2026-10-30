@@ -32,6 +32,10 @@ pragma-sdk/
 
 `protocol/` imports nothing from the SDK but `types`; the Pragmatiks host speaks only it. Changing a frame shape, the introspection report, or the worker's method set is a new `PROTOCOL_VERSION`.
 
+Protocol 2 (the only version the worker offers): the handshake result carries `distribution_catalog_names`, the catalog name (`prefix/name`, validated) of the served distribution and of every provider distribution it embeds, keyed by distribution name. Within the handshake the worker normalizes the keys, refuses a result without the served distribution (`distribution_not_cataloged`), maps each distribution's `pragma.provider` package to its catalog name (`declaration.provider.load_package_catalog_names`) and refuses a distribution it cannot load (`distribution_not_loadable`), all before it serves; the session then binds the map (`context.package_catalog_names_scope`). `Resource.provider` is the catalog name of the longest bound package holding the class's module (`context.compute_defining_provider`), so identities, owner references and applied children name the provider defining the type. `DispatchParams` and `ResourceQueryParams` carry no `provider`; request log fields name the defining provider of the target's class. `ProviderHarness` binds the tested class's top-level package to its `provider_name`, merged over its `package_catalog_names` argument.
+
+`Outputs` ignore undeclared properties; `Config` forbids them. A dependency reference whose Config forbids extras is read with the top-level config keys it does not declare dropped and logged (`worker.resource_builder.ResourceBuilder.drop_undeclared_config_keys`).
+
 ## Features
 
 **HTTP Clients**: Both sync (`PragmaClient`) and async (`AsyncPragmaClient`) with identical APIs.
