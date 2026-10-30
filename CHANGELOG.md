@@ -1,3 +1,15 @@
+## v20.0.0 (2026-10-30)
+
+### BREAKING CHANGE
+
+- PROTOCOL_VERSION is 2 and the worker offers only it; a
+host on protocol 1 cannot run SDK 20 providers. DispatchParams and
+ResourceQueryParams no longer carry `provider`.
+
+### Feat
+
+- stamp resources with their defining provider over protocol 2 (PRA-511)
+
 ## v19.0.0 (2026-10-28)
 
 ### BREAKING CHANGE
