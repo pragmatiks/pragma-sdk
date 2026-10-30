@@ -449,29 +449,6 @@ class PragmaClient(BaseClient):
         """  # noqa: DOC502
         return self._request("GET", f"/ops/dead-letter/{event_id}")
 
-    def retry_dead_letter_event(self, event_id: str) -> None:
-        """Retry a dead letter event.
-
-        Args:
-            event_id: The dead letter event ID to retry.
-
-        Raises:
-            httpx.HTTPStatusError: If event not found or retry fails.
-        """  # noqa: DOC502
-        self._request("POST", f"/ops/dead-letter/{event_id}/retry")
-
-    def retry_all_dead_letter_events(self) -> int:
-        """Retry all dead letter events.
-
-        Returns:
-            Number of events retried.
-
-        Raises:
-            httpx.HTTPStatusError: If the request fails.
-        """  # noqa: DOC502
-        response = self._request("POST", "/ops/dead-letter/retry-all")
-        return response["retried_count"]
-
     def delete_dead_letter_event(self, event_id: str) -> None:
         """Delete a dead letter event.
 
@@ -1242,29 +1219,6 @@ class AsyncPragmaClient(BaseClient):
             httpx.HTTPStatusError: If event not found or request fails.
         """  # noqa: DOC502
         return await self._request("GET", f"/ops/dead-letter/{event_id}")
-
-    async def retry_dead_letter_event(self, event_id: str) -> None:
-        """Retry a dead letter event.
-
-        Args:
-            event_id: The dead letter event ID to retry.
-
-        Raises:
-            httpx.HTTPStatusError: If event not found or retry fails.
-        """  # noqa: DOC502
-        await self._request("POST", f"/ops/dead-letter/{event_id}/retry")
-
-    async def retry_all_dead_letter_events(self) -> int:
-        """Retry all dead letter events.
-
-        Returns:
-            Number of events retried.
-
-        Raises:
-            httpx.HTTPStatusError: If the request fails.
-        """  # noqa: DOC502
-        response = await self._request("POST", "/ops/dead-letter/retry-all")
-        return response["retried_count"]
 
     async def delete_dead_letter_event(self, event_id: str) -> None:
         """Delete a dead letter event.
