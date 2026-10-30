@@ -8,11 +8,17 @@ follows from ``id`` and ``method``; the receiver validates ``params`` or
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict, StringConstraints
 
 from pragma_sdk.types import EventType, LifecycleState
+
+
+CatalogName = Annotated[
+    str, StringConstraints(pattern=r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+]
+"""A provider catalog name, ``prefix/name``: two lowercase alphanumeric labels, inner hyphens allowed."""
 
 
 class FrameKind(StrEnum):
@@ -205,9 +211,15 @@ class HandshakeResult(BaseModel):
 
     Attributes:
         protocol_version: Protocol version the connection speaks from now on.
+        distribution_catalog_names: Provider catalog name (``prefix/name``)
+            of the served distribution and of every provider distribution it
+            embeds, keyed by PEP 503-normalized distribution name. Must
+            contain the served distribution, or the worker refuses the
+            handshake.
     """
 
     protocol_version: int
+    distribution_catalog_names: dict[str, CatalogName]
 
 
 class UnsupportedProtocolData(BaseModel):
@@ -288,7 +300,6 @@ class DispatchParams(BaseModel):
         previous_config: Configuration before an update, or ``None``.
         resolved_files: Signed download URLs keyed by Pragmatiks file reference.
         owner_reference: Owner recorded on resources the method applies.
-        provider: Provider catalog name of the resource.
     """
 
     event_type: Literal[EventType.CREATE, EventType.UPDATE, EventType.DELETE]
@@ -296,7 +307,6 @@ class DispatchParams(BaseModel):
     previous_config: dict[str, Any] | None
     resolved_files: dict[str, str]
     owner_reference: OwnerReferencePayload
-    provider: str
 
 
 class WaitForStateParams(BaseModel):
@@ -375,10 +385,8 @@ class ResourceQueryParams(BaseModel):
         since: Earliest log timestamp to include, with its UTC offset, or
             ``None``; health ignores it.
         tail: Maximum number of recent log entries; health ignores it.
-        provider: Provider catalog name of the resource.
     """
 
     target: ResourcePayload
     since: AwareDatetime | None
     tail: int
-    provider: str

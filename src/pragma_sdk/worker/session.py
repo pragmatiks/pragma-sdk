@@ -15,9 +15,11 @@ from functools import partial
 from typing import Any, Literal
 
 import structlog
+from packaging.utils import canonicalize_name
 from pydantic import BaseModel, ValidationError
 
-from pragma_sdk.context import RuntimeContext
+from pragma_sdk.context import RuntimeContext, compute_defining_provider, package_catalog_names_scope
+from pragma_sdk.declaration.provider import ProviderDeclarationError
 from pragma_sdk.diagnostics.error_descriptions import build_error_message
 from pragma_sdk.diagnostics.validation_errors import build_validation_error_details, build_validation_error_message
 from pragma_sdk.protocol.codec import (
@@ -70,7 +72,14 @@ HANDLER_EXITED_MESSAGE = "The handler called sys.exit(). Return a result or rais
 HANDSHAKE_CLOSED_MESSAGE = "Host closed the connection during the handshake"
 
 type HandshakeFailureReason = Literal[
-    "closed", "oversized", "unexpected_frame", "refused", "malformed_result", "version_not_offered"
+    "closed",
+    "oversized",
+    "unexpected_frame",
+    "refused",
+    "malformed_result",
+    "version_not_offered",
+    "distribution_not_cataloged",
+    "distribution_not_loadable",
 ]
 
 
@@ -81,8 +90,12 @@ class HandshakeError(Exception):
         reason: Why the handshake failed: the host ``closed`` the connection,
             the worker's handshake was ``oversized``, the host sent an
             ``unexpected_frame`` or an unreadable one, ``refused`` the
-            handshake, sent a ``malformed_result``, or accepted a version the
-            worker did not offer (``version_not_offered``).
+            handshake, sent a ``malformed_result``, accepted a version the
+            worker did not offer (``version_not_offered``), named no catalog
+            name for the distribution the worker serves
+            (``distribution_not_cataloged``), or named a catalog name for a
+            distribution the worker cannot load as a provider
+            (``distribution_not_loadable``).
         fields: Structured detail of the failure, safe to log.
     """
 
@@ -97,6 +110,21 @@ class HandshakeError(Exception):
         self.reason = reason
         self.fields = fields
         super().__init__(message)
+
+
+@dataclass(frozen=True)
+class AcceptedHandshake:
+    """What a session serves with once the host accepted its handshake.
+
+    Attributes:
+        protocol_version: Protocol version the connection speaks from now on.
+        package_catalog_names: Provider catalog name of the package of the
+            served distribution and of every provider distribution it
+            embeds, keyed by package.
+    """
+
+    protocol_version: int
+    package_catalog_names: dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -134,6 +162,7 @@ class WorkerSession:
         request_handlers: RequestHandlers,
         pending_responses: PendingResponses,
         runtime_context_factory: Callable[[int], RuntimeContext],
+        package_catalog_names_loader: Callable[[dict[str, str]], dict[str, str]],
     ) -> None:
         """Initialize the session on an open host connection.
 
@@ -146,6 +175,10 @@ class WorkerSession:
             pending_responses: Correlation map for the requests the worker sends.
             runtime_context_factory: Builds the runtime context serving one
                 dispatch's platform callbacks, from the dispatch's correlation id.
+            package_catalog_names_loader: Turns the provider catalog name of
+                each distribution, keyed by normalized distribution name, into
+                the catalog name of each distribution's package; raises
+                ``ProviderDeclarationError`` for a distribution it cannot load.
         """
         self.reader = reader
         self.writer = writer
@@ -154,6 +187,7 @@ class WorkerSession:
         self.request_handlers = request_handlers
         self.pending_responses = pending_responses
         self.runtime_context_factory = runtime_context_factory
+        self.package_catalog_names_loader = package_catalog_names_loader
         self.request_tasks: dict[int, asyncio.Task[None]] = {}
         self.request_routes: dict[str, RequestRoute] = {
             MIGRATE_METHOD: RequestRoute(
@@ -167,14 +201,14 @@ class WorkerSession:
                 params_model=ResourceQueryParams,
                 failure_log_event="resource_logs_failed",
                 logs_start=False,
-                log_fields=build_query_log_fields,
+                log_fields=self.build_query_log_fields,
                 handler=request_handlers.run_resource_logs,
             ),
             RESOURCE_HEALTH_METHOD: RequestRoute(
                 params_model=ResourceQueryParams,
                 failure_log_event="resource_health_failed",
                 logs_start=False,
-                log_fields=build_query_log_fields,
+                log_fields=self.build_query_log_fields,
                 handler=request_handlers.run_resource_health,
             ),
         }
@@ -182,8 +216,11 @@ class WorkerSession:
     async def serve(self) -> None:
         """Perform the handshake and serve requests until shutdown or disconnect.
 
-        Requests still running when serving ends are cancelled. The caller
-        owns the connection and closes it.
+        Every request is served with the accepted handshake's package
+        catalog names bound, so a resource's ``provider`` is the catalog name
+        of the distribution defining its class. Requests still running when
+        serving ends are cancelled. The caller owns the connection and
+        closes it.
 
         Raises:
             HandshakeError: If the handshake with the host does not complete.
@@ -191,23 +228,32 @@ class WorkerSession:
                 malformed or oversized frame, or one cut off by a disconnect.
         """  # noqa: DOC502
         try:
-            protocol_version = await self.perform_handshake()
-            logger.info("worker_serving", protocol_version=protocol_version)
-            await self.receive_frames()
+            accepted_handshake = await self.perform_handshake()
+            logger.info(
+                "worker_serving",
+                protocol_version=accepted_handshake.protocol_version,
+                package_catalog_names=accepted_handshake.package_catalog_names,
+            )
+
+            with package_catalog_names_scope(accepted_handshake.package_catalog_names):
+                await self.receive_frames()
         finally:
             await self.cancel_request_tasks()
 
-    async def perform_handshake(self) -> int:
+    async def perform_handshake(self) -> AcceptedHandshake:
         """Send the handshake and read the host's answer, before any other frame.
 
         Returns:
-            The protocol version the host accepted.
+            The accepted protocol version, and the provider catalog name of
+            the package of each distribution the host names.
 
         Raises:
             HandshakeError: If the handshake exceeds ``MAXIMUM_FRAME_BYTES``,
                 the host closes the connection, answers with another or an
                 unreadable frame, refuses the handshake, sends a malformed
-                result, or accepts a version the worker did not offer.
+                result, accepts a version the worker did not offer, names no
+                catalog name for the distribution the worker serves, or names
+                one for a distribution the worker cannot load as a provider.
         """
         correlation_id = self.pending_responses.allocate_id()
         request = self.codec.build_request(correlation_id, HANDSHAKE_METHOD, self.handshake_params)
@@ -269,7 +315,48 @@ class WorkerSession:
                 protocol_versions=self.handshake_params.protocol_versions,
             )
 
-        return result.protocol_version
+        distribution_catalog_names: dict[str, str] = {
+            canonicalize_name(distribution): catalog_name
+            for distribution, catalog_name in result.distribution_catalog_names.items()
+        }
+
+        if self.handshake_params.distribution not in distribution_catalog_names:
+            raise HandshakeError(
+                "distribution_not_cataloged",
+                "Host accepted the handshake without a catalog name for the served distribution",
+                distribution=self.handshake_params.distribution,
+                cataloged_distributions=sorted(distribution_catalog_names),
+            )
+
+        return AcceptedHandshake(
+            protocol_version=result.protocol_version,
+            package_catalog_names=self.load_package_catalog_names(distribution_catalog_names),
+        )
+
+    def load_package_catalog_names(self, distribution_catalog_names: dict[str, str]) -> dict[str, str]:
+        """Load the catalog name of each cataloged distribution's package, refusing the handshake when one cannot load.
+
+        Args:
+            distribution_catalog_names: Provider catalog name of each
+                distribution the host names, keyed by normalized
+                distribution name.
+
+        Returns:
+            The same catalog names, keyed by each distribution's package.
+
+        Raises:
+            HandshakeError: If a distribution is not installed, declares no
+                loadable ``pragma.provider`` entry point, or declares the
+                same package as another under a different catalog name.
+        """
+        try:
+            return self.package_catalog_names_loader(distribution_catalog_names)
+        except ProviderDeclarationError as error:
+            raise HandshakeError(
+                "distribution_not_loadable",
+                f"Host named a catalog name for a distribution the worker cannot load as a provider: {error}",
+                cataloged_distributions=sorted(distribution_catalog_names),
+            ) from error
 
     async def receive_frames(self) -> None:
         """Read frames from the host and route them until shutdown or disconnect.
@@ -393,7 +480,7 @@ class WorkerSession:
             params_model=DispatchParams,
             failure_log_event="dispatch_failed",
             logs_start=True,
-            log_fields=build_dispatch_log_fields,
+            log_fields=self.build_dispatch_log_fields,
             handler=partial(self.request_handlers.run_dispatch, context=context),
         )
 
@@ -543,6 +630,50 @@ class WorkerSession:
 
         return True
 
+    def build_dispatch_log_fields(self, params: DispatchParams) -> dict[str, Any]:
+        """Pick the fields identifying what a dispatch acts on, for its log events.
+
+        Args:
+            params: The dispatch's validated params.
+
+        Returns:
+            Its event type, and the target's fields as
+            :meth:`build_target_log_fields` picks them.
+        """
+        return {"event_type": params.event_type, **self.build_target_log_fields(params.target)}
+
+    def build_query_log_fields(self, params: ResourceQueryParams) -> dict[str, Any]:
+        """Pick the fields identifying what a logs or health query acts on, for its log events.
+
+        Args:
+            params: The query's validated params.
+
+        Returns:
+            The target's fields as :meth:`build_target_log_fields` picks them.
+        """
+        return self.build_target_log_fields(params.target)
+
+    def build_target_log_fields(self, target: ResourcePayload) -> dict[str, Any]:
+        """Pick the fields identifying the resource a request acts on, for its log events.
+
+        Must run with the session's package catalog names bound.
+
+        Args:
+            target: The resource a request acts on.
+
+        Returns:
+            Its project, resource type and name, and the catalog name of the
+            provider defining its class as ``provider`` when the served
+            provider defines its type.
+        """
+        resource_fields = build_resource_log_fields(target)
+        resource_class = self.request_handlers.resource_types.get(target.resource)
+
+        if resource_class is None:
+            return resource_fields
+
+        return {"provider": compute_defining_provider(resource_class), **resource_fields}
+
     def forget_request_task(self, correlation_id: int, task: asyncio.Task[None]) -> None:
         """Stop tracking a finished request task, unless another task took over its correlation id.
 
@@ -552,30 +683,6 @@ class WorkerSession:
         """
         if self.request_tasks.get(correlation_id) is task:
             del self.request_tasks[correlation_id]
-
-
-def build_dispatch_log_fields(params: DispatchParams) -> dict[str, Any]:
-    """Pick the fields identifying what a dispatch acts on, for its log events.
-
-    Args:
-        params: The dispatch's validated params.
-
-    Returns:
-        Its event type and provider, and the target's project, resource type and name.
-    """
-    return {"event_type": params.event_type, "provider": params.provider, **build_resource_log_fields(params.target)}
-
-
-def build_query_log_fields(params: ResourceQueryParams) -> dict[str, Any]:
-    """Pick the fields identifying what a logs or health query acts on, for its log events.
-
-    Args:
-        params: The query's validated params.
-
-    Returns:
-        Its provider, and the target's project, resource type and name.
-    """
-    return {"provider": params.provider, **build_resource_log_fields(params.target)}
 
 
 def build_migration_log_fields(params: MigrateParams) -> dict[str, Any]:

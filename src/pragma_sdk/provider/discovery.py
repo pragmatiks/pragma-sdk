@@ -8,6 +8,7 @@ from collections.abc import Iterator
 
 from pragma_sdk.models import Resource
 from pragma_sdk.provider.provider import RESOURCE_MARKER
+from pragma_sdk.provider_entry_point import is_module_in_package
 
 
 def discover_resources(package_name: str) -> dict[str, type[Resource]]:
@@ -62,19 +63,6 @@ def is_registered_resource(cls: type) -> bool:
         and cls is not Resource
         and cls.__dict__.get(RESOURCE_MARKER, False) is True
     )
-
-
-def is_module_in_package(module_name: str, package_name: str) -> bool:
-    """Check whether a module is a package or one of its submodules.
-
-    Args:
-        module_name: Fully qualified module name.
-        package_name: Importable package name (e.g., "postgres_provider").
-
-    Returns:
-        True if the module is the package or lies below it.
-    """
-    return module_name == package_name or module_name.startswith(f"{package_name}.")
 
 
 def discover_module_resources(module_name: str, package_name: str) -> Iterator[tuple[str, type[Resource]]]:

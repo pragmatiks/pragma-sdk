@@ -6,7 +6,8 @@ import re
 from typing import Annotated, Any, ClassVar, get_args, get_origin
 
 import structlog
-from pydantic import ValidationError
+from pydantic import AliasChoices, AliasPath, ValidationError
+from pydantic.fields import FieldInfo
 
 from pragma_sdk.diagnostics.validation_errors import build_validation_error_details
 from pragma_sdk.models import Config, Dependency, Resource, is_dependency_marker, is_field_ref_marker
@@ -424,6 +425,11 @@ class ResourceBuilder:
     ) -> Resource | None:
         """Flatten a dependency reference and validate it into a Resource.
 
+        The reference's ``resolved_config``, or its ``config`` when it has
+        none, is read as ``resource_type``'s Config as
+        :meth:`drop_undeclared_config_keys` leaves it, so a dependency
+        recorded by a newer version of its provider still reads.
+
         Args:
             resource_type: Resource type to validate the reference against.
             reference_data: Raw reference payload from the dependency marker.
@@ -442,6 +448,8 @@ class ResourceBuilder:
         flattened_reference = self.flatten_config(reference_data, resolved_files)
         self.apply_resolved_config_override(flattened_reference)
 
+        self.drop_undeclared_config_keys(flattened_reference, resource_type, field_name)
+
         try:
             return resource_type.model_validate(flattened_reference)
         except ValidationError as error:
@@ -453,6 +461,93 @@ class ResourceBuilder:
             )
 
             return None
+
+    def drop_undeclared_config_keys(
+        self, flattened_reference: dict[str, Any], resource_type: type[Resource], field_name: str
+    ) -> None:
+        """Drop the top-level config keys a strict Config does not declare from a dependency reference, in place.
+
+        Only a Config forbidding extra keys is filtered; nested values stay
+        strict. Dropped keys are logged as ``dependency_config_keys_ignored``
+        by name, never by value.
+
+        Args:
+            flattened_reference: Flattened dependency reference to adjust.
+            resource_type: Resource type the reference is read as.
+            field_name: Config field name, named in log events.
+
+        Note:
+            Keys are dropped before validation, so a ``mode="before"`` model
+            validator on the Config does not see them. A resource type whose
+            ``config`` field is not a Config subclass is left unfiltered.
+        """
+        config_field = resource_type.model_fields.get("config")
+        config_class = config_field.annotation if config_field is not None else None
+        config_data = flattened_reference.get("config")
+
+        if not isinstance(config_class, type) or not issubclass(config_class, Config):
+            return
+
+        if config_class.model_config.get("extra") != "forbid" or not isinstance(config_data, dict):
+            return
+
+        declared_keys = self.compute_declared_config_keys(config_class)
+        ignored_keys = sorted(key for key in config_data if key not in declared_keys)
+
+        if not ignored_keys:
+            return
+
+        logger.info(
+            "dependency_config_keys_ignored",
+            field=field_name,
+            resource_type=resource_type.__name__,
+            ignored_keys=ignored_keys,
+        )
+        flattened_reference["config"] = {key: value for key, value in config_data.items() if key in declared_keys}
+
+    @classmethod
+    def compute_declared_config_keys(cls, config_class: type[Config]) -> set[str]:
+        """Compute the top-level keys a Config class accepts.
+
+        Args:
+            config_class: Config class a config is read as.
+
+        Returns:
+            Every field's name and alias, its validation alias, each choice
+            of an ``AliasChoices`` validation alias, and the first key of each
+            ``AliasPath``.
+        """
+        declared_keys: set[str] = set()
+
+        for name, field in config_class.model_fields.items():
+            declared_keys.add(name)
+            declared_keys.update(cls.compute_field_alias_keys(field))
+
+        return declared_keys
+
+    @staticmethod
+    def compute_field_alias_keys(field: FieldInfo) -> set[str]:
+        """Compute the top-level keys a field accepts through its aliases.
+
+        Args:
+            field: The field.
+
+        Returns:
+            Its alias, its validation alias, each choice of an
+            ``AliasChoices`` validation alias, and the first key of each
+            ``AliasPath``.
+        """
+        aliases: list[str | AliasPath | AliasChoices | None] = [field.alias, field.validation_alias]
+
+        if isinstance(field.validation_alias, AliasChoices):
+            aliases.extend(field.validation_alias.choices)
+
+        alias_keys = {alias for alias in aliases if isinstance(alias, str)}
+        alias_keys.update(
+            alias.path[0] for alias in aliases if isinstance(alias, AliasPath) and isinstance(alias.path[0], str)
+        )
+
+        return alias_keys
 
     @staticmethod
     def apply_resolved_config_override(flattened_reference: dict[str, Any]) -> None:

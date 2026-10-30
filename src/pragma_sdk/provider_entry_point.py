@@ -67,3 +67,16 @@ def is_module_path_reference(reference_match: re.Match[str]) -> bool:
         and reference_match.group("extras") is None
         and all(part.isidentifier() and not keyword.iskeyword(part) for part in module.split("."))
     )
+
+
+def is_module_in_package(module_name: str, package_name: str) -> bool:
+    """Check whether a module is a package or one of its submodules.
+
+    Args:
+        module_name: Fully qualified module name.
+        package_name: Importable package name (e.g., "postgres_provider").
+
+    Returns:
+        True if the module is the package or lies below it.
+    """
+    return module_name == package_name or module_name.startswith(f"{package_name}.")

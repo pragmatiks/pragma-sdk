@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from pydantic import Field as PydanticField
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode
 
-from pragma_sdk.context import apply_resource, provider_name, resource_owner, wait_for_resource_state
+from pragma_sdk.context import apply_resource, compute_defining_provider, resource_owner, wait_for_resource_state
 from pragma_sdk.models.file import FileReference
 from pragma_sdk.models.identity import ResourceIdentity
 from pragma_sdk.models.references import (
@@ -625,9 +625,13 @@ def _collect_sensitive_output_fields(cls: type[Outputs]) -> set[str]:
 
 
 class Outputs(BaseModel):
-    """Base class for resource outputs produced by lifecycle handlers."""
+    """Base class for resource outputs produced by lifecycle handlers.
 
-    model_config = {"extra": "forbid"}
+    Validation ignores properties the class does not declare, so outputs a
+    newer version of a provider records still read as this class.
+    """
+
+    model_config = {"extra": "ignore"}
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
@@ -714,24 +718,22 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
     @property
     def provider(self) -> str:
-        """Catalog name of the provider that manages this resource.
+        """Catalog name of the provider whose distribution defines this resource's class.
 
-        Reads the provider name from the runtime context. The runtime sets
-        this before invoking lifecycle methods.
+        A resource of a type an embedded provider defines carries the
+        embedded provider's catalog name, even when an embedding provider
+        builds or applies it, so its identity, its owner references and the
+        child resources it applies name the provider that manages the type.
 
         Returns:
             Provider catalog name (e.g., "pragmatiks/gcp").
 
         Raises:
-            RuntimeError: If called outside a runtime context where the
-                provider name has not been set.
-        """
-        name = provider_name()
-
-        if name is None:
-            raise RuntimeError("provider name not set — this must be called within a runtime context")
-
-        return name
+            RuntimeError: If read outside a lifecycle method the Pragmatiks
+                runtime or the ``ProviderHarness`` runs, or the class belongs
+                neither to the provider nor to a provider it embeds.
+        """  # noqa: DOC502
+        return compute_defining_provider(type(self))
 
     @property
     def identity(self) -> ResourceIdentity:
