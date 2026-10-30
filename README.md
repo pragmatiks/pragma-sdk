@@ -78,7 +78,7 @@ uv add pragmatiks-sdk
 - **HTTP Clients** - Sync and async clients for the Pragmatiks API
 - **Provider Authoring** - Build custom providers with type-safe Config and Outputs
 - **Provider Publishing and Installation** - Publish provider versions, install, upgrade and downgrade them, and read an installation's history
-- **Dead-Letter Queue** - Inspect and retry failed events for debugging and recovery
+- **Dead-Letter Queue** - Inspect and delete failed events for debugging and recovery
 - **Field References** - Reference outputs from other resources dynamically
 - **Testing Harness** - Test provider lifecycle methods locally without deployment
 - **Auto-discovery** - Automatic credential resolution from environment or config files
@@ -253,8 +253,6 @@ On the client itself, `AsyncPragmaClient` only.
 |--------|-------------|
 | `list_dead_letter_events(provider)` | List dead letter events with optional provider filter |
 | `get_dead_letter_event(event_id)` | Get a dead letter event by ID |
-| `retry_dead_letter_event(event_id)` | Retry a single dead letter event |
-| `retry_all_dead_letter_events()` | Retry all dead letter events |
 | `delete_dead_letter_event(event_id)` | Delete a single dead letter event |
 | `delete_dead_letter_events(provider, all)` | Delete multiple dead letter events |
 
