@@ -24,6 +24,7 @@ from pragma_sdk.models import (
     DeclaredProviderVersion,
     LifecycleEventFrame,
     Organization,
+    OrganizationStatusResponse,
     PaginatedResponse,
     Provider,
     ProviderInstallation,
@@ -950,18 +951,22 @@ class PragmaClient(BaseClient):
         response = self._request("GET", "/organizations/me")
         return Organization.model_validate(response)
 
-    def cleanup_organization(self, organization_id: str) -> None:
-        """Trigger cleanup for an organization.
+    def get_organization_status(self) -> OrganizationStatusResponse:
+        """Get the status of the organization the authenticated caller belongs to.
 
-        Initiates resource teardown and deprovisioning for the organization.
+        Answers in every status, ``deleting`` and ``deleted`` included, so
+        polling it is safe.
 
-        Args:
-            organization_id: Unique identifier for the organization.
+        Returns:
+            The organization's stored status and slug; ``bootstrapping``
+            with no slug while no organization record exists yet.
 
         Raises:
-            httpx.HTTPStatusError: If organization not found or cleanup fails.
+            httpx.HTTPStatusError: If the caller is unauthenticated or the
+                request fails.
         """  # noqa: DOC502
-        self._request("POST", f"/organizations/{organization_id}/cleanup")
+        response = self._request("GET", "/organizations/me/status")
+        return OrganizationStatusResponse.model_validate(response)
 
 
 class AsyncPragmaClient(BaseClient):
@@ -1711,18 +1716,22 @@ class AsyncPragmaClient(BaseClient):
         response = await self._request("GET", "/organizations/me")
         return Organization.model_validate(response)
 
-    async def cleanup_organization(self, organization_id: str) -> None:
-        """Trigger cleanup for an organization.
+    async def get_organization_status(self) -> OrganizationStatusResponse:
+        """Get the status of the organization the authenticated caller belongs to.
 
-        Initiates resource teardown and deprovisioning for the organization.
+        Answers in every status, ``deleting`` and ``deleted`` included, so
+        polling it is safe.
 
-        Args:
-            organization_id: Unique identifier for the organization.
+        Returns:
+            The organization's stored status and slug; ``bootstrapping``
+            with no slug while no organization record exists yet.
 
         Raises:
-            httpx.HTTPStatusError: If organization not found or cleanup fails.
+            httpx.HTTPStatusError: If the caller is unauthenticated or the
+                request fails.
         """  # noqa: DOC502
-        await self._request("POST", f"/organizations/{organization_id}/cleanup")
+        response = await self._request("GET", "/organizations/me/status")
+        return OrganizationStatusResponse.model_validate(response)
 
     async def stream_lifecycle_events(self, *, timeout: float | None = None) -> AsyncGenerator[LifecycleEventFrame]:
         """Stream resource lifecycle transitions as they happen.

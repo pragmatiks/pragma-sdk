@@ -3,6 +3,7 @@
 from pragma_sdk.models.api import (
     LifecycleEventFrame,
     Organization,
+    OrganizationStatusResponse,
     ProviderDeleteResult,
     ProviderResponse,
     ResourceSchema,
@@ -86,6 +87,7 @@ __all__ = [
     "LifecycleEventFrame",
     "Organization",
     "OrganizationStatus",
+    "OrganizationStatusResponse",
     "Outputs",
     "OwnerReference",
     "PaginatedResponse",
