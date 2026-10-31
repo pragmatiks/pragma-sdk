@@ -133,12 +133,13 @@ class OrganizationStatus(StrEnum):
     Mirrors the API's organization lifecycle: an organization is created in
     ``BOOTSTRAPPING`` while the bootstrap worker provisions its tenant
     namespace, reaches ``READY`` once usable, or lands in ``BOOTSTRAP_FAILED``
-    if the bootstrap deadline passes before setup finishes. ``DEACTIVATING``
-    and ``DELETED`` cover teardown.
+    if the bootstrap deadline passes before setup finishes. It is
+    ``DELETING`` while its deletion runs, ``DELETED`` once it is gone.
+    Deletion cannot be cancelled.
     """
 
     BOOTSTRAPPING = "bootstrapping"
     READY = "ready"
     BOOTSTRAP_FAILED = "bootstrap_failed"
-    DEACTIVATING = "deactivating"
+    DELETING = "deleting"
     DELETED = "deleted"

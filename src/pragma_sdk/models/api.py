@@ -157,6 +157,20 @@ class Organization(BaseModel):
     updated_at: datetime
 
 
+class OrganizationStatusResponse(BaseModel):
+    """The caller's organization status as stored, with the organization's slug.
+
+    Attributes:
+        status: Lifecycle status of the organization; ``bootstrapping``
+            while no organization record exists yet.
+        slug: URL-friendly identifier for the organization, or None while
+            no organization record exists yet.
+    """
+
+    status: OrganizationStatus
+    slug: str | None = None
+
+
 class UserInfo(BaseModel):
     """Current user information from authentication.
 
