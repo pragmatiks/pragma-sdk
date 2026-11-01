@@ -165,10 +165,13 @@ class OrganizationStatusResponse(BaseModel):
             while no organization record exists yet.
         slug: URL-friendly identifier for the organization, or None while
             no organization record exists yet.
+        bootstrap_error: Why the organization could not be set up; set only
+            while the status is ``bootstrap_failed``.
     """
 
     status: OrganizationStatus
     slug: str | None = None
+    bootstrap_error: str | None = None
 
 
 class UserInfo(BaseModel):
