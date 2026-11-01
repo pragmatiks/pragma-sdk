@@ -1,3 +1,13 @@
+## v21.0.0 (2026-11-01)
+
+### BREAKING CHANGE
+
+- retry_dead_letter_event and retry_all_dead_letter_events are removed from both clients; the API no longer serves them.
+
+### Feat
+
+- remove the dead-letter retry methods (PRA-500)
+
 ## v20.0.0 (2026-10-30)
 
 ### BREAKING CHANGE
