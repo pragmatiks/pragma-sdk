@@ -1,3 +1,9 @@
+## v21.1.0 (2026-11-01)
+
+### Feat
+
+- name a dependent a delete fails in the teardown impact
+
 ## v21.0.0 (2026-11-01)
 
 ### BREAKING CHANGE
