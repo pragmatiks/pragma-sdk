@@ -10,8 +10,17 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, StringConstraints
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    StringConstraints,
+    model_serializer,
+)
 
+from pragma_sdk.protocol.constants import MAXIMUM_OPERATION_DEADLINE_SECONDS
 from pragma_sdk.types import EventType, LifecycleState
 
 
@@ -62,13 +71,34 @@ class RequestFrame(BaseModel):
 class NotificationFrame(BaseModel):
     """Outgoing notification that expects no response.
 
+    A notification without params serializes without a ``params`` member.
+
     Attributes:
         jsonrpc: JSON-RPC version, always ``"2.0"``.
         method: Method name.
+        params: Method parameters, or ``None`` for a bare notification.
     """
 
     jsonrpc: str
     method: str
+    params: Any = None
+
+    @model_serializer(mode="wrap")
+    def serialize_present_members(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Serialize the frame, leaving ``params`` out when the notification carries none.
+
+        Args:
+            handler: Pydantic's default serializer of this model.
+
+        Returns:
+            The frame's members; ``params`` only when it is not ``None``.
+        """
+        members = handler(self)
+
+        if self.params is None:
+            members.pop("params", None)
+
+        return members
 
 
 class SuccessFrame(BaseModel):
@@ -179,6 +209,10 @@ class ResourceTypeCapabilities(BaseModel):
         computed: Whether the type is declared computed.
         logs: Whether the type overrides ``logs``.
         health: Whether the type overrides ``health``.
+        operation_deadline_seconds: Ceiling in whole seconds, from 1 to
+            ``MAXIMUM_OPERATION_DEADLINE_SECONDS``, that heartbeats may
+            carry one operation of the type to, or ``None`` when the type
+            uses the platform default.
     """
 
     resource: str
@@ -186,6 +220,7 @@ class ResourceTypeCapabilities(BaseModel):
     computed: bool
     logs: bool
     health: bool
+    operation_deadline_seconds: int | None = Field(default=None, gt=0, le=MAXIMUM_OPERATION_DEADLINE_SECONDS)
 
 
 class HandshakeParams(ProtocolOffer):
@@ -216,10 +251,24 @@ class HandshakeResult(BaseModel):
             embeds, keyed by PEP 503-normalized distribution name. Must
             contain the served distribution, or the worker refuses the
             handshake.
+        heartbeat_interval_seconds: Seconds between two ``heartbeat``
+            notifications the worker sends from the accepted handshake
+            until the session ends; a positive, finite number.
     """
 
     protocol_version: int
     distribution_catalog_names: dict[str, CatalogName]
+    heartbeat_interval_seconds: float = Field(gt=0, allow_inf_nan=False)
+
+
+class CancelParams(BaseModel):
+    """Parameters of a ``cancel`` notification the host sends at an operation's deadline.
+
+    Attributes:
+        correlation_id: Correlation id of the request to cancel.
+    """
+
+    correlation_id: int
 
 
 class UnsupportedProtocolData(BaseModel):

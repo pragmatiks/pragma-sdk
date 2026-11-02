@@ -82,7 +82,13 @@ from pragma_sdk.models import (
     WheelUploadOutcome,
 )
 from pragma_sdk.models import Provider as ProviderModel
-from pragma_sdk.provider import MissingObserveError, MissingOutputsError, Provider
+from pragma_sdk.protocol.constants import MAXIMUM_OPERATION_DEADLINE_SECONDS
+from pragma_sdk.provider import (
+    MissingObserveError,
+    MissingOutputsError,
+    OperationDeadlineOutOfRangeError,
+    Provider,
+)
 from pragma_sdk.types import (
     CompatibilityConstraint,
     CopyContext,
@@ -99,6 +105,7 @@ from pragma_sdk.wheel_rename import rename_provider_wheel
 
 
 __all__ = [
+    "MAXIMUM_OPERATION_DEADLINE_SECONDS",
     "SETTLED_VERSION_STATUSES",
     "AdmissionFailureCategory",
     "AlreadyExistsError",
@@ -130,6 +137,7 @@ __all__ = [
     "LogEntry",
     "MissingObserveError",
     "MissingOutputsError",
+    "OperationDeadlineOutOfRangeError",
     "Organization",
     "OrganizationStatus",
     "Outputs",

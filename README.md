@@ -78,7 +78,6 @@ uv add pragmatiks-sdk
 - **HTTP Clients** - Sync and async clients for the Pragmatiks API
 - **Provider Authoring** - Build custom providers with type-safe Config and Outputs
 - **Provider Publishing and Installation** - Publish provider versions, install, upgrade and downgrade them, and read an installation's history
-- **Dead-Letter Queue** - Inspect and delete failed events for debugging and recovery
 - **Field References** - Reference outputs from other resources dynamically
 - **Testing Harness** - Test provider lifecycle methods locally without deployment
 - **Auto-discovery** - Automatic credential resolution from environment or config files
@@ -148,6 +147,18 @@ Before it creates, updates or deletes a resource of a type that is not `computed
 - Outputs that fail validation, or that differ from what `on_observe` returns, fail the resource while the object stays in place, until a fixed provider version runs.
 
 `ProviderHarness` results carry `normalized_outputs`, the outputs as the platform compares them, so a test can check that a create and an observe agree.
+
+### Operation deadline
+
+Every operation of a resource type may run for 1200 seconds by default. A type declares another ceiling with a bare class attribute, a whole number of seconds from 1 to `MAXIMUM_OPERATION_DEADLINE_SECONDS` (3600):
+
+```python
+@gcp.resource("instance")
+class Instance(Resource[InstanceConfig, InstanceOutputs]):
+    operation_deadline_seconds = 1800
+```
+
+`@provider.resource()` refuses any other value with `OperationDeadlineOutOfRangeError`, and publishing such a provider fails admission with `operation_deadline_out_of_range`. Past the default an operation runs on only while the worker's event loop stays responsive: the worker sends heartbeats on its own, and a handler blocking the loop stops them and fails soon after. At the deadline the handler's `await` raises `asyncio.CancelledError`; let it propagate and clean up in `finally`. Work under `asyncio.to_thread` or `loop.run_in_executor(None, ...)` is not stopped by the cancel: the worker answers once it ends, and is stopped about 30 seconds after the deadline if it has not. Threads and processes a handler starts itself are not tracked; stop them in `finally`. Asyncio tasks a handler spawns or shields are not cancelled with it and not waited for; end them yourself, in a `TaskGroup` or in `finally`.
 
 ### Declaring the provider
 
@@ -291,15 +302,6 @@ On the client itself, `AsyncPragmaClient` only.
 | `uninstall_provider(provider_name, cascade=False)` | Uninstall a provider |
 | `list_provider_history(provider_name)` | List an installation's history, newest first; kept 30 days, also after an uninstall |
 
-#### Dead-Letter Queue
-
-| Method | Description |
-|--------|-------------|
-| `list_dead_letter_events(provider)` | List dead letter events with optional provider filter |
-| `get_dead_letter_event(event_id)` | Get a dead letter event by ID |
-| `delete_dead_letter_event(event_id)` | Delete a single dead letter event |
-| `delete_dead_letter_events(provider, all)` | Delete multiple dead letter events |
-
 #### User & Health
 
 | Method | Description |
@@ -314,6 +316,7 @@ On the client itself, `AsyncPragmaClient` only.
 | `Provider()` | Resource grouping with `@provider.resource()` decorator |
 | `Resource[ConfigT, OutputsT]` | Base class with `on_create`, `on_observe`, `on_update`, `on_delete` |
 | `computed = True` | Class attribute for a resource with no external object; exempts it from `on_observe` and from declaring an `Outputs` class |
+| `operation_deadline_seconds = <seconds>` | Class attribute setting the longest time one operation of the type may run, from 1 to 3600 seconds; 1200 when left out |
 | `Config` | Base class for resource configuration (Pydantic model) |
 | `Outputs` | Base class for resource outputs (Pydantic model) |
 | `AlreadyExistsError` | Raised from `on_create` when the object to create already exists |

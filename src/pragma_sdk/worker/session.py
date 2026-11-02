@@ -1,15 +1,19 @@
 """The worker's session with the Pragmatiks host.
 
 The session sends the handshake, then runs each request the host sends and
-answers it. Lifecycle methods' platform callbacks travel back to the host
+answers it, and sends a heartbeat at the interval the host names until the
+session ends. Lifecycle methods' platform callbacks travel back to the host
 over the same connection through the runtime context each dispatch is given.
+A request the host cancels at its operation's deadline is answered with
+``CANCELLED_CODE`` once the executor work its handler left has ended.
 """
 
 from __future__ import annotations
 
 import asyncio
+import inspect
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Literal
@@ -33,8 +37,11 @@ from pragma_sdk.protocol.codec import (
 )
 from pragma_sdk.protocol.constants import (
     ALREADY_EXISTS_CODE,
+    CANCEL_METHOD,
+    CANCELLED_CODE,
     DISPATCH_METHOD,
     HANDSHAKE_METHOD,
+    HEARTBEAT_METHOD,
     INTERNAL_ERROR_CODE,
     INVALID_PARAMS_CODE,
     MAXIMUM_FRAME_BYTES,
@@ -45,6 +52,7 @@ from pragma_sdk.protocol.constants import (
     SHUTDOWN_METHOD,
 )
 from pragma_sdk.protocol.frames import (
+    CancelParams,
     DispatchParams,
     Envelope,
     FailureFrame,
@@ -59,6 +67,7 @@ from pragma_sdk.protocol.frames import (
 )
 from pragma_sdk.protocol.pending import PendingResponses
 from pragma_sdk.types import EventType
+from pragma_sdk.worker.executor import RequestScopedExecutor, request_scope
 from pragma_sdk.worker.handlers import RequestHandlers
 
 
@@ -76,6 +85,8 @@ RESULT_TOO_LARGE_MESSAGE = (
 HANDLER_EXITED_MESSAGE = "The handler called sys.exit(). Return a result or raise an exception instead."
 
 HANDSHAKE_CLOSED_MESSAGE = "Host closed the connection during the handshake"
+
+REQUEST_CANCELLED_MESSAGE = "The request was cancelled at its deadline."
 
 type HandshakeFailureReason = Literal[
     "closed",
@@ -127,10 +138,13 @@ class AcceptedHandshake:
         package_catalog_names: Provider catalog name of the package of the
             served distribution and of every provider distribution it
             embeds, keyed by package.
+        heartbeat_interval_seconds: Seconds between two heartbeats the
+            worker sends.
     """
 
     protocol_version: int
     package_catalog_names: dict[str, str]
+    heartbeat_interval_seconds: float
 
 
 @dataclass(frozen=True)
@@ -169,6 +183,7 @@ class WorkerSession:
         pending_responses: PendingResponses,
         runtime_context_factory: Callable[[int], RuntimeContext],
         package_catalog_names_loader: Callable[[dict[str, str]], dict[str, str]],
+        executor: RequestScopedExecutor,
     ) -> None:
         """Initialize the session on an open host connection.
 
@@ -185,6 +200,8 @@ class WorkerSession:
                 each distribution, keyed by normalized distribution name, into
                 the catalog name of each distribution's package; raises
                 ``ProviderDeclarationError`` for a distribution it cannot load.
+            executor: The event loop's default executor, which records the
+                work each request submits to it.
         """
         self.reader = reader
         self.writer = writer
@@ -194,7 +211,10 @@ class WorkerSession:
         self.pending_responses = pending_responses
         self.runtime_context_factory = runtime_context_factory
         self.package_catalog_names_loader = package_catalog_names_loader
+        self.executor = executor
         self.request_tasks: dict[int, asyncio.Task[None]] = {}
+        self.cancelled_correlation_ids: set[int] = set()
+        self.answered_correlation_ids: set[int] = set()
         self.request_routes: dict[str, RequestRoute] = {
             MIGRATE_METHOD: RequestRoute(
                 params_model=MigrateParams,
@@ -231,8 +251,11 @@ class WorkerSession:
 
         Every request is served with the accepted handshake's package
         catalog names bound, so a resource's ``provider`` is the catalog name
-        of the distribution defining its class. Requests still running when
-        serving ends are cancelled. The caller owns the connection and
+        of the distribution defining its class. From the accepted handshake
+        on, a heartbeat goes out every ``heartbeat_interval_seconds`` the
+        host named; a heartbeat that cannot be written ends serving, as a
+        disconnect does. Requests still running when serving ends are
+        cancelled and not answered. The caller owns the connection and
         closes it.
 
         Raises:
@@ -246,10 +269,11 @@ class WorkerSession:
                 "worker_serving",
                 protocol_version=accepted_handshake.protocol_version,
                 package_catalog_names=accepted_handshake.package_catalog_names,
+                heartbeat_interval_seconds=accepted_handshake.heartbeat_interval_seconds,
             )
 
             with package_catalog_names_scope(accepted_handshake.package_catalog_names):
-                await self.receive_frames()
+                await self.serve_frames(accepted_handshake.heartbeat_interval_seconds)
         finally:
             await self.cancel_request_tasks()
 
@@ -344,6 +368,7 @@ class WorkerSession:
         return AcceptedHandshake(
             protocol_version=result.protocol_version,
             package_catalog_names=self.load_package_catalog_names(distribution_catalog_names),
+            heartbeat_interval_seconds=result.heartbeat_interval_seconds,
         )
 
     def load_package_catalog_names(self, distribution_catalog_names: dict[str, str]) -> dict[str, str]:
@@ -370,6 +395,52 @@ class WorkerSession:
                 f"Host named a catalog name for a distribution the worker cannot load as a provider: {error}",
                 cataloged_distributions=sorted(distribution_catalog_names),
             ) from error
+
+    async def serve_frames(self, heartbeat_interval_seconds: float) -> None:
+        """Route the host's frames while sending heartbeats, until shutdown, disconnect or a failed heartbeat.
+
+        Args:
+            heartbeat_interval_seconds: Seconds between two heartbeats.
+
+        Raises:
+            FrameError: If the host sends a frame that cannot be read: a
+                malformed or oversized frame, or one cut off by a disconnect.
+        """  # noqa: DOC502
+        receiving = asyncio.create_task(self.receive_frames(), name="receive_frames")
+        heartbeating = asyncio.create_task(self.send_heartbeats(heartbeat_interval_seconds), name="send_heartbeats")
+
+        try:
+            await asyncio.wait((receiving, heartbeating), return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            receiving.cancel()
+            heartbeating.cancel()
+            await asyncio.gather(receiving, heartbeating, return_exceptions=True)
+
+        for task in (receiving, heartbeating):
+            if not task.cancelled():
+                task.result()
+
+    async def send_heartbeats(self, interval_seconds: float) -> None:
+        """Send a bare ``heartbeat`` notification every interval, until cancelled or a write fails.
+
+        A heartbeat that cannot be written, because the connection is lost,
+        is logged as ``heartbeat_write_failed`` and ends the loop.
+
+        Args:
+            interval_seconds: Seconds between two heartbeats; the first goes
+                out one interval after the call.
+        """
+        heartbeat = self.codec.build_notification(HEARTBEAT_METHOD)
+
+        while True:
+            await asyncio.sleep(interval_seconds)
+
+            try:
+                await self.codec.write(self.writer, heartbeat)
+            except OSError as error:
+                logger.warning("heartbeat_write_failed", error=str(error))
+
+                return
 
     async def receive_frames(self) -> None:
         """Read frames from the host and route them until shutdown or disconnect.
@@ -410,11 +481,12 @@ class WorkerSession:
         await asyncio.gather(*tasks.values(), return_exceptions=True)
 
     def route_frame(self, envelope: Envelope) -> None:
-        """Route one frame by kind: resolve a response, start a request.
+        """Route one frame by kind: resolve a response, start a request, cancel a request.
 
-        Notifications other than shutdown, responses no callback awaits, and
-        requests for methods the worker does not serve are ignored, each
-        logged as a ``frame_ignored`` warning.
+        Notifications other than shutdown and cancel, a cancel whose params
+        are invalid, responses no callback awaits, and requests for methods
+        the worker does not serve are ignored, each logged as a
+        ``frame_ignored`` warning.
 
         Args:
             envelope: The frame read from the host.
@@ -426,8 +498,80 @@ class WorkerSession:
             case FrameKind.REQUEST:
                 self.start_request(envelope)
 
+            case FrameKind.NOTIFICATION if envelope.method == CANCEL_METHOD:
+                self.receive_cancel(envelope)
+
             case FrameKind.NOTIFICATION:
                 log_ignored_frame(envelope, "notification")
+
+    def receive_cancel(self, envelope: Envelope) -> None:
+        """Cancel the request a ``cancel`` notification names.
+
+        Args:
+            envelope: The cancel notification.
+        """
+        try:
+            params = CancelParams.model_validate(envelope.params)
+        except ValidationError:
+            log_ignored_frame(envelope, "invalid_params")
+
+            return
+
+        self.cancel_request(params.correlation_id)
+
+    def cancel_request(self, correlation_id: int) -> None:
+        """Cancel a running request at its operation's deadline, so it is answered with ``CANCELLED_CODE``.
+
+        An accepted cancel is logged as ``request_cancel_received``. A
+        request whose task has not started yet is not interrupted; it skips
+        its handler as it starts. A cancel for a request with no running
+        task, one whose task is done, one already cancelled, or one whose
+        response is being written is logged as
+        ``cancel_ignored`` at debug level, with its ``reason``, and ignored.
+
+        Args:
+            correlation_id: Correlation id of the request to cancel.
+        """
+        task = self.request_tasks.get(correlation_id)
+        ignored_reason = self.find_cancel_ignored_reason(correlation_id, task)
+
+        if task is None or ignored_reason is not None:
+            logger.debug("cancel_ignored", correlation_id=correlation_id, reason=ignored_reason)
+
+            return
+
+        logger.warning("request_cancel_received", correlation_id=correlation_id, method=task.get_name())
+        self.cancelled_correlation_ids.add(correlation_id)
+
+        if is_task_started(task):
+            task.cancel()
+
+    def find_cancel_ignored_reason(self, correlation_id: int, task: asyncio.Task[None] | None) -> str | None:
+        """Find why a cancel for a request is to be ignored.
+
+        Args:
+            correlation_id: Correlation id the cancel names.
+            task: The request's running task, or ``None`` when none runs.
+
+        Returns:
+            ``unknown_request`` when no task runs the request,
+            ``already_done`` when its task is done, ``already_cancelled``
+            when the host already cancelled it, ``already_answered`` when its
+            response is being written, otherwise ``None``.
+        """
+        if task is None:
+            return "unknown_request"
+
+        if task.done():
+            return "already_done"
+
+        if correlation_id in self.cancelled_correlation_ids:
+            return "already_cancelled"
+
+        if correlation_id in self.answered_correlation_ids:
+            return "already_answered"
+
+        return None
 
     def resolve_response(self, envelope: Envelope) -> None:
         """Hand a response to the callback awaiting it.
@@ -458,6 +602,8 @@ class WorkerSession:
 
             return
 
+        self.cancelled_correlation_ids.discard(correlation_id)
+        self.answered_correlation_ids.discard(correlation_id)
         task = asyncio.create_task(self.run_request(correlation_id, method, envelope.params, route), name=method)
         self.request_tasks[correlation_id] = task
         task.add_done_callback(partial(self.forget_request_task, correlation_id))
@@ -501,18 +647,56 @@ class WorkerSession:
         """Run a request and write its response to the host.
 
         Every event logged meanwhile, by the worker or the provider, carries
-        the request's ``correlation_id`` and ``method``.
+        the request's ``correlation_id`` and ``method``, and the work it
+        submits to the default executor is recorded under its correlation id.
+
+        A request the host cancels is answered with ``CANCELLED_CODE`` as
+        :meth:`answer_cancel` describes, wherever the cancel lands: before
+        the request starts, while its params are validated, while its
+        handler runs, whether the handler then raises ``CancelledError``,
+        returns or raises another error. A cancel that lands once its
+        response is being written is ignored, so every request gets one
+        answer.
 
         Args:
             correlation_id: Correlation id of the request.
             method: Method name of the request.
             params: The request's params, unvalidated.
             route: How to run the method.
-        """
-        with structlog.contextvars.bound_contextvars(correlation_id=correlation_id, method=method):
-            await self.run_route(correlation_id, params, route)
 
-    async def run_route(self, correlation_id: int, params: Any, route: RequestRoute) -> None:
+        Raises:
+            CancelledError: If the request is being cancelled for another
+                reason than the host's cancel, such as the end of the
+                session; it is then not answered.
+        """  # noqa: DOC502
+        started_at = time.monotonic()
+
+        with (
+            structlog.contextvars.bound_contextvars(correlation_id=correlation_id, method=method),
+            request_scope(correlation_id),
+        ):
+            try:
+                if correlation_id not in self.cancelled_correlation_ids:
+                    await self.run_route(correlation_id, params, route, started_at)
+            except asyncio.CancelledError:
+                if not self.is_cancel_unanswered(correlation_id):
+                    raise
+
+            if self.is_cancel_unanswered(correlation_id):
+                await self.answer_cancel(correlation_id, started_at)
+
+    def is_cancel_unanswered(self, correlation_id: int) -> bool:
+        """Tell whether the host cancelled a request that has no answer written yet.
+
+        Args:
+            correlation_id: Correlation id of the request.
+
+        Returns:
+            Whether the request is cancelled and unanswered.
+        """
+        return correlation_id in self.cancelled_correlation_ids and correlation_id not in self.answered_correlation_ids
+
+    async def run_route(self, correlation_id: int, params: Any, route: RequestRoute, request_started_at: float) -> None:
         """Validate a request's params, run its handler and write the response.
 
         Invalid params are answered with ``INVALID_PARAMS_CODE``, described by
@@ -521,19 +705,30 @@ class WorkerSession:
         the route's log fields. Routes with ``logs_start`` log
         ``request_started`` as the handler starts. ``request_completed``,
         logged once the result is written, records how long the handler ran
-        and its result took to encode.
+        and its result took to encode. A handler that ends without raising
+        ``CancelledError`` after the host cancelled its request is logged as
+        ``request_cancel_swallowed`` and its response is not written. A
+        cancel that lands while the handler runs is answered here, so
+        ``request_cancelled`` carries the route's log fields too.
 
         Args:
             correlation_id: Correlation id of the request.
             params: The request's params, unvalidated.
             route: How to run the method.
-        """
+            request_started_at: :func:`time.monotonic` reading taken as the request started.
+
+        Raises:
+            CancelledError: If the request is being cancelled for another
+                reason than the host's cancel, such as the end of the
+                session; it is then not answered.
+        """  # noqa: DOC502
         try:
             validated_params = route.params_model.model_validate(params)
         except ValidationError as error:
             logger.error("request_params_invalid", errors=build_validation_error_details(error))
             message = build_validation_error_message(error)
             failure = self.codec.build_failure(correlation_id, INVALID_PARAMS_CODE, message)
+            self.answered_correlation_ids.add(correlation_id)
             await self.write_response(correlation_id, failure)
 
             return
@@ -543,8 +738,27 @@ class WorkerSession:
                 logger.info("request_started")
 
             started_at = time.monotonic()
-            response = await self.run_handler(correlation_id, validated_params, route, started_at)
+
+            try:
+                response = await self.run_handler(correlation_id, validated_params, route, started_at)
+            except asyncio.CancelledError:
+                if correlation_id not in self.cancelled_correlation_ids:
+                    raise
+
+                await self.answer_cancel(correlation_id, request_started_at)
+
+                return
+
             duration_seconds = measure_elapsed_seconds(started_at)
+
+            if correlation_id in self.cancelled_correlation_ids:
+                logger.warning("request_cancel_swallowed", duration_seconds=duration_seconds)
+                await self.answer_cancel(correlation_id, request_started_at)
+
+                return
+
+            self.answered_correlation_ids.add(correlation_id)
+
             written = await self.write_response(correlation_id, response)
 
             if written and isinstance(response, SuccessFrame):
@@ -575,7 +789,8 @@ class WorkerSession:
             The success or failure frame answering the request.
 
         Raises:
-            CancelledError: If the request is being cancelled.
+            CancelledError: If the request is being cancelled, by the host's
+                cancel or for another reason, such as the end of the session.
         """  # noqa: DOC502
         try:
             result = await route.handler(validated_params)
@@ -590,6 +805,69 @@ class WorkerSession:
             return self.build_handler_failure(correlation_id, validated_params, route, started_at, error)
 
         return self.encode_result(correlation_id, result)
+
+    async def answer_cancel(self, correlation_id: int, started_at: float) -> None:
+        """Answer a request the host cancelled with ``CANCELLED_CODE``, once the executor work it left has ended.
+
+        The work waited for is what the request recorded in the default
+        executor by the time its handler ended; the wait is logged as
+        ``request_cancelled``.
+
+        Args:
+            correlation_id: Correlation id of the cancelled request.
+            started_at: :func:`time.monotonic` reading taken as the request started.
+
+        Raises:
+            CancelledError: If the request is also being cancelled for
+                another reason, such as the end of the session; it is then
+                not answered.
+        """
+        self.answered_correlation_ids.add(correlation_id)
+
+        if not self.consume_cancel():
+            raise asyncio.CancelledError
+
+        await self.wait_for_cancelled_work(correlation_id, started_at)
+        await self.write_response(correlation_id, self.build_cancelled_failure(correlation_id))
+
+    def consume_cancel(self) -> bool:
+        """Withdraw the cancellation the host's cancel requested of the running request task.
+
+        Returns:
+            Whether nothing else, such as the end of the session, is
+            cancelling the task too.
+        """
+        task = asyncio.current_task()
+
+        if task is None or task.cancelling() == 0:
+            return True
+
+        return task.uncancel() == 0
+
+    async def wait_for_cancelled_work(self, correlation_id: int, started_at: float) -> None:
+        """Wait for the executor work a cancelled request left, logged as ``request_cancelled``.
+
+        Args:
+            correlation_id: Correlation id of the cancelled request.
+            started_at: :func:`time.monotonic` reading taken as the request started.
+        """
+        executor_work_items = await self.executor.wait_for_work(correlation_id)
+        logger.warning(
+            "request_cancelled",
+            duration_seconds=measure_elapsed_seconds(started_at),
+            executor_work_items=executor_work_items,
+        )
+
+    def build_cancelled_failure(self, correlation_id: int) -> FailureFrame:
+        """Build the frame answering a request the host cancelled.
+
+        Args:
+            correlation_id: Correlation id of the cancelled request.
+
+        Returns:
+            A failure with ``CANCELLED_CODE``.
+        """
+        return self.codec.build_failure(correlation_id, CANCELLED_CODE, REQUEST_CANCELLED_MESSAGE)
 
     def build_handler_failure(
         self,
@@ -730,7 +1008,7 @@ class WorkerSession:
         return {"provider": compute_defining_provider(resource_class), **resource_fields}
 
     def forget_request_task(self, correlation_id: int, task: asyncio.Task[None]) -> None:
-        """Stop tracking a finished request task, unless another task took over its correlation id.
+        """Stop tracking a finished request task, and its cancel, unless another task took over its correlation id.
 
         Args:
             correlation_id: Correlation id of the request.
@@ -738,6 +1016,8 @@ class WorkerSession:
         """
         if self.request_tasks.get(correlation_id) is task:
             del self.request_tasks[correlation_id]
+            self.cancelled_correlation_ids.discard(correlation_id)
+            self.answered_correlation_ids.discard(correlation_id)
 
 
 def build_migration_log_fields(params: MigrateParams) -> dict[str, Any]:
@@ -769,7 +1049,8 @@ def log_ignored_frame(envelope: Envelope, reason: str) -> None:
 
     Args:
         envelope: The dropped frame.
-        reason: Why it was dropped: ``notification``, ``unsolicited_response``,
+        reason: Why it was dropped: ``notification``, ``invalid_params``
+            (a cancel whose params are invalid), ``unsolicited_response``,
             ``missing_id`` or ``unknown_method``.
     """
     logger.warning(
@@ -787,6 +1068,23 @@ def is_cancellation_requested() -> bool:
     task = asyncio.current_task()
 
     return task is not None and task.cancelling() > 0
+
+
+def is_task_started(task: asyncio.Task[None]) -> bool:
+    """Check whether a task has started running its coroutine.
+
+    A task cancelled before it starts ends without running any of its
+    coroutine, so nothing in it can answer the cancel.
+
+    Args:
+        task: The task to check.
+
+    Returns:
+        False while the task's coroutine has not run its first step.
+    """
+    coroutine = task.get_coro()
+
+    return not isinstance(coroutine, Coroutine) or inspect.getcoroutinestate(coroutine) != inspect.CORO_CREATED
 
 
 def measure_elapsed_seconds(started_at: float) -> float:

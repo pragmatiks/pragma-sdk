@@ -72,6 +72,7 @@ class AdmissionFailureCategory(StrEnum):
     IMPORT_FAILED = "import_failed"
     MISSING_OBSERVE = "missing_observe"
     MISSING_OUTPUTS = "missing_outputs"
+    OPERATION_DEADLINE_OUT_OF_RANGE = "operation_deadline_out_of_range"
     STORED_WHEEL_CONFLICT = "stored_wheel_conflict"
     DEADLINE_EXCEEDED = "deadline_exceeded"
     PLATFORM_ERROR = "platform_error"

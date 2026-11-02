@@ -5,12 +5,15 @@ Each frame is a 4-byte big-endian length prefix followed by one UTF-8 JSON
 body of at most :data:`MAXIMUM_FRAME_BYTES`. A create dispatch refused
 because its external object already exists fails with
 :data:`ALREADY_EXISTS_CODE`.
+
+Protocol 4 adds the :data:`HEARTBEAT_METHOD` and :data:`CANCEL_METHOD`
+notifications and the :data:`CANCELLED_CODE` failure code.
 """
 
 from __future__ import annotations
 
 
-PROTOCOL_VERSION = 3
+PROTOCOL_VERSION = 4
 OFFERED_PROTOCOL_VERSIONS = [PROTOCOL_VERSION]
 
 JSONRPC_VERSION = "2.0"
@@ -24,13 +27,23 @@ APPLY_RESOURCE_METHOD = "apply_resource"
 MIGRATE_METHOD = "migrate"
 RESOURCE_LOGS_METHOD = "resource_logs"
 RESOURCE_HEALTH_METHOD = "resource_health"
+CANCEL_METHOD = "cancel"
+HEARTBEAT_METHOD = "heartbeat"
 
 METHOD_NOT_FOUND_CODE = -32601
 INVALID_PARAMS_CODE = -32602
 INTERNAL_ERROR_CODE = -32603
 UNSUPPORTED_PROTOCOL_CODE = -32001
 ALREADY_EXISTS_CODE = -32002
+CANCELLED_CODE = -32003
 
 LENGTH_PREFIX_FORMAT = ">I"
 LENGTH_PREFIX_BYTES = 4
 MAXIMUM_FRAME_BYTES = 64 * 1024 * 1024
+
+MAXIMUM_OPERATION_DEADLINE_SECONDS = 3600
+"""Longest ``operation_deadline_seconds``, in seconds, a resource type may declare.
+
+A provider version declaring a longer one, or one under 1, is refused at
+admission.
+"""

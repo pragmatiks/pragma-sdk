@@ -706,6 +706,37 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
     ``on_delete`` also runs after a create that never completed and must
     tolerate finding nothing to delete.
     """
+    operation_deadline_seconds: ClassVar[int | None] = None
+    """Longest time, in whole seconds, one operation of this type may run.
+
+    Declare it as a bare ``operation_deadline_seconds = 1800``, without a
+    type annotation, from 1 to ``MAXIMUM_OPERATION_DEADLINE_SECONDS``
+    (3600). Any other value, or an annotated field of that name, makes
+    ``@provider.resource()`` raise ``OperationDeadlineOutOfRangeError`` as
+    the class is defined. Leave it ``None`` for the platform default of
+    1200 seconds.
+
+    An operation runs up to the declared value or the platform default,
+    whichever is shorter. A declared value longer than the default lets it
+    run past the default, never beyond the declared value, but only while
+    the worker's event loop stays responsive: a handler that blocks the
+    loop, with ``time.sleep`` or another blocking call, fails soon after it
+    passes the default. Run blocking work under ``asyncio.to_thread``.
+
+    At the deadline the platform cancels the handler: the ``await`` it is
+    suspended in raises ``asyncio.CancelledError``. Let it propagate, and
+    release what the handler holds in ``finally``. The operation fails with
+    a deadline reason, whatever the handler does next.
+
+    The cancel does not stop work running under ``asyncio.to_thread`` or
+    ``loop.run_in_executor(None, ...)``. The worker answers the cancel once
+    the work the handler left there has finished, and is stopped about 30 seconds after the deadline if it has
+    not, which ends that work. Asyncio tasks the handler spawns, or shields
+    with ``asyncio.shield``, are not cancelled with it and are not waited
+    for; ending them is the handler's responsibility, for example in a
+    ``TaskGroup`` or in ``finally``. Threads, processes and executors a
+    handler starts itself are not tracked either: stop them in ``finally``.
+    """
 
     project_id: str
     name: str

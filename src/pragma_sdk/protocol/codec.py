@@ -126,16 +126,21 @@ class JsonRpcCodec:
 
         return RequestFrame(jsonrpc=JSONRPC_VERSION, id=correlation_id, method=method, params=payload)
 
-    def build_notification(self, method: str) -> NotificationFrame:
+    def build_notification(self, method: str, params: Any = None) -> NotificationFrame:
         """Build a notification frame.
 
         Args:
             method: Method name.
+            params: Method parameters, or ``None`` for a bare notification,
+                which is written without a ``params`` member.
 
         Returns:
             The notification frame.
-        """
-        return NotificationFrame(jsonrpc=JSONRPC_VERSION, method=method)
+
+        Raises:
+            UnicodeDecodeError: If a bytes value in ``params`` is not UTF-8.
+        """  # noqa: DOC502
+        return NotificationFrame(jsonrpc=JSONRPC_VERSION, method=method, params=build_json_payload(params))
 
     def build_success(self, correlation_id: int, result: Any) -> SuccessFrame:
         """Build a response frame reporting success.
