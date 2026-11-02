@@ -105,8 +105,10 @@ def load_declared_provider(distribution: str) -> DeclaredProvider:
             package defines no resource types, or a resource type the package
             imports from outside itself defines no ``on_observe``.
         MissingObserveError: If a non-computed resource type the package
-            defines has no ``on_observe``. Any other exception the provider
-            package raises while it is imported propagates unchanged.
+            defines has no ``on_observe``.
+        MissingOutputsError: If a non-computed resource type the package
+            imports declares no ``Outputs`` class. Any other exception the
+            provider package raises while it is imported propagates unchanged.
     """  # noqa: DOC502
     normalized_distribution = canonicalize_name(distribution)
 
@@ -206,8 +208,10 @@ def discover_declared_resources(normalized_distribution: str, package: str) -> d
             instead of a package, the package defines no resource types, or a
             resource type outside the package defines no ``on_observe``.
         MissingObserveError: If a non-computed resource type the package
-            defines has no ``on_observe``. Any other exception the package
-            raises while it is imported propagates unchanged.
+            defines has no ``on_observe``.
+        MissingOutputsError: If a non-computed resource type the package
+            imports declares no ``Outputs`` class. Any other exception the
+            package raises while it is imported propagates unchanged.
     """  # noqa: DOC502
     try:
         resource_types = discover_resources(package)

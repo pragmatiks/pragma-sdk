@@ -47,7 +47,7 @@ from pragma_sdk.provider.harness import (
     ProviderHarness,
 )
 from pragma_sdk.provider.loading import load_provider_schemas
-from pragma_sdk.provider.provider import RESOURCE_MARKER, MissingObserveError, Provider
+from pragma_sdk.provider.provider import RESOURCE_MARKER, MissingObserveError, MissingOutputsError, Provider
 
 
 __all__ = [
@@ -56,6 +56,7 @@ __all__ = [
     "LifecycleEvent",
     "LifecycleResult",
     "MissingObserveError",
+    "MissingOutputsError",
     "Provider",
     "ProviderHarness",
     "discover_resources",

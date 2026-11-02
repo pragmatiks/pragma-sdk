@@ -29,8 +29,10 @@ def discover_resources(package_name: str) -> dict[str, type[Resource]]:
 
     Raises:
         MissingObserveError: If a non-computed resource type in an imported
-            module defines no on_observe. Any other exception a module raises
-            on import propagates.
+            module defines no on_observe.
+        MissingOutputsError: If a non-computed resource type in an imported
+            module declares no Outputs class. Any other exception a module
+            raises on import propagates.
 
     Example:
         resources = discover_resources("postgres_provider")
@@ -78,8 +80,10 @@ def discover_module_resources(module_name: str, package_name: str) -> Iterator[t
 
     Raises:
         MissingObserveError: If a non-computed resource type in an imported
-            module defines no on_observe. Any other exception a module raises
-            on import propagates.
+            module defines no on_observe.
+        MissingOutputsError: If a non-computed resource type in an imported
+            module declares no Outputs class. Any other exception a module
+            raises on import propagates.
     """  # noqa: DOC502
     module = importlib.import_module(module_name)
 

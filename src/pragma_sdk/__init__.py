@@ -82,7 +82,7 @@ from pragma_sdk.models import (
     WheelUploadOutcome,
 )
 from pragma_sdk.models import Provider as ProviderModel
-from pragma_sdk.provider import MissingObserveError, Provider
+from pragma_sdk.provider import MissingObserveError, MissingOutputsError, Provider
 from pragma_sdk.types import (
     CompatibilityConstraint,
     CopyContext,
@@ -129,6 +129,7 @@ __all__ = [
     "LifecycleState",
     "LogEntry",
     "MissingObserveError",
+    "MissingOutputsError",
     "Organization",
     "OrganizationStatus",
     "Outputs",
