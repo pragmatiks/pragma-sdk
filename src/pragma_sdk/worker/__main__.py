@@ -24,6 +24,7 @@ from pragma_sdk.declaration.settings import load_provider_settings
 from pragma_sdk.diagnostics.structured_logging import configure_logging
 from pragma_sdk.protocol.codec import FrameError, JsonRpcCodec
 from pragma_sdk.protocol.pending import PendingResponses
+from pragma_sdk.worker.executor import RequestScopedExecutor
 from pragma_sdk.worker.handlers import RequestHandlers
 from pragma_sdk.worker.resource_builder import ResourceBuilder
 from pragma_sdk.worker.runtime_context import RuntimeContextProxy
@@ -73,6 +74,10 @@ def load_provider() -> DeclaredProvider:
 async def serve_host(socket_path: str, declared_provider: DeclaredProvider) -> None:
     """Connect to the host socket and serve the provider until shutdown or disconnect, then close the connection.
 
+    A :class:`~pragma_sdk.worker.executor.RequestScopedExecutor` becomes
+    the event loop's default executor before the connection opens, so the
+    worker can wait for the executor work a cancelled request left.
+
     Args:
         socket_path: Filesystem path of the host's Unix socket.
         declared_provider: The provider to serve, its package imported.
@@ -82,6 +87,8 @@ async def serve_host(socket_path: str, declared_provider: DeclaredProvider) -> N
         HandshakeError: If the handshake with the host does not complete.
         FrameError: If the host sends a frame that cannot be read.
     """  # noqa: DOC502
+    executor = RequestScopedExecutor()
+    asyncio.get_running_loop().set_default_executor(executor)
     reader, writer = await asyncio.open_unix_connection(socket_path)
     codec = JsonRpcCodec()
     pending_responses = PendingResponses()
@@ -96,6 +103,7 @@ async def serve_host(socket_path: str, declared_provider: DeclaredProvider) -> N
             RuntimeContextProxy, writer=writer, pending_responses=pending_responses, codec=codec
         ),
         package_catalog_names_loader=load_package_catalog_names,
+        executor=executor,
     )
 
     try:

@@ -12,7 +12,7 @@ from pragma_sdk.models import Resource
 from pragma_sdk.protocol.constants import OFFERED_PROTOCOL_VERSIONS
 from pragma_sdk.protocol.frames import HandshakeParams, ResourceTypeCapabilities
 from pragma_sdk.provider.discovery import discover_resources
-from pragma_sdk.provider.provider import MissingObserveError, MissingOutputsError
+from pragma_sdk.provider.provider import MissingObserveError, MissingOutputsError, OperationDeadlineOutOfRangeError
 from pragma_sdk.provider_entry_point import (
     ENTRY_POINT_DECLARATION,
     PROVIDER_ENTRY_POINT_GROUP,
@@ -77,7 +77,8 @@ def build_resource_type_capabilities(resource: str, resource_class: type[Resourc
 
     Returns:
         Whether the class defines ``on_observe``, is declared computed, and
-        overrides ``logs`` and ``health``.
+        overrides ``logs`` and ``health``, and the
+        ``operation_deadline_seconds`` it declares.
     """
     return ResourceTypeCapabilities(
         resource=resource,
@@ -85,6 +86,7 @@ def build_resource_type_capabilities(resource: str, resource_class: type[Resourc
         computed=resource_class.computed,
         logs=resource_class.logs is not Resource.logs,
         health=resource_class.health is not Resource.health,
+        operation_deadline_seconds=resource_class.operation_deadline_seconds,
     )
 
 
@@ -102,14 +104,18 @@ def load_declared_provider(distribution: str) -> DeclaredProvider:
             not declare exactly one ``pragma.provider`` entry point, its
             entry point's reference is not a module path, carries extras, or
             names an object or a plain module instead of a package, its
-            package defines no resource types, or a non-computed resource type
-            the package imports from outside itself defines no ``on_observe``
-            or declares no ``Outputs`` class.
+            package defines no resource types, or a resource type the package
+            imports from outside itself declares a refused
+            ``operation_deadline_seconds``, or is non-computed and defines no
+            ``on_observe`` or declares no ``Outputs`` class.
         MissingObserveError: If a non-computed resource type the package
             defines has no ``on_observe``.
         MissingOutputsError: If a non-computed resource type the package
-            defines declares no ``Outputs`` class. Any other exception the
-            provider package raises while it is imported propagates unchanged.
+            defines declares no ``Outputs`` class.
+        OperationDeadlineOutOfRangeError: If a resource type the package
+            defines declares a refused ``operation_deadline_seconds``.
+            Any other exception the provider package raises while it is
+            imported propagates unchanged.
     """  # noqa: DOC502
     normalized_distribution = canonicalize_name(distribution)
 
@@ -194,7 +200,9 @@ def parse_declared_package(normalized_distribution: str, entry_point: importlib.
         raise ProviderDeclarationError(f"Distribution {normalized_distribution!r}: {error}") from error
 
 
-def build_outside_resource_message(error: MissingObserveError | MissingOutputsError, package: str) -> str:
+def build_outside_resource_message(
+    error: MissingObserveError | MissingOutputsError | OperationDeadlineOutOfRangeError, package: str
+) -> str:
     """Build the declaration error for a refused resource type a package imports from outside itself.
 
     Args:
@@ -202,13 +210,20 @@ def build_outside_resource_message(error: MissingObserveError | MissingOutputsEr
         package: Importable package the entry point names.
 
     Returns:
-        A message naming the resource type, its module, the part it lacks
-        (``on_observe`` or an ``Outputs`` class) and how to add it.
+        A message naming the resource type, its module, what is wrong with
+        it (no ``on_observe``, no ``Outputs`` class, or a refused
+        ``operation_deadline_seconds``) and how to fix it.
     """
     location = (
         f"Resource type {error.resource!r} in module {error.module_name!r}, which {package!r} imports from "
         "outside the package,"
     )
+
+    if isinstance(error, OperationDeadlineOutOfRangeError):
+        return (
+            f"{location} declares an operation_deadline_seconds that is refused: {error} If it comes from "
+            "another provider, depend on a version of that provider that declares a valid one."
+        )
 
     if isinstance(error, MissingObserveError):
         return (
@@ -235,18 +250,22 @@ def discover_declared_resources(normalized_distribution: str, package: str) -> d
     Raises:
         ProviderDeclarationError: If the entry point names a plain module
             instead of a package, the package defines no resource types, or a
-            non-computed resource type in a module the package imports from
-            outside itself defines no ``on_observe`` or declares no
+            resource type in a module the package imports from outside itself
+            declares a refused ``operation_deadline_seconds``, or is
+            non-computed and defines no ``on_observe`` or declares no
             ``Outputs`` class.
         MissingObserveError: If a non-computed resource type the package
             defines has no ``on_observe``.
         MissingOutputsError: If a non-computed resource type the package
-            defines declares no ``Outputs`` class. Any other exception the
-            package raises while it is imported propagates unchanged.
+            defines declares no ``Outputs`` class.
+        OperationDeadlineOutOfRangeError: If a resource type the package
+            defines declares a refused ``operation_deadline_seconds``. Any
+            other exception the package raises while it is imported
+            propagates unchanged.
     """  # noqa: DOC502
     try:
         resource_types = discover_resources(package)
-    except (MissingObserveError, MissingOutputsError) as error:
+    except (MissingObserveError, MissingOutputsError, OperationDeadlineOutOfRangeError) as error:
         if is_module_in_package(error.module_name, package):
             raise
 

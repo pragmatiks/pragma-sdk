@@ -7,6 +7,7 @@ from typing import TypeVar
 
 from pragma_sdk.models import Resource
 from pragma_sdk.models.base import derive_outputs_class
+from pragma_sdk.protocol.constants import MAXIMUM_OPERATION_DEADLINE_SECONDS
 
 
 ResourceT = TypeVar("ResourceT", bound=Resource)
@@ -63,6 +64,81 @@ class MissingOutputsError(TypeError):
         )
 
 
+class OperationDeadlineOutOfRangeError(TypeError):
+    """Raised when a resource type declares an ``operation_deadline_seconds`` that is not a whole number in range.
+
+    The accepted values are ``None`` and the ``int`` values from 1 to
+    ``MAXIMUM_OPERATION_DEADLINE_SECONDS``; a ``bool`` is refused. The
+    message never repeats the declared value.
+
+    Attributes:
+        resource: Registered name of the offending resource type.
+        module_name: Module defining the offending resource class.
+    """
+
+    def __init__(self, resource: str, module_name: str) -> None:
+        """Build the error for a resource type.
+
+        Args:
+            resource: Registered name of the offending resource type.
+            module_name: Module defining the offending resource class.
+        """
+        self.resource = resource
+        self.module_name = module_name
+        super().__init__(self.build_message())
+
+    def build_message(self) -> str:
+        """Build the error's message.
+
+        Returns:
+            A message naming the resource type, the accepted range and how
+            to fix the declaration.
+        """
+        return (
+            f'resource "{self.resource}" declares operation_deadline_seconds outside 1 to '
+            f"{MAXIMUM_OPERATION_DEADLINE_SECONDS} seconds. Set it within that range, or remove it to use the default."
+        )
+
+
+class OperationDeadlineFieldError(OperationDeadlineOutOfRangeError):
+    """Raised when a resource type declares ``operation_deadline_seconds`` as an annotated field.
+
+    Catch :class:`OperationDeadlineOutOfRangeError` to handle it with every
+    other refused ``operation_deadline_seconds``.
+    """
+
+    def build_message(self) -> str:
+        """Build the error's message.
+
+        Returns:
+            A message naming the resource type and how to declare the
+            attribute instead.
+        """
+        return (
+            f'resource "{self.resource}" declares operation_deadline_seconds as a field; '
+            "write a bare `operation_deadline_seconds = <seconds>` without a type annotation."
+        )
+
+
+def is_operation_deadline_in_range(value: object) -> bool:
+    """Tell whether a declared ``operation_deadline_seconds`` is accepted.
+
+    Args:
+        value: The declared value.
+
+    Returns:
+        Whether it is ``None``, or an ``int`` that is not a ``bool`` from 1
+        to ``MAXIMUM_OPERATION_DEADLINE_SECONDS``.
+    """
+    if value is None:
+        return True
+
+    if isinstance(value, bool) or not isinstance(value, int):
+        return False
+
+    return 1 <= value <= MAXIMUM_OPERATION_DEADLINE_SECONDS
+
+
 class Provider:
     """Group Resource classes under a provider.
 
@@ -105,9 +181,15 @@ class Provider:
             Decorator function that registers the Resource class.
 
         Raises:
-            TypeError: If the decorated object is not a Resource subclass or declares ``computed`` as a field.
+            TypeError: If the decorated object is not a Resource subclass, or
+                declares ``computed`` as a field.
             MissingObserveError: If a non-computed class does not override ``on_observe``.
             MissingOutputsError: If a non-computed class declares no ``Outputs`` class.
+            OperationDeadlineOutOfRangeError: If the class declares an
+                ``operation_deadline_seconds`` other than ``None`` or a whole
+                number of seconds from 1 to ``MAXIMUM_OPERATION_DEADLINE_SECONDS``,
+                or declares it as an annotated field
+                (:class:`OperationDeadlineFieldError`).
             ValueError: If ``name`` is already registered on this provider.
 
         Example:
@@ -125,6 +207,12 @@ class Provider:
                     f'resource "{name}" declares computed as a field; '
                     "write a bare `computed = True` without a type annotation."
                 )
+
+            if "operation_deadline_seconds" in cls.model_fields:
+                raise OperationDeadlineFieldError(name, cls.__module__)
+
+            if not is_operation_deadline_in_range(cls.operation_deadline_seconds):
+                raise OperationDeadlineOutOfRangeError(name, cls.__module__)
 
             if not cls.computed and cls.on_observe is Resource.on_observe:
                 raise MissingObserveError(name, cls.__module__)
