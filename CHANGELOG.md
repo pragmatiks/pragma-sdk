@@ -1,3 +1,9 @@
+## v23.0.0 (2026-11-02)
+
+### Feat
+
+- protocol 4 with the operation deadline cap, cancel and heartbeat (PRA-505C)
+
 ## v22.0.1 (2026-11-02)
 
 ### Fix
