@@ -370,8 +370,10 @@ class ProviderInstallationEvent(BaseModel):
         message: What happened, such as ``started``, ``stopped: host
             restarted`` or the failure text; ``None`` for a transition that
             needs none.
-        cause: Detail behind a failure, such as the build step's output, or
-            ``None``.
+        cause: Detail behind a failure, such as the build step's output,
+            or how Pragmatiks stopped a worker it replaced (``stopped: did
+            not answer a cancel``), also on a successful change; ``None``
+            otherwise.
         occurred_at: When the transition happened.
     """
 
