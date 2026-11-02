@@ -25,6 +25,7 @@ from pragma_sdk.client import (
     ProjectResources,
 )
 from pragma_sdk.exceptions import (
+    AlreadyExistsError,
     ProjectHasResourcesError,
     ProjectMismatchError,
     RenamedWheelWriteError,
@@ -100,6 +101,7 @@ from pragma_sdk.wheel_rename import rename_provider_wheel
 __all__ = [
     "SETTLED_VERSION_STATUSES",
     "AdmissionFailureCategory",
+    "AlreadyExistsError",
     "AsyncPragmaClient",
     "AsyncProjectResources",
     "CompatibilityConstraint",

@@ -55,6 +55,16 @@ class ResourceFailedError(Exception):
         super().__init__(message)
 
 
+class AlreadyExistsError(Exception):
+    """Raised from ``on_create`` when the vendor reports that the object to create already exists.
+
+    Raise it on a vendor HTTP 409 or ``AlreadyExists`` error instead of
+    adopting an object Pragmatiks did not create; the resource then fails
+    instead of adopting it. Raised from any other lifecycle method, it is
+    treated as any other exception.
+    """
+
+
 class ProjectHasResourcesError(Exception):
     """Raised when deleting a non-empty project without orphan_resources=True.
 

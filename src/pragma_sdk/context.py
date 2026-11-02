@@ -125,9 +125,10 @@ async def wait_for_resource_state(
         resource reached, and ``outputs``, its outputs or ``None``.
 
     Raises:
-        RuntimeError: If called outside a lifecycle handler context, or the
-            host's wait fails, including when the target state is not reached
-            within ``timeout``.
+        RuntimeError: If called outside ``on_create``, ``on_update`` or
+            ``on_delete`` run by the Pragmatiks runtime, or the host's wait
+            fails, including when the target state is not reached within
+            ``timeout``.
 
     Example:
         ```python
@@ -146,7 +147,10 @@ async def wait_for_resource_state(
     """
     ctx = _runtime_context.get()
     if ctx is None:
-        raise RuntimeError("wait_for_resource_state must be called from within a provider lifecycle handler")
+        raise RuntimeError(
+            "wait_for_resource_state is available only in on_create, on_update and on_delete, "
+            "while the Pragmatiks runtime runs them"
+        )
     return await ctx.wait_for_state(resource_id, target_state, timeout)
 
 
@@ -162,8 +166,9 @@ async def apply_resource(resource_data: dict[str, Any]) -> None:
             name, config, owner_references, etc.
 
     Raises:
-        RuntimeError: If called outside a lifecycle handler context or if
-            the resource could not be applied.
+        RuntimeError: If called outside ``on_create``, ``on_update`` or
+            ``on_delete`` run by the Pragmatiks runtime, or if the resource
+            could not be applied.
 
     Example:
         ```python
@@ -180,7 +185,10 @@ async def apply_resource(resource_data: dict[str, Any]) -> None:
     """
     ctx = _runtime_context.get()
     if ctx is None:
-        raise RuntimeError("apply_resource must be called from within a provider lifecycle handler")
+        raise RuntimeError(
+            "apply_resource is available only in on_create, on_update and on_delete, "
+            "while the Pragmatiks runtime runs them"
+        )
     await ctx.apply_resource(resource_data)
 
 
