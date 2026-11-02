@@ -692,13 +692,14 @@ class Outputs(BaseModel):
 class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
     """Base class for provider-managed resources with lifecycle handlers.
 
-    Subclasses must override ``on_observe`` unless they declare ``computed = True``.
+    Subclasses must override ``on_observe`` and declare an ``Outputs`` class
+    unless they declare ``computed = True``.
     Handlers must be idempotent, since events may be redelivered.
     """
 
     resource: ClassVar[str]
     computed: ClassVar[bool] = False
-    """Whether this type has no external object and so needs no ``on_observe``.
+    """Whether this type has no external object and so needs no ``on_observe`` or ``Outputs`` class.
 
     Declare it as a bare ``computed = True``, without a type annotation. The
     platform never observes a computed type before acting, so its

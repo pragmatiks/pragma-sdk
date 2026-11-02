@@ -140,6 +140,8 @@ class Bucket(Resource[BucketConfig, BucketOutputs]):
 
 Before it creates, updates or deletes a resource of a type that is not `computed`, the platform calls `on_observe` to see whether the object exists, and calls it again once the lifecycle method returns:
 
+- A type that is not `computed` must define `on_observe` and declare an `Outputs` class (`Resource[YourConfig, YourOutputs]`): `@provider.resource()` refuses it otherwise, with `MissingObserveError` or `MissingOutputsError`, since without outputs the platform could never see its object as present.
+
 - `on_observe` returns the object's outputs, or `None` only when the object does not exist. Platform callbacks such as `apply_resource` are not available in it.
 - `on_create` and `on_update` return only once `on_observe` finds the object, with outputs equal to what `on_observe` returns. Both sides are validated against the type's `Outputs` class before they are compared, so properties it does not declare never count. `on_delete` returns only once `on_observe` returns `None`.
 - When the vendor refuses a create because the object already exists, raise `AlreadyExistsError` from `on_create` instead of adopting the object. The resource fails, and Pragmatiks never takes over an object it did not create.
@@ -311,7 +313,7 @@ On the client itself, `AsyncPragmaClient` only.
 |-------|-------------|
 | `Provider()` | Resource grouping with `@provider.resource()` decorator |
 | `Resource[ConfigT, OutputsT]` | Base class with `on_create`, `on_observe`, `on_update`, `on_delete` |
-| `computed = True` | Class attribute for a resource with no external object; exempts it from `on_observe` |
+| `computed = True` | Class attribute for a resource with no external object; exempts it from `on_observe` and from declaring an `Outputs` class |
 | `Config` | Base class for resource configuration (Pydantic model) |
 | `Outputs` | Base class for resource outputs (Pydantic model) |
 | `AlreadyExistsError` | Raised from `on_create` when the object to create already exists |

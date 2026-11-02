@@ -119,8 +119,10 @@ def load_provider_schemas(package_name: str, catalog_name: str) -> list[dict[str
         PydanticInvalidForJsonSchema: If a config or outputs type cannot be
             expressed as JSON schema.
         MissingObserveError: If a non-computed resource type in a module the
-            package imports defines no ``on_observe``. Any other exception a
-            module of the package raises on import propagates.
+            package imports defines no ``on_observe``.
+        MissingOutputsError: If a non-computed resource type in a module the
+            package imports declares no ``Outputs`` class. Any other exception
+            a module of the package raises on import propagates.
     """  # noqa: DOC502
     resource_classes = discover_resources(package_name).values()
 

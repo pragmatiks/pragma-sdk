@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import TypeVar
 
 from pragma_sdk.models import Resource
+from pragma_sdk.models.base import derive_outputs_class
 
 
 ResourceT = TypeVar("ResourceT", bound=Resource)
@@ -31,6 +32,35 @@ class MissingObserveError(TypeError):
         self.resource = resource
         self.module_name = module_name
         super().__init__(f'resource "{resource}" does not define on_observe. Add it, or declare the resource computed.')
+
+
+class MissingOutputsError(TypeError):
+    """Raised when a non-computed resource type declares no ``Outputs`` class.
+
+    The platform observes a non-computed type before it acts on it, and an
+    observe reports the object present only through outputs the type's
+    ``Outputs`` class validates. A type without one could never be seen as
+    present, so every create would fail and every delete would skip
+    ``on_delete``.
+
+    Attributes:
+        resource: Registered name of the offending resource type.
+        module_name: Module defining the offending resource class.
+    """
+
+    def __init__(self, resource: str, module_name: str) -> None:
+        """Build the error for a resource type.
+
+        Args:
+            resource: Registered name of the offending resource type.
+            module_name: Module defining the offending resource class.
+        """
+        self.resource = resource
+        self.module_name = module_name
+        super().__init__(
+            f'resource "{resource}" declares no Outputs class. '
+            "Declare one as Resource[YourConfig, YourOutputs], or declare the resource computed."
+        )
 
 
 class Provider:
@@ -77,6 +107,7 @@ class Provider:
         Raises:
             TypeError: If the decorated object is not a Resource subclass or declares ``computed`` as a field.
             MissingObserveError: If a non-computed class does not override ``on_observe``.
+            MissingOutputsError: If a non-computed class declares no ``Outputs`` class.
             ValueError: If ``name`` is already registered on this provider.
 
         Example:
@@ -97,6 +128,9 @@ class Provider:
 
             if not cls.computed and cls.on_observe is Resource.on_observe:
                 raise MissingObserveError(name, cls.__module__)
+
+            if not cls.computed and derive_outputs_class(cls) is None:
+                raise MissingOutputsError(name, cls.__module__)
 
             cls.resource = name
 
