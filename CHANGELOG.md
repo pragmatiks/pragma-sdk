@@ -1,3 +1,9 @@
+## v22.0.1 (2026-11-02)
+
+### Fix
+
+- report a resource type without an Outputs class as missing_outputs
+
 ## v22.0.0 (2026-11-02)
 
 ### BREAKING CHANGE
