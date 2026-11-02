@@ -1,3 +1,20 @@
+## v22.0.0 (2026-11-02)
+
+### BREAKING CHANGE
+
+- the worker speaks only protocol 3. Providers must be
+republished on this SDK, and their outputs must validate against their Outputs
+class: on_create and on_update return only once on_observe sees the object with
+the same outputs.
+
+### Feat
+
+- observe-then-act worker protocol 3
+
+### Fix
+
+- refuse a non-computed resource type without an Outputs class
+
 ## v21.1.0 (2026-11-01)
 
 ### Feat
