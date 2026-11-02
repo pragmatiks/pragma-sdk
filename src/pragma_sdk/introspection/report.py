@@ -7,7 +7,7 @@ from pragma_sdk.diagnostics.error_descriptions import build_error_message
 from pragma_sdk.protocol.constants import OFFERED_PROTOCOL_VERSIONS
 from pragma_sdk.protocol.introspection import IntrospectionFailure, IntrospectionSuccess
 from pragma_sdk.provider.loading import build_resource_type_schema
-from pragma_sdk.provider.provider import MissingObserveError
+from pragma_sdk.provider.provider import MissingObserveError, MissingOutputsError
 
 
 def build_introspection_success(declared_provider: DeclaredProvider) -> IntrospectionSuccess:
@@ -42,7 +42,9 @@ def build_introspection_failure(error: BaseException) -> IntrospectionFailure:
 
     Returns:
         A ``missing_observe`` failure naming the resource type when a
-        non-computed type defines no ``on_observe``; otherwise an
+        non-computed type defines no ``on_observe``, a ``missing_outputs``
+        failure naming it when such a type declares no ``Outputs`` class;
+        otherwise an
         ``import_failed`` failure whose detail is ``"{Type}: {message}"``,
         or ``"{Type}"`` alone when the exception has no readable text. The
         message repeats no rejected input or URL secret, and characters
@@ -54,6 +56,15 @@ def build_introspection_failure(error: BaseException) -> IntrospectionFailure:
             protocol_versions=OFFERED_PROTOCOL_VERSIONS,
             outcome="failure",
             category="missing_observe",
+            detail=str(error),
+            resource=error.resource,
+        )
+
+    if isinstance(error, MissingOutputsError):
+        return IntrospectionFailure(
+            protocol_versions=OFFERED_PROTOCOL_VERSIONS,
+            outcome="failure",
+            category="missing_outputs",
             detail=str(error),
             resource=error.resource,
         )

@@ -49,16 +49,17 @@ class IntrospectionFailure(ProtocolOffer):
         outcome: Always ``"failure"``.
         category: ``"missing_observe"`` when a non-computed resource type
             the provider's package defines has no ``on_observe``;
-            ``"import_failed"`` for every other failure, including a missing
-            distribution or entry point and such a type imported from
-            outside the package.
+            ``"missing_outputs"`` when such a type declares no ``Outputs``
+            class; ``"import_failed"`` for every other failure, including a
+            missing distribution or entry point and such a type imported
+            from outside the package.
         detail: Error message; for ``"import_failed"``, ``"{Type}: {message}"``.
-        resource: Offending resource type for ``"missing_observe"``,
-            otherwise ``None``.
+        resource: Offending resource type for ``"missing_observe"`` and
+            ``"missing_outputs"``, otherwise ``None``.
     """
 
     outcome: Literal["failure"]
-    category: Literal["missing_observe", "import_failed"]
+    category: Literal["missing_observe", "missing_outputs", "import_failed"]
     detail: str
     resource: str | None
 
