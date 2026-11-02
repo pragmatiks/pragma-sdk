@@ -71,6 +71,7 @@ class AdmissionFailureCategory(StrEnum):
     UNSUPPORTED_PROTOCOL = "unsupported_protocol"
     IMPORT_FAILED = "import_failed"
     MISSING_OBSERVE = "missing_observe"
+    MISSING_OUTPUTS = "missing_outputs"
     STORED_WHEEL_CONFLICT = "stored_wheel_conflict"
     DEADLINE_EXCEEDED = "deadline_exceeded"
     PLATFORM_ERROR = "platform_error"
