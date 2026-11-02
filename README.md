@@ -88,7 +88,7 @@ uv add pragmatiks-sdk
 Define resources with typed configuration and lifecycle methods:
 
 ```python
-from pragma_sdk import Provider, Resource, Config, Outputs, Field
+from pragma_sdk import AlreadyExistsError, Provider, Resource, Config, Outputs, Field
 
 gcp = Provider()
 
@@ -106,20 +106,46 @@ class BucketOutputs(Outputs):
 @gcp.resource("storage")
 class Bucket(Resource[BucketConfig, BucketOutputs]):
     async def on_create(self) -> BucketOutputs:
-        """Provision the bucket."""
-        return BucketOutputs(url=f"gs://{self.name}", created_at="...")
+        """Provision the bucket; refuse a bucket that already exists."""
+        bucket = await storage_client.create_bucket(self.name, location=self.config.location)
+
+        if bucket is None:
+            raise AlreadyExistsError(f"Bucket {self.name} already exists")
+
+        return BucketOutputs(url=f"gs://{self.name}", created_at=bucket.created_at)
 
     async def on_observe(self) -> BucketOutputs | None:
         """Look the bucket up by identity; None when it does not exist."""
-        return BucketOutputs(url=f"gs://{self.name}", created_at="...")
+        bucket = await storage_client.find_bucket(self.name)
+
+        if bucket is None:
+            return None
+
+        return BucketOutputs(url=f"gs://{self.name}", created_at=bucket.created_at)
 
     async def on_update(self, previous_config: BucketConfig | None) -> BucketOutputs:
         """Converge to self.config; previous_config is None when unknown."""
-        return BucketOutputs(url=f"gs://{self.name}", created_at="...")
+        bucket = await storage_client.update_bucket(self.name, storage_class=self.config.storage_class)
+
+        return BucketOutputs(url=f"gs://{self.name}", created_at=bucket.created_at)
 
     async def on_delete(self) -> None:
         """Delete the bucket; succeeds when it is already gone."""
+        await storage_client.delete_bucket(self.name, missing_ok=True)
 ```
+
+`storage_client` stands for your vendor's client.
+
+### Observing before acting
+
+Before it creates, updates or deletes a resource of a type that is not `computed`, the platform calls `on_observe` to see whether the object exists, and calls it again once the lifecycle method returns:
+
+- `on_observe` returns the object's outputs, or `None` only when the object does not exist. Platform callbacks such as `apply_resource` are not available in it.
+- `on_create` and `on_update` return only once `on_observe` finds the object, with outputs equal to what `on_observe` returns. Both sides are validated against the type's `Outputs` class before they are compared, so properties it does not declare never count. `on_delete` returns only once `on_observe` returns `None`.
+- When the vendor refuses a create because the object already exists, raise `AlreadyExistsError` from `on_create` instead of adopting the object. The resource fails, and Pragmatiks never takes over an object it did not create.
+- Outputs that fail validation, or that differ from what `on_observe` returns, fail the resource while the object stays in place, until a fixed provider version runs.
+
+`ProviderHarness` results carry `normalized_outputs`, the outputs as the platform compares them, so a test can check that a create and an observe agree.
 
 ### Declaring the provider
 
@@ -175,6 +201,10 @@ async def test_bucket_creation():
 
     assert result.success
     assert "gs://test-bucket" in result.outputs.url
+
+    observed = await harness.invoke_observe(Bucket, name="test-bucket", config=BucketConfig(location="US"))
+
+    assert observed.normalized_outputs == result.normalized_outputs
 ```
 
 Inside the harness, a resource of a class from the tested class's top-level package carries the harness's `provider_name` (`test/local` by default). When the tested class builds resources of an embedded provider's types, name that provider's package the way the platform does, or reading their `provider` or `id` raises:
@@ -284,6 +314,7 @@ On the client itself, `AsyncPragmaClient` only.
 | `computed = True` | Class attribute for a resource with no external object; exempts it from `on_observe` |
 | `Config` | Base class for resource configuration (Pydantic model) |
 | `Outputs` | Base class for resource outputs (Pydantic model) |
+| `AlreadyExistsError` | Raised from `on_create` when the object to create already exists |
 | `Field[T]` | Type alias for `T | FieldReference` |
 | `ProviderHarness` | Local testing harness |
 

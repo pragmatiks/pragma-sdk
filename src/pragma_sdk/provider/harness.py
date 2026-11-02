@@ -39,10 +39,13 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Any
 from uuid import uuid4
 
 from pragma_sdk.context import package_catalog_names_scope
 from pragma_sdk.models import Config, Outputs, Resource
+from pragma_sdk.protocol.codec import build_json_payload
+from pragma_sdk.provider.outputs import normalize_outputs
 from pragma_sdk.types import CopyContext, CopyResult, LifecycleState, PatchDefinition, PatchResult
 
 
@@ -75,12 +78,16 @@ class LifecycleResult:
     """Result of executing a lifecycle method in tests.
 
     Use `.success` or `.failed` to check status, `.outputs` for returned values,
-    and `.error` for any exception raised. For copy and patch operations, use
+    and `.error` for any exception raised. `.normalized_outputs` holds the
+    outputs as the platform compares a create's or an update's with an
+    observe's: validated against the type's Outputs class and encoded as
+    plain JSON data, secrets revealed. For copy and patch operations, use
     `.copy_result` and `.patch_result` respectively.
     """
 
     success: bool
     outputs: Outputs | None = None
+    normalized_outputs: dict[str, Any] | None = None
     copy_result: CopyResult | None = None
     patch_result: PatchResult | None = None
     error: Exception | None = None
@@ -133,7 +140,7 @@ class ProviderHarness:
             config=DatabaseConfig(name="test-db")
         )
         assert observe_result.success
-        assert observe_result.outputs == create_result.outputs
+        assert observe_result.normalized_outputs == create_result.normalized_outputs
 
         update_result = await harness.invoke_update(
             Database,
@@ -221,7 +228,9 @@ class ProviderHarness:
             handler: Lifecycle method to await on the built resource.
 
         Returns:
-            Result carrying the handler's outputs, or the exception it raised.
+            Result carrying the handler's outputs and their normalized form,
+            or the exception it raised, an outputs validation failure
+            included.
         """
         event = LifecycleEvent(
             event_id=str(uuid4()),
@@ -247,9 +256,11 @@ class ProviderHarness:
                 build_package_catalog_names(resource_class, self._provider_name, self.package_catalog_names)
             ):
                 outputs = await handler(resource)
+            normalized_outputs = build_json_payload(normalize_outputs(resource_class, outputs))
             result = LifecycleResult(
                 success=True,
                 outputs=outputs,
+                normalized_outputs=normalized_outputs,
                 resource=resource,
                 event=event,
             )

@@ -10,6 +10,7 @@ from pydantic import Field as PydanticField
 
 from pragma_sdk.models.enums import (
     OrganizationStatus,
+    ProviderFailureCode,
     ResponseStatus,
     TeardownAction,
 )
@@ -33,7 +34,20 @@ class ProviderDeleteResult(BaseModel):
 
 
 class ProviderResponse(BaseModel):
-    """Provider response reporting the outcome of a lifecycle event."""
+    """Provider response reporting the outcome of a lifecycle event.
+
+    Attributes:
+        event_id: Id of the lifecycle event answered.
+        event_type: Lifecycle event answered.
+        resource_id: Canonical id of the resource the event acts on.
+        organization_id: Organization owning the resource.
+        status: Whether the event succeeded.
+        outputs: Outputs of a successful create or update, or ``None``.
+        error: Why the event failed, or ``None``.
+        failure_code: Kind of a failure whose reason the platform words
+            itself, or ``None`` for any other failure and for a success.
+        timestamp: When the response was built.
+    """
 
     event_id: str
     event_type: EventType
@@ -42,6 +56,7 @@ class ProviderResponse(BaseModel):
     status: ResponseStatus
     outputs: dict | None = None
     error: str | None = None
+    failure_code: ProviderFailureCode | None = None
     timestamp: datetime
 
 

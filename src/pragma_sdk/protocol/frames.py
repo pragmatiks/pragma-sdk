@@ -309,6 +309,30 @@ class DispatchParams(BaseModel):
     owner_reference: OwnerReferencePayload
 
 
+class ObserveParams(BaseModel):
+    """Parameters of an ``observe`` request reading the external object a resource owns.
+
+    Attributes:
+        target: The resource to observe.
+        resolved_files: Signed download URLs keyed by Pragmatiks file reference.
+    """
+
+    target: ResourcePayload
+    resolved_files: dict[str, str]
+
+
+class ObserveResult(BaseModel):
+    """Result of an ``observe`` request.
+
+    Attributes:
+        outputs: Outputs of the observed object, validated against the
+            resource's Outputs class and encoded as a dispatch's outputs are,
+            or ``None`` when the object is absent.
+    """
+
+    outputs: dict[str, Any] | None
+
+
 class WaitForStateParams(BaseModel):
     """Parameters of a ``wait_for_state`` callback request.
 

@@ -6,12 +6,12 @@ import re
 from typing import Annotated, Any, ClassVar, get_args, get_origin
 
 import structlog
-from pydantic import AliasChoices, AliasPath, ValidationError
-from pydantic.fields import FieldInfo
+from pydantic import ValidationError
 
 from pragma_sdk.diagnostics.validation_errors import build_validation_error_details
 from pragma_sdk.models import Config, Dependency, Resource, is_dependency_marker, is_field_ref_marker
 from pragma_sdk.models.base import is_union_origin
+from pragma_sdk.models.declared_keys import compute_declared_keys
 from pragma_sdk.protocol.frames import ResourcePayload
 from pragma_sdk.provider.loading import derive_config_class
 from pragma_sdk.types import LifecycleState
@@ -491,7 +491,7 @@ class ResourceBuilder:
         if config_class.model_config.get("extra") != "forbid" or not isinstance(config_data, dict):
             return
 
-        declared_keys = self.compute_declared_config_keys(config_class)
+        declared_keys = compute_declared_keys(config_class)
         ignored_keys = sorted(key for key in config_data if key not in declared_keys)
 
         if not ignored_keys:
@@ -504,50 +504,6 @@ class ResourceBuilder:
             ignored_keys=ignored_keys,
         )
         flattened_reference["config"] = {key: value for key, value in config_data.items() if key in declared_keys}
-
-    @classmethod
-    def compute_declared_config_keys(cls, config_class: type[Config]) -> set[str]:
-        """Compute the top-level keys a Config class accepts.
-
-        Args:
-            config_class: Config class a config is read as.
-
-        Returns:
-            Every field's name and alias, its validation alias, each choice
-            of an ``AliasChoices`` validation alias, and the first key of each
-            ``AliasPath``.
-        """
-        declared_keys: set[str] = set()
-
-        for name, field in config_class.model_fields.items():
-            declared_keys.add(name)
-            declared_keys.update(cls.compute_field_alias_keys(field))
-
-        return declared_keys
-
-    @staticmethod
-    def compute_field_alias_keys(field: FieldInfo) -> set[str]:
-        """Compute the top-level keys a field accepts through its aliases.
-
-        Args:
-            field: The field.
-
-        Returns:
-            Its alias, its validation alias, each choice of an
-            ``AliasChoices`` validation alias, and the first key of each
-            ``AliasPath``.
-        """
-        aliases: list[str | AliasPath | AliasChoices | None] = [field.alias, field.validation_alias]
-
-        if isinstance(field.validation_alias, AliasChoices):
-            aliases.extend(field.validation_alias.choices)
-
-        alias_keys = {alias for alias in aliases if isinstance(alias, str)}
-        alias_keys.update(
-            alias.path[0] for alias in aliases if isinstance(alias, AliasPath) and isinstance(alias.path[0], str)
-        )
-
-        return alias_keys
 
     @staticmethod
     def apply_resolved_config_override(flattened_reference: dict[str, Any]) -> None:

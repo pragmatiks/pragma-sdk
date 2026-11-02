@@ -700,7 +700,10 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
     computed: ClassVar[bool] = False
     """Whether this type has no external object and so needs no ``on_observe``.
 
-    Declare it as a bare ``computed = True``, without a type annotation.
+    Declare it as a bare ``computed = True``, without a type annotation. The
+    platform never observes a computed type before acting, so its
+    ``on_delete`` also runs after a create that never completed and must
+    tolerate finding nothing to delete.
     """
 
     project_id: str
@@ -756,13 +759,33 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         return self.identity.canonical
 
     async def on_create(self) -> OutputsT:
-        """Handle resource creation."""
+        """Create the external object this resource owns.
+
+        Return only once observing the resource finds the object, with
+        outputs equal to what ``on_observe`` returns. The outputs, an
+        instance of the type's Outputs class or a dict, are validated against
+        that class, which drops the properties it does not declare. Outputs
+        that fail that validation, or differ from what ``on_observe``
+        returns, fail the resource while the object stays in place, until a
+        fixed provider version runs.
+
+        Returns:
+            Outputs of the created object.
+
+        Raises:
+            AlreadyExistsError: If the vendor refuses the create because the
+                object already exists outside Pragmatiks.
+        """  # noqa: DOC502
         raise NotImplementedError(f"{self.__class__.__name__} must implement on_create()")
 
     async def on_observe(self) -> OutputsT | None:
         """Report the external object this resource owns.
 
-        Locate it from identity and ``config`` alone; ``self.outputs`` is never populated.
+        Locate it from identity and ``config`` alone; ``self.outputs`` is never
+        populated, and platform callbacks such as ``apply_resource`` raise.
+        The outputs are validated against the type's Outputs class and
+        compared with what ``on_create`` and ``on_update`` returned, so return
+        the same values for the same object.
 
         Returns:
             Outputs of the existing object, or ``None`` only when it does not exist.
@@ -775,6 +798,14 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
     async def on_update(self, previous_config: ConfigT | None) -> OutputsT:
         """Converge the existing external object to ``self.config``.
 
+        Return only once observing the resource finds the object, with
+        outputs equal to what ``on_observe`` returns. The outputs, an
+        instance of the type's Outputs class or a dict, are validated against
+        that class, which drops the properties it does not declare. Outputs
+        that fail that validation, or differ from what ``on_observe``
+        returns, fail the resource while the object stays in place, until a
+        fixed provider version runs.
+
         Args:
             previous_config: Configuration last applied, or ``None`` when unknown.
 
@@ -784,7 +815,13 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         raise NotImplementedError(f"{self.__class__.__name__} must implement on_update()")
 
     async def on_delete(self) -> None:
-        """Handle resource deletion."""
+        """Delete the external object this resource owns.
+
+        Return only once observing the resource finds the object absent.
+        The platform may call it after a create that never completed, so it
+        must tolerate an object that was never created or only partly
+        created.
+        """
         raise NotImplementedError(f"{self.__class__.__name__} must implement on_delete()")
 
     async def on_copy(self, context: CopyContext) -> CopyResult:
@@ -1032,8 +1069,9 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
             Self with updated outputs and lifecycle_state.
 
         Raises:
-            RuntimeError: If called outside a lifecycle handler context, or the
-                host's wait fails, including when READY is not reached within
+            RuntimeError: If called outside ``on_create``, ``on_update`` or
+                ``on_delete`` run by the Pragmatiks runtime, or the host's
+                wait fails, including when READY is not reached within
                 ``timeout``.
             ValidationError: If the reached outputs do not match the
                 resource's Outputs class.

@@ -22,6 +22,8 @@ from pragma_sdk.context import RuntimeContext, compute_defining_provider, packag
 from pragma_sdk.declaration.provider import ProviderDeclarationError
 from pragma_sdk.diagnostics.error_descriptions import build_error_message
 from pragma_sdk.diagnostics.validation_errors import build_validation_error_details, build_validation_error_message
+from pragma_sdk.exceptions import AlreadyExistsError
+from pragma_sdk.models.enums import ProviderFailureCode
 from pragma_sdk.protocol.codec import (
     ConnectionClosedError,
     FrameError,
@@ -30,12 +32,14 @@ from pragma_sdk.protocol.codec import (
     MalformedFrameError,
 )
 from pragma_sdk.protocol.constants import (
+    ALREADY_EXISTS_CODE,
     DISPATCH_METHOD,
     HANDSHAKE_METHOD,
     INTERNAL_ERROR_CODE,
     INVALID_PARAMS_CODE,
     MAXIMUM_FRAME_BYTES,
     MIGRATE_METHOD,
+    OBSERVE_METHOD,
     RESOURCE_HEALTH_METHOD,
     RESOURCE_LOGS_METHOD,
     SHUTDOWN_METHOD,
@@ -48,11 +52,13 @@ from pragma_sdk.protocol.frames import (
     HandshakeParams,
     HandshakeResult,
     MigrateParams,
+    ObserveParams,
     ResourcePayload,
     ResourceQueryParams,
     SuccessFrame,
 )
 from pragma_sdk.protocol.pending import PendingResponses
+from pragma_sdk.types import EventType
 from pragma_sdk.worker.handlers import RequestHandlers
 
 
@@ -197,18 +203,25 @@ class WorkerSession:
                 log_fields=build_migration_log_fields,
                 handler=request_handlers.run_migration,
             ),
+            OBSERVE_METHOD: RequestRoute(
+                params_model=ObserveParams,
+                failure_log_event="observe_failed",
+                logs_start=True,
+                log_fields=self.build_targeted_log_fields,
+                handler=request_handlers.run_observe,
+            ),
             RESOURCE_LOGS_METHOD: RequestRoute(
                 params_model=ResourceQueryParams,
                 failure_log_event="resource_logs_failed",
                 logs_start=False,
-                log_fields=self.build_query_log_fields,
+                log_fields=self.build_targeted_log_fields,
                 handler=request_handlers.run_resource_logs,
             ),
             RESOURCE_HEALTH_METHOD: RequestRoute(
                 params_model=ResourceQueryParams,
                 failure_log_event="resource_health_failed",
                 logs_start=False,
-                log_fields=self.build_query_log_fields,
+                log_fields=self.build_targeted_log_fields,
                 handler=request_handlers.run_resource_health,
             ),
         }
@@ -542,12 +555,15 @@ class WorkerSession:
     ) -> SuccessFrame | FailureFrame:
         """Run a request's handler on its validated params and build the frame answering it.
 
-        A handler that raises, raises ``CancelledError`` while its request is
-        not being cancelled, or calls ``sys.exit()`` in its own task, is
-        answered with ``INTERNAL_ERROR_CODE`` and a message that repeats no
-        rejected input or URL secret, and logged as the route's failure event
-        with how long it ran. ``sys.exit()`` called in a task the handler
-        starts ends the worker instead.
+        A create dispatch whose ``on_create`` raises
+        :class:`~pragma_sdk.exceptions.AlreadyExistsError`, alone or inside an
+        exception group, is answered with ``ALREADY_EXISTS_CODE`` and that
+        error's message. Any other failure, also ``CancelledError`` while the
+        request is not being cancelled, or ``sys.exit()`` called in the
+        handler's own task, is answered with ``INTERNAL_ERROR_CODE`` and a
+        message that repeats no rejected input or URL secret. Either is
+        logged as the route's failure event. ``sys.exit()`` called in a task
+        the handler starts ends the worker instead.
 
         Args:
             correlation_id: Correlation id of the request.
@@ -571,11 +587,50 @@ class WorkerSession:
             if isinstance(error, asyncio.CancelledError) and is_cancellation_requested():
                 raise
 
-            logger.exception(route.failure_log_event, duration_seconds=measure_elapsed_seconds(started_at))
-
-            return self.codec.build_failure(correlation_id, INTERNAL_ERROR_CODE, build_error_message(error))
+            return self.build_handler_failure(correlation_id, validated_params, route, started_at, error)
 
         return self.encode_result(correlation_id, result)
+
+    def build_handler_failure(
+        self,
+        correlation_id: int,
+        validated_params: BaseModel,
+        route: RequestRoute,
+        started_at: float,
+        error: BaseException,
+    ) -> FailureFrame:
+        """Build the failure frame answering a request whose handler raised, logging the route's failure event.
+
+        Args:
+            correlation_id: Correlation id of the request.
+            validated_params: The request's validated params.
+            route: How the method was run.
+            started_at: :func:`time.monotonic` reading taken as the handler started.
+            error: What the handler raised.
+
+        Returns:
+            A failure with ``ALREADY_EXISTS_CODE`` for a create dispatch
+            refused because its object already exists, otherwise with
+            ``INTERNAL_ERROR_CODE``.
+        """
+        duration_seconds = measure_elapsed_seconds(started_at)
+        already_exists_error = find_already_exists_error(error) if is_create_dispatch(validated_params) else None
+
+        if already_exists_error is not None:
+            logger.warning(
+                route.failure_log_event,
+                failure_code=ProviderFailureCode.ALREADY_EXISTS,
+                duration_seconds=duration_seconds,
+                exc_info=already_exists_error,
+            )
+
+            return self.codec.build_failure(
+                correlation_id, ALREADY_EXISTS_CODE, build_error_message(already_exists_error)
+            )
+
+        logger.error(route.failure_log_event, duration_seconds=duration_seconds, exc_info=error)
+
+        return self.codec.build_failure(correlation_id, INTERNAL_ERROR_CODE, build_error_message(error))
 
     def encode_result(self, correlation_id: int, result: Any) -> SuccessFrame | FailureFrame:
         """Build the success frame of a handler's result, or a failure when the result cannot be encoded.
@@ -642,11 +697,11 @@ class WorkerSession:
         """
         return {"event_type": params.event_type, **self.build_target_log_fields(params.target)}
 
-    def build_query_log_fields(self, params: ResourceQueryParams) -> dict[str, Any]:
-        """Pick the fields identifying what a logs or health query acts on, for its log events.
+    def build_targeted_log_fields(self, params: ObserveParams | ResourceQueryParams) -> dict[str, Any]:
+        """Pick the fields identifying the resource an observe, logs or health request targets, for its log events.
 
         Args:
-            params: The query's validated params.
+            params: The request's validated params.
 
         Returns:
             The target's fields as :meth:`build_target_log_fields` picks them.
@@ -744,3 +799,42 @@ def measure_elapsed_seconds(started_at: float) -> float:
         The elapsed seconds, rounded to three decimals.
     """
     return round(time.monotonic() - started_at, 3)
+
+
+def is_create_dispatch(params: BaseModel) -> bool:
+    """Tell whether a request's validated params are those of a create dispatch.
+
+    Args:
+        params: The request's validated params.
+
+    Returns:
+        Whether the request is a dispatch whose event type is ``CREATE``.
+    """
+    return isinstance(params, DispatchParams) and params.event_type == EventType.CREATE
+
+
+def find_already_exists_error(error: BaseException) -> AlreadyExistsError | None:
+    """Find the :class:`~pragma_sdk.exceptions.AlreadyExistsError` a handler raised, alone or inside an exception group.
+
+    An error that only chains one as its cause or context does not count:
+    the provider chose to raise something else.
+
+    Args:
+        error: What the handler raised.
+
+    Returns:
+        The error itself, the first one an exception group holds at any
+        depth, or ``None`` when there is none.
+    """
+    if isinstance(error, AlreadyExistsError):
+        return error
+
+    if not isinstance(error, BaseExceptionGroup):
+        return None
+
+    matching_group = error.subgroup(AlreadyExistsError)
+
+    if matching_group is None:
+        return None
+
+    return find_already_exists_error(matching_group.exceptions[0])

@@ -12,6 +12,7 @@ from pragma_sdk.protocol.codec import (
     MalformedFrameError,
 )
 from pragma_sdk.protocol.constants import (
+    ALREADY_EXISTS_CODE,
     APPLY_RESOURCE_METHOD,
     DISPATCH_METHOD,
     HANDSHAKE_METHOD,
@@ -21,6 +22,7 @@ from pragma_sdk.protocol.constants import (
     MAXIMUM_FRAME_BYTES,
     METHOD_NOT_FOUND_CODE,
     MIGRATE_METHOD,
+    OBSERVE_METHOD,
     OFFERED_PROTOCOL_VERSIONS,
     PROTOCOL_VERSION,
     RESOURCE_HEALTH_METHOD,
@@ -43,6 +45,8 @@ from pragma_sdk.protocol.frames import (
     MigrateParams,
     MigrateResult,
     NotificationFrame,
+    ObserveParams,
+    ObserveResult,
     OwnerReferencePayload,
     ProtocolOffer,
     RequestFrame,
@@ -65,6 +69,7 @@ from pragma_sdk.types import EventType, HealthStatus, LifecycleState, LogEntry
 
 
 __all__ = [
+    "ALREADY_EXISTS_CODE",
     "APPLY_RESOURCE_METHOD",
     "DISPATCH_METHOD",
     "HANDSHAKE_METHOD",
@@ -74,6 +79,7 @@ __all__ = [
     "MAXIMUM_FRAME_BYTES",
     "METHOD_NOT_FOUND_CODE",
     "MIGRATE_METHOD",
+    "OBSERVE_METHOD",
     "OFFERED_PROTOCOL_VERSIONS",
     "PROTOCOL_VERSION",
     "RESOURCE_HEALTH_METHOD",
@@ -106,6 +112,8 @@ __all__ = [
     "MigrateParams",
     "MigrateResult",
     "NotificationFrame",
+    "ObserveParams",
+    "ObserveResult",
     "OwnerReferencePayload",
     "PendingResponses",
     "ProtocolOffer",

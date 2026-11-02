@@ -14,6 +14,19 @@ class ResponseStatus(StrEnum):
     FAILURE = "failure"
 
 
+class ProviderFailureCode(StrEnum):
+    """Kind of a failed provider response whose reason the platform words itself.
+
+    ``ALREADY_EXISTS``: the external object exists outside Pragmatiks, so the
+    create was refused. ``CONFORMANCE``: once the lifecycle method returned,
+    observing the object disagreed with it: the outputs differ from what
+    observing returns, or the object is still present after its deletion.
+    """
+
+    ALREADY_EXISTS = "already_exists"
+    CONFORMANCE = "conformance"
+
+
 class VersionStatus(StrEnum):
     """Where a provider version is between its declaration and admission.
 
