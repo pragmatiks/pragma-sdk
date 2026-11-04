@@ -298,6 +298,7 @@ jobs:
           failed=""
           for repository in pragma-cli pragma-os pragma-providers; do
             if ! gh workflow run update-sdk.yaml \
+              --ref main \
               --repo "pragmatiks/${repository}" \
               --field sdk_version="$SDK_VERSION"; then
               echo "::error::update-sdk dispatch failed for pragmatiks/${repository}"
