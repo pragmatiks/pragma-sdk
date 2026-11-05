@@ -1,3 +1,9 @@
+## v24.1.0 (2026-11-05)
+
+### Feat
+
+- add the translating installation state (PRA-512)
+
 ## v24.0.0 (2026-11-05)
 
 ### BREAKING CHANGE
