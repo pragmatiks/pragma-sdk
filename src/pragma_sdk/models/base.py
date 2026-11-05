@@ -748,6 +748,10 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
     lifecycle_state: LifecycleState = LifecycleState.DRAFT
     tags: list[str] | None = None
     provider_version: str | None = None
+    """Version whose operation produced the outputs, as the platform records it.
+
+    ``None`` until an operation succeeds, and again after a deactivate.
+    """
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

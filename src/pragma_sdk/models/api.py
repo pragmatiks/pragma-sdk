@@ -41,6 +41,9 @@ class ProviderResponse(BaseModel):
         event_type: Lifecycle event answered.
         resource_id: Canonical id of the resource the event acts on.
         organization_id: Organization owning the resource.
+        provider_version: Version of the provider that ran the operation and
+            built the reply; the platform records it with the outputs of a
+            success.
         status: Whether the event succeeded.
         outputs: Outputs of a successful create or update, or ``None``.
         error: Why the event failed, or ``None``.
@@ -53,6 +56,7 @@ class ProviderResponse(BaseModel):
     event_type: EventType
     resource_id: str
     organization_id: str
+    provider_version: str = PydanticField(min_length=1)
     status: ResponseStatus
     outputs: dict | None = None
     error: str | None = None
