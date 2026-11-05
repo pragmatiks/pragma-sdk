@@ -112,11 +112,16 @@ class InstallationLifecycleState(StrEnum):
 
     An operation is requested (``PENDING``), the provider host starts its
     version (``PROCESSING``) and the installation ends ``READY`` or
-    ``FAILED``; ``DELETING`` lasts until an uninstall removes it.
+    ``FAILED``; ``DELETING`` lasts until an uninstall removes it. A version
+    change whose target has started beside the serving version waits in
+    ``DRAINING`` for the running resource operations to end, then
+    ``SWAPPING`` while the host switches to the target.
     """
 
     PENDING = "pending"
     PROCESSING = "processing"
+    DRAINING = "draining"
+    SWAPPING = "swapping"
     READY = "ready"
     FAILED = "failed"
     DELETING = "deleting"
