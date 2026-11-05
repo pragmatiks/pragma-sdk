@@ -926,11 +926,17 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
     @classmethod
     def upgrade(cls, config: dict, outputs: dict | None) -> tuple[dict, dict | None]:
-        """Migrate config and outputs from the previous provider version.
+        """Migrate config and outputs from the previous published version.
 
         Called during provider upgrade for each existing resource of this type.
         Override to transform config/outputs when the schema changes between versions.
         Must be defined on every version, even if no-op.
+
+        Note:
+            Every published version's translation between the stored and the
+            target version runs in order, one version at a time. A
+            translation must be pure and finish within 60 seconds. ``config``
+            arrives with its field references unresolved.
 
         Args:
             config: Resource config dict from the previous version.
@@ -944,11 +950,17 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
     @classmethod
     def downgrade(cls, config: dict, outputs: dict | None) -> tuple[dict, dict | None]:
-        """Migrate config and outputs back to the previous provider version.
+        """Migrate config and outputs back to the previous published version.
 
         Called during provider downgrade for each existing resource of this type.
         Override to reverse the transformations applied by upgrade().
         Must be defined on every version, even if no-op.
+
+        Note:
+            Every published version's translation between the stored and the
+            target version runs in order, one version at a time. A
+            translation must be pure and finish within 60 seconds. ``config``
+            arrives with its field references unresolved.
 
         Args:
             config: Resource config dict from the current version.

@@ -115,12 +115,15 @@ class InstallationLifecycleState(StrEnum):
     ``FAILED``; ``DELETING`` lasts until an uninstall removes it. A version
     change whose target has started beside the serving version waits in
     ``DRAINING`` for the running resource operations to end, then
-    ``SWAPPING`` while the host switches to the target.
+    ``TRANSLATING`` while the stored resources move to the target's shape
+    one published version at a time, then ``SWAPPING`` while the host
+    switches to the target.
     """
 
     PENDING = "pending"
     PROCESSING = "processing"
     DRAINING = "draining"
+    TRANSLATING = "translating"
     SWAPPING = "swapping"
     READY = "ready"
     FAILED = "failed"
