@@ -1,3 +1,13 @@
+## v24.0.0 (2026-11-05)
+
+### BREAKING CHANGE
+
+- ProviderResponse requires provider_version.
+
+### Feat
+
+- carry the provider version that ran an operation on its reply
+
 ## v23.1.0 (2026-11-05)
 
 ### Feat
