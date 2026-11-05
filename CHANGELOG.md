@@ -1,3 +1,9 @@
+## v23.1.0 (2026-11-05)
+
+### Feat
+
+- add the draining and swapping installation states
+
 ## v23.0.0 (2026-11-02)
 
 ### Feat
