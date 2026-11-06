@@ -769,7 +769,8 @@ class WorkerSession:
     ) -> SuccessFrame | FailureFrame:
         """Run a request's handler on its validated params and build the frame answering it.
 
-        A create dispatch whose ``on_create`` raises
+        A create dispatch whose ``on_create``, or an observe whose
+        ``on_observe``, raises
         :class:`~pragma_sdk.exceptions.AlreadyExistsError`, alone or inside an
         exception group, is answered with ``ALREADY_EXISTS_CODE`` and that
         error's message. Any other failure, also ``CancelledError`` while the
@@ -888,11 +889,14 @@ class WorkerSession:
 
         Returns:
             A failure with ``ALREADY_EXISTS_CODE`` for a create dispatch
-            refused because its object already exists, otherwise with
+            refused because its object already exists, or an observe that
+            found an object this resource did not create, otherwise with
             ``INTERNAL_ERROR_CODE``.
         """
         duration_seconds = measure_elapsed_seconds(started_at)
-        already_exists_error = find_already_exists_error(error) if is_create_dispatch(validated_params) else None
+        already_exists_error = (
+            find_already_exists_error(error) if is_already_exists_answered(validated_params) else None
+        )
 
         if already_exists_error is not None:
             logger.warning(
@@ -1099,15 +1103,19 @@ def measure_elapsed_seconds(started_at: float) -> float:
     return round(time.monotonic() - started_at, 3)
 
 
-def is_create_dispatch(params: BaseModel) -> bool:
-    """Tell whether a request's validated params are those of a create dispatch.
+def is_already_exists_answered(params: BaseModel) -> bool:
+    """Tell whether a request answers an ``AlreadyExistsError`` with ``ALREADY_EXISTS_CODE``.
 
     Args:
         params: The request's validated params.
 
     Returns:
-        Whether the request is a dispatch whose event type is ``CREATE``.
+        Whether the request is an observe, or a dispatch whose event type
+        is ``CREATE``.
     """
+    if isinstance(params, ObserveParams):
+        return True
+
     return isinstance(params, DispatchParams) and params.event_type == EventType.CREATE
 
 

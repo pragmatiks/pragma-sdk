@@ -829,18 +829,25 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
     async def on_observe(self) -> OutputsT | None:
         """Report the external object this resource owns.
 
-        Locate it from identity and ``config`` alone; ``self.outputs`` is never
-        populated, and platform callbacks, ``Resource.apply`` and
-        ``Resource.read`` included, raise. The outputs are validated against the type's Outputs class and
-        compared with what ``on_create`` and ``on_update`` returned, so return
-        the same values for the same object.
+        Locate it from identity and ``config`` alone and make no write;
+        ``self.outputs`` is never populated, and platform callbacks,
+        ``Resource.apply`` and ``Resource.read`` included, raise. The outputs
+        are validated against the type's Outputs class and compared with what
+        ``on_create`` and ``on_update`` returned, so return the same values for
+        the same object. Report only an object this resource created: for one
+        at the resource's identity that the create's conflict path would
+        refuse, such as an object without this resource's marker or with
+        another resource's, raise ``AlreadyExistsError`` with the message the
+        create's conflict uses.
 
         Returns:
             Outputs of the existing object, or ``None`` only when it does not exist.
 
         Raises:
+            AlreadyExistsError: If an object exists at the resource's identity
+                that this resource did not create.
             NotImplementedError: If the subclass does not override it.
-        """
+        """  # noqa: DOC502
         raise NotImplementedError(f"{type(self).__name__} must implement on_observe")
 
     async def on_update(self, previous_config: ConfigT | None) -> OutputsT | ChildrenPending:

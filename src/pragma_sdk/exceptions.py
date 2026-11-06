@@ -56,11 +56,15 @@ class ResourceFailedError(Exception):
 
 
 class AlreadyExistsError(Exception):
-    """Raised from ``on_create`` when the vendor reports that the object to create already exists.
+    """Raised when the object at a resource's identity is not one this resource created.
 
-    Raise it on a vendor HTTP 409 or ``AlreadyExists`` error instead of
-    adopting an object Pragmatiks did not create; the resource then fails
-    instead of adopting it. Raised from any other lifecycle method, it is
+    Raise it from ``on_create`` on a vendor HTTP 409 or ``AlreadyExists``
+    error instead of adopting an object Pragmatiks did not create, or from
+    ``on_observe`` for an object at the resource's identity this resource
+    did not create: one that the create's conflict path would refuse, such
+    as an object without this resource's marker. The platform then never
+    writes or deletes that object: a create or update fails, and a delete
+    leaves it in place. Raised from any other lifecycle method, it is
     treated as any other exception.
     """
 
