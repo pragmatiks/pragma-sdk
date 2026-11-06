@@ -1,3 +1,9 @@
+## v25.1.0 (2026-11-06)
+
+### Feat
+
+- answer an observe that finds an object the resource did not create with already-exists (PRA-598)
+
 ## v25.0.0 (2026-11-06)
 
 ### BREAKING CHANGE
