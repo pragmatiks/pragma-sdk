@@ -1,3 +1,19 @@
+## v25.0.0 (2026-11-06)
+
+### BREAKING CHANGE
+
+- protocol 5 is the only protocol the worker offers. Removed
+`wait_ready`, `apply(wait=, timeout=)`, `set_owner`, `owner_references`,
+`OwnerReference`, `wait_for_state`/`WAIT_FOR_STATE_METHOD`,
+`resource_owner` scopes and `TeardownAction.RELEASED`. Every dispatch reply
+is a `DispatchResult` (`outputs`, `children_pending`); `ChildResourcePayload`
+carries no `project_id`; refused callbacks raise `CallbackRefusedError`
+(`CALLBACK_REFUSED_CODE`).
+
+### Feat
+
+- compose resources through owned children (protocol 5, PRA-501)
+
 ## v24.1.0 (2026-11-05)
 
 ### Feat
