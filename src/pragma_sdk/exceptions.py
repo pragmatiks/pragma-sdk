@@ -65,6 +65,16 @@ class AlreadyExistsError(Exception):
     """
 
 
+class CallbackRefusedError(RuntimeError):
+    """Raised from a platform callback, such as ``Resource.apply`` or ``Resource.read``, that the platform refused.
+
+    Its text is the platform's reason alone, worded for the resource's user,
+    for example that the resource to apply is already owned by another
+    resource. Let it propagate: the operation then fails with that text as
+    its reason.
+    """
+
+
 class ProjectHasResourcesError(Exception):
     """Raised when deleting a non-empty project without orphan_resources=True.
 

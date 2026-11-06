@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Self
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 from pydantic import Field as PydanticField
 
 from pragma_sdk.models.enums import (
@@ -14,6 +14,7 @@ from pragma_sdk.models.enums import (
     ResponseStatus,
     TeardownAction,
 )
+from pragma_sdk.protocol.frames import CHILDREN_PENDING_WITH_OUTPUTS_MESSAGE
 from pragma_sdk.types import EventType, LifecycleState
 
 
@@ -46,6 +47,9 @@ class ProviderResponse(BaseModel):
             success.
         status: Whether the event succeeded.
         outputs: Outputs of a successful create or update, or ``None``.
+        children_pending: Whether a successful create or update waits for
+            the resources its operation applied to be ready; such a response
+            carries no outputs.
         error: Why the event failed, or ``None``.
         failure_code: Kind of a failure whose reason the platform words
             itself, or ``None`` for any other failure and for a success.
@@ -59,9 +63,32 @@ class ProviderResponse(BaseModel):
     provider_version: str = PydanticField(min_length=1)
     status: ResponseStatus
     outputs: dict | None = None
+    children_pending: bool = False
     error: str | None = None
     failure_code: ProviderFailureCode | None = None
     timestamp: datetime
+
+    @model_validator(mode="after")
+    def refuse_misplaced_children_pending(self) -> Self:
+        """Refuse ``children_pending`` on a failure or together with outputs.
+
+        Returns:
+            The validated response.
+
+        Raises:
+            ValueError: If ``children_pending`` is set on a response whose
+                status is not ``SUCCESS``, or whose outputs are not ``None``.
+        """
+        if not self.children_pending:
+            return self
+
+        if self.status != ResponseStatus.SUCCESS:
+            raise ValueError("Only a successful response can wait for its children.")
+
+        if self.outputs is not None:
+            raise ValueError(CHILDREN_PENDING_WITH_OUTPUTS_MESSAGE)
+
+        return self
 
 
 class ResourceSchema(BaseModel):

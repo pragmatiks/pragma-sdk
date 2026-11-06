@@ -1,13 +1,13 @@
 """Runtime context for provider lifecycle methods.
 
 This module provides the interface between SDK code and the runtime that
-executes provider lifecycle methods. Provider authors use SDK functions
-like wait_for_resource_state(), and the runtime injects its implementation
-before calling lifecycle methods.
+executes provider lifecycle methods. ``Resource.apply`` and
+``Resource.read`` reach the platform through :func:`apply_resource` and
+:func:`read_resource`; the runtime injects its implementation of the
+RuntimeContext protocol before calling lifecycle methods.
 
-The RuntimeContext Protocol defines what the runtime must implement.
-Provider code should NOT import RuntimeContext directly - use the
-exported functions instead.
+Provider code uses ``Resource.apply`` and ``Resource.read``, never
+RuntimeContext or this module's callback functions.
 """
 
 from __future__ import annotations
@@ -17,13 +17,12 @@ from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, Protocol
 
 from pragma_sdk.provider_entry_point import is_module_in_package
-from pragma_sdk.types import LifecycleState
 
 
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-    from pragma_sdk.models.references import OwnerReference
+    from pragma_sdk.protocol.frames import ChildResourceStatePayload
 
 
 class RuntimeContext(Protocol):
@@ -34,47 +33,44 @@ class RuntimeContext(Protocol):
     to this context.
     """
 
-    async def wait_for_state(
-        self,
-        resource_id: str,
-        target_state: LifecycleState,
-        timeout: float,
-    ) -> dict[str, Any]:
-        """Wait for a resource to reach a specific lifecycle state.
-
-        Args:
-            resource_id: Unique resource ID (e.g., "provider/type/name").
-            target_state: State to wait for (typically READY or FAILED).
-            timeout: Maximum seconds to wait.
-
-        Returns:
-            A dict with exactly two keys: ``lifecycle_state``, the state the
-            resource reached, and ``outputs``, its outputs or ``None``.
-
-        Raises:
-            RuntimeError: If the host's wait fails, including when the target
-                state is not reached within ``timeout``.
-        """
-        ...
-
     async def apply_resource(self, resource_data: dict[str, Any]) -> None:
-        """Apply a resource through the API.
+        """Apply a resource through the API, owned by the dispatched resource.
 
         Sends the resource to the API for creation or update. The API will
         validate, persist, and emit lifecycle events for provider processing.
 
         Args:
-            resource_data: Serialized resource data including provider, resource,
-                name, config, owner_references, etc.
+            resource_data: Serialized resource data: provider, resource,
+                name, config and tags.
 
         Raises:
+            CallbackRefusedError: If the platform refused the apply, with its
+                reason as the text.
             RuntimeError: If the resource could not be applied.
+        """
+        ...
+
+    async def read_resource(self, provider: str, resource: str, name: str) -> ChildResourceStatePayload | None:
+        """Read a resource the dispatched resource owns, in its project.
+
+        Args:
+            provider: Provider catalog name of the resource.
+            resource: Resource type name of the resource.
+            name: Name of the resource.
+
+        Returns:
+            The resource as the platform records it, or ``None`` when no live
+            resource has that identity.
+
+        Raises:
+            CallbackRefusedError: If the platform refused the read, such as
+                for a live resource the dispatched resource does not own.
+            RuntimeError: If the resource could not be read.
         """
         ...
 
 
 _runtime_context: ContextVar[RuntimeContext | None] = ContextVar("_runtime_context", default=None)
-_resource_owner: ContextVar[OwnerReference | None] = ContextVar("_resource_owner", default=None)
 _package_catalog_names: ContextVar[dict[str, str] | None] = ContextVar("_package_catalog_names", default=None)
 
 
@@ -104,120 +100,75 @@ def runtime_context() -> RuntimeContext | None:
     return _runtime_context.get()
 
 
-async def wait_for_resource_state(
-    resource_id: str,
-    target_state: LifecycleState,
-    timeout: float = 60.0,
-) -> dict[str, Any]:
-    """Wait for a resource to reach a specific lifecycle state.
-
-    Call this from within provider lifecycle handlers (on_create, on_update,
-    on_delete) to wait for another resource's state change. Useful for
-    coordinating between resources where one needs another to be READY.
+def require_runtime_context(callback_name: str) -> RuntimeContext:
+    """Return the bound runtime context, refusing a callback made outside a lifecycle method.
 
     Args:
-        resource_id: Unique resource ID (e.g., "provider/type/name").
-        target_state: State to wait for (typically READY or FAILED).
-        timeout: Maximum seconds to wait.
+        callback_name: Name of the callback being made, named in the error.
 
     Returns:
-        A dict with exactly two keys: ``lifecycle_state``, the state the
-        resource reached, and ``outputs``, its outputs or ``None``.
+        The bound runtime context.
 
     Raises:
-        RuntimeError: If called outside ``on_create``, ``on_update`` or
-            ``on_delete`` run by the Pragmatiks runtime, or the host's wait
-            fails, including when the target state is not reached within
-            ``timeout``.
-
-    Example:
-        ```python
-        from pragma_sdk import Resource, LifecycleState
-        from pragma_sdk.context import wait_for_resource_state
-
-        class MyResource(Resource[MyConfig, MyOutputs]):
-            async def on_create(self):
-                data = await wait_for_resource_state(
-                    "other_provider/type/name",
-                    LifecycleState.READY,
-                    timeout=30.0,
-                )
-                connection_url = data["outputs"]["url"]
-        ```
+        RuntimeError: If no runtime context is bound, such as in
+            ``on_observe`` or outside a lifecycle method the Pragmatiks
+            runtime runs.
     """
-    ctx = _runtime_context.get()
-    if ctx is None:
+    context = _runtime_context.get()
+
+    if context is None:
         raise RuntimeError(
-            "wait_for_resource_state is available only in on_create, on_update and on_delete, "
+            f"{callback_name} is available only in on_create, on_update and on_delete, "
             "while the Pragmatiks runtime runs them"
         )
-    return await ctx.wait_for_state(resource_id, target_state, timeout)
+
+    return context
 
 
 async def apply_resource(resource_data: dict[str, Any]) -> None:
-    """Apply a resource through the API.
+    """Apply a resource through the API, owned by the resource whose lifecycle method runs.
 
-    Call this from within provider lifecycle handlers to create or update
-    subresources. The resource will be sent to the API, persisted, and
-    processed through the normal lifecycle event flow.
+    Provider code calls ``Resource.apply`` instead. The platform names the
+    dispatched resource as the owner and applies the resource in its
+    project.
 
     Args:
-        resource_data: Serialized resource data including provider, resource,
-            name, config, owner_references, etc.
+        resource_data: Serialized resource data: provider, resource, name,
+            config and tags.
 
     Raises:
+        CallbackRefusedError: If the platform refused the apply, such as for
+            a resource another resource owns, with its reason as the text.
         RuntimeError: If called outside ``on_create``, ``on_update`` or
             ``on_delete`` run by the Pragmatiks runtime, or if the resource
             could not be applied.
-
-    Example:
-        ```python
-        class AppResource(Resource[AppConfig, AppOutputs]):
-            async def on_create(self):
-                db = DatabaseResource(
-                    name=f"{self.name}-db",
-                    config=DbConfig(port=5432),
-                )
-                await db.apply()  # Owner automatically set from context
-                await db.wait_ready()
-                return AppOutputs(db_url=db.outputs.connection_url)
-        ```
-    """
-    ctx = _runtime_context.get()
-    if ctx is None:
-        raise RuntimeError(
-            "apply_resource is available only in on_create, on_update and on_delete, "
-            "while the Pragmatiks runtime runs them"
-        )
-    await ctx.apply_resource(resource_data)
+    """  # noqa: DOC502
+    await require_runtime_context("apply_resource").apply_resource(resource_data)
 
 
-@contextmanager
-def resource_owner_scope(owner: OwnerReference) -> Generator[None]:
-    """Bind the executing resource as owner for child resources.
+async def read_resource(provider: str, resource: str, name: str) -> ChildResourceStatePayload | None:
+    """Read a resource the resource whose lifecycle method runs owns.
 
-    Called by the runtime before invoking lifecycle methods. When a child
-    resource calls apply() within the block, this owner is automatically
-    added to its owner_references. The previous owner is restored on exit.
+    Provider code calls ``Resource.read`` instead. The platform reads in
+    the running resource's project.
 
     Args:
-        owner: OwnerReference for the currently executing resource.
-    """
-    token = _resource_owner.set(owner)
-    try:
-        yield
-    finally:
-        _resource_owner.reset(token)
-
-
-def resource_owner() -> OwnerReference | None:
-    """Get the current resource owner, if any.
+        provider: Provider catalog name of the resource.
+        resource: Resource type name of the resource.
+        name: Name of the resource.
 
     Returns:
-        OwnerReference for the currently executing resource, or None if
-        not in a lifecycle handler context.
-    """
-    return _resource_owner.get()
+        The resource as the platform records it, or ``None`` when no live
+        resource has that identity.
+
+    Raises:
+        CallbackRefusedError: If the platform refused the read, such as for a
+            live resource the running resource does not own.
+        RuntimeError: If called outside ``on_create``, ``on_update`` or
+            ``on_delete`` run by the Pragmatiks runtime, or if the resource
+            could not be read.
+    """  # noqa: DOC502
+    return await require_runtime_context("read_resource").read_resource(provider, resource, name)
 
 
 @contextmanager

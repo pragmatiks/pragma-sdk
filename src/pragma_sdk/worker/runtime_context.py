@@ -10,17 +10,18 @@ from pydantic import BaseModel, ValidationError
 
 from pragma_sdk.diagnostics.error_descriptions import build_error_message
 from pragma_sdk.diagnostics.validation_errors import build_validation_error_message
+from pragma_sdk.exceptions import CallbackRefusedError
 from pragma_sdk.protocol.codec import FrameError, JsonRpcCodec
-from pragma_sdk.protocol.constants import APPLY_RESOURCE_METHOD, WAIT_FOR_STATE_METHOD
+from pragma_sdk.protocol.constants import APPLY_RESOURCE_METHOD, CALLBACK_REFUSED_CODE, READ_RESOURCE_METHOD
 from pragma_sdk.protocol.frames import (
     ApplyResourceParams,
     ChildResourcePayload,
+    ChildResourceStatePayload,
     Envelope,
-    WaitForStateParams,
-    WaitForStateResult,
+    ReadResourceParams,
+    ReadResourceResult,
 )
 from pragma_sdk.protocol.pending import PendingResponses
-from pragma_sdk.types import LifecycleState
 
 
 logger = structlog.get_logger()
@@ -49,37 +50,11 @@ class RuntimeContextProxy:
         self.pending_responses = pending_responses
         self.codec = codec
 
-    async def wait_for_state(self, resource_id: str, target_state: LifecycleState, timeout: float) -> dict[str, Any]:
-        """Ask the host to wait until a resource reaches a lifecycle state.
-
-        Args:
-            resource_id: Canonical id of the resource to watch.
-            target_state: State to wait for.
-            timeout: Maximum seconds to wait, a finite number.
-
-        Returns:
-            The reached ``lifecycle_state`` and the resource's ``outputs``.
-
-        Raises:
-            RuntimeError: If the callback fails: the host reports a failure,
-                including when the state is not reached within ``timeout``,
-                answers with a malformed result, or cannot be reached, or
-                ``timeout`` is infinite or NaN.
-        """  # noqa: DOC502
-        params = WaitForStateParams(
-            dispatch_id=self.dispatch_id, resource_id=resource_id, target_state=target_state, timeout=timeout
-        )
-
-        result = await self.call(WAIT_FOR_STATE_METHOD, params)
-
-        try:
-            return WaitForStateResult.model_validate(result).model_dump()
-        except ValidationError as error:
-            message = build_validation_error_message(error)
-            raise RuntimeError(f"Callback {WAIT_FOR_STATE_METHOD} returned a malformed result: {message}") from None
-
     async def apply_resource(self, resource_data: dict[str, Any]) -> None:
         """Ask the host to apply a resource through the platform.
+
+        Events logged while the callback runs carry the child's
+        ``child_provider``, ``child_resource`` and ``child_name``.
 
         Args:
             resource_data: The resource to apply, as ``Resource.apply`` builds it.
@@ -87,13 +62,48 @@ class RuntimeContextProxy:
         Raises:
             ValidationError: If ``resource_data`` does not match the child
                 resource payload, extra keys included.
-            RuntimeError: If the callback fails: the host reports a failure
-                or cannot be reached.
+            CallbackRefusedError: If the platform refused the apply.
+            RuntimeError: If the callback fails otherwise: the host reports a
+                failure or cannot be reached.
         """  # noqa: DOC502
         child = ChildResourcePayload.model_validate(resource_data)
         params = ApplyResourceParams(dispatch_id=self.dispatch_id, child=child)
 
-        await self.call(APPLY_RESOURCE_METHOD, params)
+        with structlog.contextvars.bound_contextvars(
+            child_provider=child.provider, child_resource=child.resource, child_name=child.name
+        ):
+            await self.call(APPLY_RESOURCE_METHOD, params)
+
+    async def read_resource(self, provider: str, resource: str, name: str) -> ChildResourceStatePayload | None:
+        """Ask the host to read a resource the dispatched resource owns.
+
+        Events logged while the callback runs carry the child's
+        ``child_provider``, ``child_resource`` and ``child_name``.
+
+        Args:
+            provider: Provider catalog name of the resource.
+            resource: Resource type name of the resource.
+            name: Name of the resource.
+
+        Returns:
+            The child resource, or ``None`` when no live resource has that identity.
+
+        Raises:
+            CallbackRefusedError: If the platform refused the read, such as
+                for a live resource the dispatched resource does not own.
+            RuntimeError: If the callback fails otherwise: the host reports a
+                failure, answers with a malformed result, or cannot be reached.
+        """  # noqa: DOC502
+        params = ReadResourceParams(dispatch_id=self.dispatch_id, provider=provider, resource=resource, name=name)
+
+        with structlog.contextvars.bound_contextvars(child_provider=provider, child_resource=resource, child_name=name):
+            result = await self.call(READ_RESOURCE_METHOD, params)
+
+        try:
+            return ReadResourceResult.model_validate(result).resource
+        except ValidationError as error:
+            message = build_validation_error_message(error)
+            raise RuntimeError(f"Callback {READ_RESOURCE_METHOD} returned a malformed result: {message}") from None
 
     async def call(self, method: str, params: BaseModel) -> Any:
         """Send a callback request to the host and await its result.
@@ -106,8 +116,12 @@ class RuntimeContextProxy:
             The callback's result, unvalidated.
 
         Raises:
-            RuntimeError: If the host reports that the callback failed, the
-                request cannot be sent, or the host connection is lost.
+            CallbackRefusedError: If the host answers with
+                ``CALLBACK_REFUSED_CODE``, logged ``callback_refused``; its
+                text is the host's message alone.
+            RuntimeError: If the host reports that the callback failed with
+                any other code, the request cannot be sent, or the host
+                connection is lost.
         """
         correlation_id, future = self.pending_responses.register()
 
@@ -120,6 +134,10 @@ class RuntimeContextProxy:
             self.pending_responses.discard(correlation_id)
 
         if response.error is not None:
+            if response.error.code == CALLBACK_REFUSED_CODE:
+                logger.warning("callback_refused", callback_method=method, dispatch_id=self.dispatch_id)
+                raise CallbackRefusedError(response.error.message)
+
             raise RuntimeError(f"Callback {method} failed ({response.error.code}): {response.error.message}")
 
         return response.result

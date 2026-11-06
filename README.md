@@ -141,12 +141,51 @@ Before it creates, updates or deletes a resource of a type that is not `computed
 
 - A type that is not `computed` must define `on_observe` and declare an `Outputs` class (`Resource[YourConfig, YourOutputs]`): `@provider.resource()` refuses it otherwise, with `MissingObserveError` or `MissingOutputsError`, since without outputs the platform could never see its object as present. Publishing such a provider fails admission with `missing_observe` or `missing_outputs`, naming the resource type.
 
-- `on_observe` returns the object's outputs, or `None` only when the object does not exist. Platform callbacks such as `apply_resource` are not available in it.
+- `on_observe` returns the object's outputs, or `None` only when the object does not exist. Platform callbacks such as `Resource.apply` and `Resource.read` are not available in it, so it finds its object by identity, never through child resources.
 - `on_create` and `on_update` return only once `on_observe` finds the object, with outputs equal to what `on_observe` returns. Both sides are validated against the type's `Outputs` class before they are compared, so properties it does not declare never count. `on_delete` returns only once `on_observe` returns `None`.
 - When the vendor refuses a create because the object already exists, raise `AlreadyExistsError` from `on_create` instead of adopting the object. The resource fails, and Pragmatiks never takes over an object it did not create.
 - Outputs that fail validation, or that differ from what `on_observe` returns, fail the resource while the object stays in place, until a fixed provider version runs.
 
 `ProviderHarness` results carry `normalized_outputs`, the outputs as the platform compares them, so a test can check that a create and an observe agree.
+
+### Child resources
+
+A resource can be composed of child resources it owns. `on_create` and `on_update` apply each child with `await child.apply()`, which returns once the platform accepted it and never waits, and read it with `await child.read()`, which returns the child as the platform records it (`lifecycle_state`, `config`, `outputs`), or `None` when it does not exist yet. While a child is not `READY`, the method returns `ChildrenPending()` instead of outputs:
+
+```python
+from pragma_sdk import ChildrenPending, LifecycleState
+
+
+@gcp.resource("app")
+class App(Resource[AppConfig, AppOutputs]):
+    computed = True
+
+    async def on_create(self) -> AppOutputs | ChildrenPending:
+        return await self.converge()
+
+    async def on_update(self, previous_config: AppConfig | None) -> AppOutputs | ChildrenPending:
+        return await self.converge()
+
+    async def converge(self) -> AppOutputs | ChildrenPending:
+        bucket = Bucket(project_id=self.project_id, name=f"{self.name}-data", config=BucketConfig(location="EU"))
+        await bucket.apply()
+        applied = await bucket.read()
+
+        if applied is None or applied.lifecycle_state != LifecycleState.READY or applied.outputs is None:
+            return ChildrenPending()
+
+        return AppOutputs(bucket_url=applied.outputs.url)
+```
+
+The platform then waits until every child this operation applied is `READY` and runs the resource a second time: a computed resource through `on_update`, any other through `on_create` when `on_observe` finds its object absent, else through `on_update`. That pass applies the same children, which changes nothing, reads them `READY` and returns the outputs. Its `previous_config` is the configuration completed before the first pass, `None` after a create. A pass whose children are already `READY` returns its outputs at once.
+
+- A child that fails its create, or is deleted while its owner waits, fails the owner.
+- Returning `ChildrenPending()` when every child the operation applied was already `READY` and unchanged, or when it applied none, fails the resource.
+- Return `ChildrenPending()` only after `read()` found a child that is not `READY`.
+- `apply()` and `read()` act in the running resource's project, whatever `project_id` the child carries. `read()` returns the child's `lifecycle_state`, `outputs` and the `config` its owner applied, with references unresolved; it carries no dependencies or tags.
+- `read()` serves only resources the running resource owns. The platform refuses a read or an apply of a resource another resource owns, or one that exists and no resource owns, with `CallbackRefusedError`; let it propagate, and the resource fails with that reason.
+- The platform tears owned children down before their owner, so `on_delete` deletes none of them.
+- `ProviderHarness` serves no platform callback yet, so `apply()` and `read()` raise in a method it runs; it records a returned `ChildrenPending()` as `children_pending`.
 
 ### Operation deadline
 
@@ -171,7 +210,7 @@ gcp = "gcp_provider"
 
 The Pragmatiks platform finds the provider's resource types through this entry point. Only resource classes defined inside that package belong to the provider; resource classes it imports from another provider stay that provider's.
 
-A resource always names the provider whose package defines its class. When a provider builds or applies a resource of a type it imports from another provider, that resource, its identity and its owner references name the other provider, and that provider manages it. Declare that provider as a dependency, so it is embedded, and install it in the organization too: the organization's installation of it is what manages those resources.
+A resource always names the provider whose package defines its class. When a provider builds or applies a resource of a type it imports from another provider, that resource and its identity name the other provider, and that provider manages it. Declare that provider as a dependency, so it is embedded, and install it in the organization too: the organization's installation of it is what manages those resources.
 
 To check what the platform will read from an installed wheel, run introspection in its environment:
 
@@ -225,6 +264,8 @@ Inside the harness, a resource of a class from the tested class's top-level pack
 ```python
 harness = ProviderHarness(package_catalog_names={"gcp_provider": "pragmatiks/gcp"})
 ```
+
+The harness serves no platform callback, so a resource composed of [child resources](#child-resources) cannot run `apply()` or `read()` in it.
 
 ## Authentication
 

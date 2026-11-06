@@ -7,11 +7,34 @@ from typing import Any
 import structlog
 
 from pragma_sdk.models.base import Outputs, Resource, derive_outputs_class
+from pragma_sdk.models.children import ChildrenPending
 from pragma_sdk.models.declared_keys import compute_declared_keys
 from pragma_sdk.protocol.codec import build_revealed_payload
 
 
 logger = structlog.get_logger()
+
+
+def refuse_children_pending(result: object, resource_class: type[Resource], method_name: str) -> None:
+    """Refuse ``ChildrenPending`` returned by a lifecycle method other than ``on_create`` and ``on_update``.
+
+    Call it with the result of any other lifecycle method, such as
+    ``on_observe`` or ``on_delete``, once the method has returned.
+
+    Args:
+        result: What the method returned.
+        resource_class: The resource class whose method returned the result.
+        method_name: The lifecycle method that returned the result, such as ``on_delete``.
+
+    Raises:
+        ValueError: If the result is ``ChildrenPending``.
+    """
+    if isinstance(result, ChildrenPending):
+        raise ValueError(
+            f"{resource_class.__qualname__}.{method_name} ran to its end and returned ChildrenPending, which only "
+            f"on_create and on_update may return. Remove that return from {method_name}, then publish the "
+            "provider again."
+        )
 
 
 def normalize_outputs(resource_class: type[Resource], outputs: Any) -> dict[str, Any] | None:
