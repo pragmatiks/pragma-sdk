@@ -17,10 +17,11 @@ class ResponseStatus(StrEnum):
 class ProviderFailureCode(StrEnum):
     """Kind of a failed provider response whose reason the platform words itself.
 
-    ``ALREADY_EXISTS``: the external object exists outside Pragmatiks, so the
-    create was refused. ``CONFORMANCE``: once the lifecycle method returned,
-    observing the object disagreed with it: the outputs differ from what
-    observing returns, or the object is still present after its deletion.
+    ``ALREADY_EXISTS``: the object at the resource's identity is not one this
+    resource created, so Pragmatiks refused to write it. ``CONFORMANCE``:
+    once the lifecycle method returned, observing the object disagreed with
+    it: the outputs differ from what observing returns, or the object is
+    still present after its deletion.
     """
 
     ALREADY_EXISTS = "already_exists"

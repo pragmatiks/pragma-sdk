@@ -10,9 +10,9 @@ notification; the worker sends the ``heartbeat`` notification and, from a
 dispatch, the :data:`APPLY_RESOURCE_METHOD` and :data:`READ_RESOURCE_METHOD`
 callbacks. Beside the JSON-RPC codes, a handshake offering no supported
 protocol version fails with :data:`UNSUPPORTED_PROTOCOL_CODE`, a create
-dispatch refused because its external object already exists with
-:data:`ALREADY_EXISTS_CODE`, a
-request the host cancelled at its deadline with :data:`CANCELLED_CODE`, and
+dispatch refused because its external object already exists, and an
+observe that finds an object the resource did not create, with
+:data:`ALREADY_EXISTS_CODE`, a request the host cancelled at its deadline with :data:`CANCELLED_CODE`, and
 the host answers a callback the platform refused with
 :data:`CALLBACK_REFUSED_CODE`, its message the platform's reason.
 """
