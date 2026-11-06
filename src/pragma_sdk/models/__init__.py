@@ -11,6 +11,7 @@ from pragma_sdk.models.api import (
     UserInfo,
 )
 from pragma_sdk.models.base import Config, Outputs, Resource
+from pragma_sdk.models.children import ChildrenPending
 from pragma_sdk.models.enums import (
     SETTLED_VERSION_STATUSES,
     AdmissionFailureCategory,
@@ -52,7 +53,6 @@ from pragma_sdk.models.references import (
     ImmutableDependency,
     ImmutableField,
     ImmutableSensitiveField,
-    OwnerReference,
     ResourceReference,
     Sensitive,
     SensitiveDependency,
@@ -67,6 +67,7 @@ from pragma_sdk.types import EventType
 __all__ = [
     "SETTLED_VERSION_STATUSES",
     "AdmissionFailureCategory",
+    "ChildrenPending",
     "Config",
     "CreateProjectRequest",
     "DeclaredProviderVersion",
@@ -88,7 +89,6 @@ __all__ = [
     "Organization",
     "OrganizationStatus",
     "Outputs",
-    "OwnerReference",
     "PaginatedResponse",
     "Project",
     "Provider",

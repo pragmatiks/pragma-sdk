@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any, assert_never
+from typing import assert_never
 
 import structlog
 from pydantic import BaseModel
 
-from pragma_sdk.context import RuntimeContext, resource_owner_scope, runtime_context_scope
-from pragma_sdk.models import Config, Resource
-from pragma_sdk.models.references import OwnerReference
+from pragma_sdk.context import RuntimeContext, runtime_context_scope
+from pragma_sdk.models import ChildrenPending, Config, Resource
 from pragma_sdk.protocol.frames import (
     DispatchParams,
+    DispatchResult,
     MigrateParams,
     MigrateResult,
     ObserveParams,
@@ -19,7 +19,7 @@ from pragma_sdk.protocol.frames import (
     ResourcePayload,
     ResourceQueryParams,
 )
-from pragma_sdk.provider.outputs import normalize_outputs
+from pragma_sdk.provider.outputs import normalize_outputs, refuse_children_pending
 from pragma_sdk.types import EventType, HealthStatus, LogEntry
 from pragma_sdk.worker.resource_builder import ResourceBuilder
 
@@ -40,26 +40,30 @@ class RequestHandlers:
         self.resource_types = resource_types
         self.resource_builder = resource_builder
 
-    async def run_dispatch(self, params: DispatchParams, context: RuntimeContext) -> dict[str, Any] | None:
-        """Build the resource and run the lifecycle method the event names.
+    async def run_dispatch(self, params: DispatchParams, context: RuntimeContext) -> DispatchResult:
+        """Build the resource, run the lifecycle method the event names and build the result answering the dispatch.
 
-        The runtime context and the owner of applied resources are bound for
-        the duration of the method. The outputs of a create or an update are
-        normalized as :func:`~pragma_sdk.provider.outputs.normalize_outputs`
-        describes, so the host can compare them with what observing the
-        object returns.
+        The runtime context is bound for the duration of the method. The
+        outputs of a create or an update are normalized as
+        :func:`~pragma_sdk.provider.outputs.normalize_outputs` describes, so
+        the host can compare them with what observing the object returns.
+        ``ChildrenPending`` from ``on_create`` or ``on_update`` is answered
+        with ``children_pending`` and no outputs, logged
+        ``dispatch_children_pending``.
 
         Args:
             params: The dispatch parameters.
             context: Runtime context serving the method's platform callbacks.
 
         Returns:
-            The normalized outputs the method returned, or ``None``.
+            The dispatch result: the normalized outputs, or
+            ``children_pending`` with no outputs.
 
         Raises:
             ValueError: If the provider defines no such resource type, its
-                class has no Config-typed ``config`` field, or it returns
-                outputs without declaring an Outputs class.
+                class has no Config-typed ``config`` field, it returns
+                outputs without declaring an Outputs class, or ``on_delete``
+                returns ``ChildrenPending``.
             ValidationError: If the config does not match the resource's
                 Config class, or the outputs do not match its Outputs class.
             MissingResolvedFileError: If the config holds a Pragmatiks file
@@ -67,21 +71,25 @@ class RequestHandlers:
                 method raises propagates unchanged.
         """  # noqa: DOC502
         resource_class, resource = self.build_target_resource(params.target, params.resolved_files)
-        owner_reference = OwnerReference.model_validate(params.owner_reference.model_dump())
 
-        with runtime_context_scope(context), resource_owner_scope(owner_reference):
-            outputs = await self.invoke_handler(params, resource, resource_class)
+        with runtime_context_scope(context):
+            result = await self.invoke_handler(params, resource, resource_class)
 
-        return normalize_outputs(resource_class, outputs)
+        if isinstance(result, ChildrenPending):
+            logger.info("dispatch_children_pending")
+
+            return DispatchResult(outputs=None, children_pending=True)
+
+        return DispatchResult(outputs=normalize_outputs(resource_class, result))
 
     async def run_observe(self, params: ObserveParams) -> ObserveResult:
         """Build the resource and report the external object it owns through ``on_observe``.
 
         No runtime context is bound, so a platform callback such as
-        ``apply_resource`` raises. The outputs are normalized as
-        :func:`~pragma_sdk.provider.outputs.normalize_outputs` describes, the
-        same way a create's or an update's are. Logs ``observe_completed``
-        with whether the object is present.
+        ``apply_resource`` or ``read_resource`` raises. The outputs are
+        normalized as :func:`~pragma_sdk.provider.outputs.normalize_outputs`
+        describes, the same way a create's or an update's are. Logs
+        ``observe_completed`` with whether the object is present.
 
         Args:
             params: The observe parameters.
@@ -92,8 +100,9 @@ class RequestHandlers:
 
         Raises:
             ValueError: If the provider defines no such resource type, its
-                class has no Config-typed ``config`` field, or it returns
-                outputs without declaring an Outputs class.
+                class has no Config-typed ``config`` field, it returns
+                outputs without declaring an Outputs class, or it returns
+                ``ChildrenPending``.
             ValidationError: If the config does not match the resource's
                 Config class, or the outputs do not match its Outputs class.
             MissingResolvedFileError: If the config holds a Pragmatiks file
@@ -101,7 +110,9 @@ class RequestHandlers:
                 raises propagates unchanged.
         """  # noqa: DOC502
         resource_class, resource = self.build_target_resource(params.target, params.resolved_files)
-        outputs = normalize_outputs(resource_class, await resource.on_observe())
+        observed = await resource.on_observe()
+        refuse_children_pending(observed, resource_class, "on_observe")
+        outputs = normalize_outputs(resource_class, observed)
         logger.info("observe_completed", observed_present=outputs is not None)
 
         return ObserveResult(outputs=outputs)
@@ -114,12 +125,14 @@ class RequestHandlers:
         Args:
             params: The dispatch parameters.
             resource: The built resource.
-            resource_class: The resource class, used to rebuild the previous config.
+            resource_class: The resource class, used to rebuild the previous config and named in a refusal.
 
         Returns:
-            Outputs of ``on_create`` or ``on_update``, or ``None`` for ``on_delete``.
+            Outputs or ``ChildrenPending`` from ``on_create`` or
+            ``on_update``, ``None`` from ``on_delete``.
 
         Raises:
+            ValueError: If ``on_delete`` returns ``ChildrenPending``.
             ValidationError: If an update's previous config does not match the
                 resource's Config class.
             MissingResolvedFileError: If an update's previous config holds a
@@ -136,7 +149,10 @@ class RequestHandlers:
                 return await resource.on_update(previous_config)
 
             case EventType.DELETE:
-                return await resource.on_delete()
+                deleted = await resource.on_delete()
+                refuse_children_pending(deleted, resource_class, "on_delete")
+
+                return deleted
 
             case _:
                 assert_never(params.event_type)

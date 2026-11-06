@@ -8,7 +8,7 @@ follows from ``id`` and ``method``; the receiver validates ``params`` or
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
     AwareDatetime,
@@ -18,6 +18,7 @@ from pydantic import (
     SerializerFunctionWrapHandler,
     StringConstraints,
     model_serializer,
+    model_validator,
 )
 
 from pragma_sdk.protocol.constants import MAXIMUM_OPERATION_DEADLINE_SECONDS
@@ -28,6 +29,9 @@ CatalogName = Annotated[
     str, StringConstraints(pattern=r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
 ]
 """A provider catalog name, ``prefix/name``: two lowercase alphanumeric labels, inner hyphens allowed."""
+
+CHILDREN_PENDING_WITH_OUTPUTS_MESSAGE = "A result that waits for its children carries no outputs."
+"""Why a dispatch result or a provider response that sets ``children_pending`` and carries outputs is refused."""
 
 
 class FrameKind(StrEnum):
@@ -300,43 +304,27 @@ class ResourcePayload(BaseModel):
     tags: list[str] | None
 
 
-class OwnerReferencePayload(BaseModel):
-    """Identity of the resource that owns the resources a dispatch applies.
-
-    Attributes:
-        project_id: Project of the owner.
-        provider: Provider catalog name of the owner.
-        resource: Resource type name of the owner.
-        name: Resource name of the owner.
-    """
-
-    project_id: str
-    provider: str
-    resource: str
-    name: str
-
-
 class ChildResourcePayload(BaseModel):
     """A resource a lifecycle method applies through the platform.
 
+    The project is the dispatched resource's, and the host names the
+    dispatched resource as its owner, so the payload names neither, as
+    ``ReadResourceParams`` does.
+
     Attributes:
-        project_id: Project of the resource.
         provider: Provider catalog name of the resource.
         resource: Resource type name.
         name: Resource name.
         config: Resource configuration.
-        owner_references: Resources that own this one.
         tags: Resource tags, or ``None`` when the resource sets none.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    project_id: str
     provider: str
     resource: str
     name: str
     config: dict[str, Any]
-    owner_references: list[OwnerReferencePayload]
     tags: list[str] | None = None
 
 
@@ -348,14 +336,43 @@ class DispatchParams(BaseModel):
         target: The resource to run it on.
         previous_config: Configuration before an update, or ``None``.
         resolved_files: Signed download URLs keyed by Pragmatiks file reference.
-        owner_reference: Owner recorded on resources the method applies.
     """
 
     event_type: Literal[EventType.CREATE, EventType.UPDATE, EventType.DELETE]
     target: ResourcePayload
     previous_config: dict[str, Any] | None
     resolved_files: dict[str, str]
-    owner_reference: OwnerReferencePayload
+
+
+class DispatchResult(BaseModel):
+    """Result of a ``dispatch`` request.
+
+    Attributes:
+        outputs: Outputs the lifecycle method returned, validated against the
+            resource's Outputs class and encoded with secrets revealed, or
+            ``None``.
+        children_pending: Whether ``on_create`` or ``on_update`` returned
+            ``ChildrenPending``: it waits for the resources it applied to be
+            ready, and carries no outputs.
+    """
+
+    outputs: dict[str, Any] | None
+    children_pending: bool = False
+
+    @model_validator(mode="after")
+    def refuse_outputs_with_children_pending(self) -> Self:
+        """Refuse a result that both waits for children and carries outputs.
+
+        Returns:
+            The validated result.
+
+        Raises:
+            ValueError: If ``children_pending`` is set and ``outputs`` is not ``None``.
+        """
+        if self.children_pending and self.outputs is not None:
+            raise ValueError(CHILDREN_PENDING_WITH_OUTPUTS_MESSAGE)
+
+        return self
 
 
 class ObserveParams(BaseModel):
@@ -382,34 +399,6 @@ class ObserveResult(BaseModel):
     outputs: dict[str, Any] | None
 
 
-class WaitForStateParams(BaseModel):
-    """Parameters of a ``wait_for_state`` callback request.
-
-    Attributes:
-        dispatch_id: Correlation id of the dispatch issuing the callback.
-        resource_id: Canonical id of the resource to watch.
-        target_state: Lifecycle state to wait for.
-        timeout: Maximum seconds to wait.
-    """
-
-    dispatch_id: int
-    resource_id: str
-    target_state: LifecycleState
-    timeout: float
-
-
-class WaitForStateResult(BaseModel):
-    """Result of a ``wait_for_state`` callback.
-
-    Attributes:
-        lifecycle_state: Lifecycle state the resource reached.
-        outputs: Outputs of the resource, or ``None``.
-    """
-
-    lifecycle_state: LifecycleState
-    outputs: dict[str, Any] | None
-
-
 class ApplyResourceParams(BaseModel):
     """Parameters of an ``apply_resource`` callback request.
 
@@ -420,6 +409,55 @@ class ApplyResourceParams(BaseModel):
 
     dispatch_id: int
     child: ChildResourcePayload
+
+
+class ReadResourceParams(BaseModel):
+    """Parameters of a ``read_resource`` callback request reading a resource the dispatched resource owns.
+
+    The project is the dispatched resource's. The host answers only for a
+    resource the dispatched resource owns, and refuses any other live
+    resource with ``CALLBACK_REFUSED_CODE``.
+
+    Attributes:
+        dispatch_id: Correlation id of the dispatch issuing the callback.
+        provider: Provider catalog name of the resource to read.
+        resource: Resource type name of the resource to read.
+        name: Name of the resource to read.
+    """
+
+    dispatch_id: int
+    provider: str
+    resource: str
+    name: str
+
+
+class ChildResourceStatePayload(BaseModel):
+    """A child resource the dispatched resource owns, as the platform records it.
+
+    The host serves it unmasked, sensitive values included, since only the
+    owner's lifecycle method reads it.
+
+    Attributes:
+        lifecycle_state: Lifecycle state of the child resource.
+        config: The child resource's stored configuration, as its owner
+            applied it, with references unresolved.
+        outputs: Outputs of the child resource, or ``None``.
+    """
+
+    lifecycle_state: LifecycleState
+    config: dict[str, Any]
+    outputs: dict[str, Any] | None
+
+
+class ReadResourceResult(BaseModel):
+    """Result of a ``read_resource`` callback.
+
+    Attributes:
+        resource: The child resource, or ``None`` when no live resource
+            has that identity.
+    """
+
+    resource: ChildResourceStatePayload | None
 
 
 class MigrateParams(BaseModel):

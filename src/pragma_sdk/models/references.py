@@ -1,4 +1,4 @@
-"""Reference types for resource dependencies and ownership.
+"""Reference types for resource dependencies and field references.
 
 References carry the four segments of a :class:`ResourceIdentity` directly
 as fields so that wire serialization stays flat, and expose a computed
@@ -62,21 +62,6 @@ class ResourceReference(_ResourceIdentityFields):
     @property
     def id(self) -> str:
         """Canonical identifier for the referenced resource."""
-        return self.canonical
-
-
-class OwnerReference(_ResourceIdentityFields):
-    """Reference to a resource that owns this resource for lifecycle coordination.
-
-    Used for cascading deletes and ownership tracking. When an owner resource
-    is deleted, owned resources can be automatically cleaned up.
-
-    A resource can have multiple owners (rare but valid for shared resources).
-    """
-
-    @property
-    def id(self) -> str:
-        """Canonical identifier for the owner resource."""
         return self.canonical
 
 

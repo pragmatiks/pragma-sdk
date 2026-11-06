@@ -10,8 +10,7 @@ from pydantic import ValidationError
 
 from pragma_sdk.diagnostics.validation_errors import build_validation_error_details
 from pragma_sdk.models import Config, Dependency, Resource, is_dependency_marker, is_field_ref_marker
-from pragma_sdk.models.base import is_union_origin
-from pragma_sdk.models.declared_keys import compute_declared_keys
+from pragma_sdk.models.base import drop_undeclared_config_keys, is_union_origin
 from pragma_sdk.protocol.frames import ResourcePayload
 from pragma_sdk.provider.loading import derive_config_class
 from pragma_sdk.types import LifecycleState
@@ -427,8 +426,10 @@ class ResourceBuilder:
 
         The reference's ``resolved_config``, or its ``config`` when it has
         none, is read as ``resource_type``'s Config as
-        :meth:`drop_undeclared_config_keys` leaves it, so a dependency
-        recorded by a newer version of its provider still reads.
+        :func:`~pragma_sdk.models.base.drop_undeclared_config_keys` leaves
+        it, so a dependency recorded by a newer version of its provider
+        still reads; dropped keys are logged as
+        ``dependency_config_keys_ignored`` by name, never by value.
 
         Args:
             resource_type: Resource type to validate the reference against.
@@ -448,7 +449,17 @@ class ResourceBuilder:
         flattened_reference = self.flatten_config(reference_data, resolved_files)
         self.apply_resolved_config_override(flattened_reference)
 
-        self.drop_undeclared_config_keys(flattened_reference, resource_type, field_name)
+        flattened_reference["config"], ignored_keys = drop_undeclared_config_keys(
+            resource_type, flattened_reference.get("config")
+        )
+
+        if ignored_keys:
+            logger.info(
+                "dependency_config_keys_ignored",
+                field=field_name,
+                resource_type=resource_type.__name__,
+                ignored_keys=ignored_keys,
+            )
 
         try:
             return resource_type.model_validate(flattened_reference)
@@ -461,49 +472,6 @@ class ResourceBuilder:
             )
 
             return None
-
-    def drop_undeclared_config_keys(
-        self, flattened_reference: dict[str, Any], resource_type: type[Resource], field_name: str
-    ) -> None:
-        """Drop the top-level config keys a strict Config does not declare from a dependency reference, in place.
-
-        Only a Config forbidding extra keys is filtered; nested values stay
-        strict. Dropped keys are logged as ``dependency_config_keys_ignored``
-        by name, never by value.
-
-        Args:
-            flattened_reference: Flattened dependency reference to adjust.
-            resource_type: Resource type the reference is read as.
-            field_name: Config field name, named in log events.
-
-        Note:
-            Keys are dropped before validation, so a ``mode="before"`` model
-            validator on the Config does not see them. A resource type whose
-            ``config`` field is not a Config subclass is left unfiltered.
-        """
-        config_field = resource_type.model_fields.get("config")
-        config_class = config_field.annotation if config_field is not None else None
-        config_data = flattened_reference.get("config")
-
-        if not isinstance(config_class, type) or not issubclass(config_class, Config):
-            return
-
-        if config_class.model_config.get("extra") != "forbid" or not isinstance(config_data, dict):
-            return
-
-        declared_keys = compute_declared_keys(config_class)
-        ignored_keys = sorted(key for key in config_data if key not in declared_keys)
-
-        if not ignored_keys:
-            return
-
-        logger.info(
-            "dependency_config_keys_ignored",
-            field=field_name,
-            resource_type=resource_type.__name__,
-            ignored_keys=ignored_keys,
-        )
-        flattened_reference["config"] = {key: value for key, value in config_data.items() if key in declared_keys}
 
     @staticmethod
     def apply_resolved_config_override(flattened_reference: dict[str, Any]) -> None:

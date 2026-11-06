@@ -8,20 +8,22 @@ import typing
 import warnings
 from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Annotated, Any, ClassVar, ForwardRef, Literal, Union
+from typing import Annotated, Any, ClassVar, ForwardRef, Literal, Self, Union
 
+import structlog
 from pydantic import BaseModel
 from pydantic import Field as PydanticField
 from pydantic.json_schema import GenerateJsonSchema, JsonSchemaMode
 
-from pragma_sdk.context import apply_resource, compute_defining_provider, resource_owner, wait_for_resource_state
+from pragma_sdk.context import apply_resource, compute_defining_provider, read_resource
+from pragma_sdk.models.children import ChildrenPending
+from pragma_sdk.models.declared_keys import compute_declared_keys
 from pragma_sdk.models.file import FileReference
 from pragma_sdk.models.identity import ResourceIdentity
 from pragma_sdk.models.references import (
     Dependency,
     FieldReference,
     Immutable,
-    OwnerReference,
     ResourceReference,
     Sensitive,
 )
@@ -34,6 +36,9 @@ from pragma_sdk.types import (
     PatchDefinition,
     PatchResult,
 )
+
+
+logger = structlog.get_logger()
 
 
 def is_union_origin(origin: Any) -> bool:
@@ -695,6 +700,10 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
     Subclasses must override ``on_observe`` and declare an ``Outputs`` class
     unless they declare ``computed = True``.
     Handlers must be idempotent, since events may be redelivered.
+
+    A resource composed of child resources applies them with
+    ``Resource.apply``, reads them with ``Resource.read`` and returns
+    ``ChildrenPending()`` while one is not READY; see ``ChildrenPending``.
     """
 
     resource: ClassVar[str]
@@ -742,7 +751,6 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
     name: str
     config: ConfigT
     dependencies: list[ResourceReference] = PydanticField(default_factory=list)
-    owner_references: list[OwnerReference] = PydanticField(default_factory=list)
     outputs: OutputsT | None = None
     error: str | None = None
     lifecycle_state: LifecycleState = LifecycleState.DRAFT
@@ -761,8 +769,8 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
 
         A resource of a type an embedded provider defines carries the
         embedded provider's catalog name, even when an embedding provider
-        builds or applies it, so its identity, its owner references and the
-        child resources it applies name the provider that manages the type.
+        builds, applies or reads it, so its identity and the child resources
+        it applies name the provider that manages the type.
 
         Returns:
             Provider catalog name (e.g., "pragmatiks/gcp").
@@ -794,7 +802,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         """Canonical ``project::provider::resource::name`` identifier."""
         return self.identity.canonical
 
-    async def on_create(self) -> OutputsT:
+    async def on_create(self) -> OutputsT | ChildrenPending:
         """Create the external object this resource owns.
 
         Return only once observing the resource finds the object, with
@@ -805,8 +813,12 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         returns, fail the resource while the object stays in place, until a
         fixed provider version runs.
 
+        A resource composed of child resources may return
+        ``ChildrenPending()`` while one is not READY; see ``ChildrenPending``.
+
         Returns:
-            Outputs of the created object.
+            Outputs of the created object, or ``ChildrenPending`` to wait
+            for the child resources this operation applied.
 
         Raises:
             AlreadyExistsError: If the vendor refuses the create because the
@@ -818,8 +830,8 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         """Report the external object this resource owns.
 
         Locate it from identity and ``config`` alone; ``self.outputs`` is never
-        populated, and platform callbacks such as ``apply_resource`` raise.
-        The outputs are validated against the type's Outputs class and
+        populated, and platform callbacks, ``Resource.apply`` and
+        ``Resource.read`` included, raise. The outputs are validated against the type's Outputs class and
         compared with what ``on_create`` and ``on_update`` returned, so return
         the same values for the same object.
 
@@ -831,7 +843,7 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         """
         raise NotImplementedError(f"{type(self).__name__} must implement on_observe")
 
-    async def on_update(self, previous_config: ConfigT | None) -> OutputsT:
+    async def on_update(self, previous_config: ConfigT | None) -> OutputsT | ChildrenPending:
         """Converge the existing external object to ``self.config``.
 
         Return only once observing the resource finds the object, with
@@ -842,11 +854,20 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         returns, fail the resource while the object stays in place, until a
         fixed provider version runs.
 
+        A resource composed of child resources may return
+        ``ChildrenPending()`` while one is not READY; see
+        ``ChildrenPending``. It also runs as the second pass after a wait.
+
         Args:
-            previous_config: Configuration last applied, or ``None`` when unknown.
+            previous_config: Configuration the provider last completed, or
+                ``None`` when unknown. In the second pass after a wait it is
+                still the configuration completed before the first pass,
+                ``None`` when the first pass was a create, never the first
+                pass's configuration.
 
         Returns:
-            Outputs of the converged object.
+            Outputs of the converged object, or ``ChildrenPending`` to wait
+            for the child resources this operation applied.
         """
         raise NotImplementedError(f"{self.__class__.__name__} must implement on_update()")
 
@@ -1005,147 +1026,152 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         """
         return HealthStatus(status="healthy")
 
-    def set_owner(self, owner: Resource) -> Resource:
-        """Set this resource's owner for lifecycle management.
+    async def apply(self) -> None:
+        """Apply this resource through the platform, owned by the resource whose lifecycle method runs.
 
-        Establishes an ownership relationship where the owner resource controls
-        this resource's lifecycle. When the owner is deleted, owned resources
-        can be automatically cleaned up via cascading deletes.
+        Call it from ``on_create`` or ``on_update`` to create or update a
+        child resource. The platform records the running resource as its
+        owner, writes the child in the running resource's project, whatever
+        ``project_id`` this instance carries, or finds it unchanged, and
+        processes it through its own lifecycle. The call returns once the
+        platform accepted the apply, never waiting for the child and never
+        telling whether it was unchanged. Read the child's state with
+        :meth:`read`, and return ``ChildrenPending()`` only after a read
+        found a child not READY: a pass that returns it while every child
+        it applied was already READY and unchanged fails.
 
-        Args:
-            owner: Parent resource that will own this resource.
-
-        Returns:
-            Self for method chaining.
-        """
-        ref = OwnerReference(
-            project_id=owner.project_id,
-            provider=owner.provider,
-            resource=owner.resource,
-            name=owner.name,
-        )
-        if ref not in self.owner_references:
-            self.owner_references.append(ref)
-        return self
-
-    async def apply(
-        self,
-        *,
-        wait: bool = False,
-        timeout: float = 60.0,
-    ) -> Resource[ConfigT, OutputsT]:
-        """Apply this resource through the API.
-
-        Sends the resource to the API for creation or update. The API will
-        validate, persist, and emit lifecycle events for provider processing.
-        The resource's lifecycle_state will be set to PENDING by the API.
-
-        Call this from within provider lifecycle handlers to create subresources.
-        The owner is automatically set from the current runtime context (the
-        resource whose lifecycle handler is executing).
-
-        When ``wait=True``, apply() also waits for the resource to reach the
-        READY state before returning, combining the publish and wait steps
-        into a single call. When ``wait=False`` (default), callers must invoke
-        ``wait_ready()`` separately if they need to block until the resource
-        is healthy.
-
-        Args:
-            wait: If True, block until the resource reaches READY state
-                after applying. If False, return immediately after the API
-                accepts the apply request.
-            timeout: Maximum seconds to wait for READY when ``wait=True``.
-                Ignored when ``wait=False``.
-
-        Returns:
-            Self for method chaining.
+        Raises:
+            CallbackRefusedError: If the platform refused the apply: another
+                resource owns this one, it exists and no resource owns it,
+                or the running operation is no longer current. Let it
+                propagate; the running resource fails with that reason.
+            RuntimeError: If called outside ``on_create``, ``on_update`` or
+                ``on_delete`` run by the Pragmatiks runtime, or the apply
+                fails otherwise.
 
         Example:
-            Apply and wait in a single call:
-
             ```python
-            async def on_create(self):
-                db = DatabaseResource(name=f"{self.name}-db", config=DbConfig(...))
-                await db.apply(wait=True, timeout=120.0)
-                return AppOutputs(db_url=db.outputs.connection_url)
+            async def on_create(self) -> AppOutputs | ChildrenPending:
+                database = DatabaseResource(
+                    project_id=self.project_id, name=f"{self.name}-db", config=DbConfig(port=5432)
+                )
+                await database.apply()
+                applied = await database.read()
+
+                if applied is None or applied.lifecycle_state != LifecycleState.READY:
+                    return ChildrenPending()
+
+                return AppOutputs(database_url=applied.outputs.connection_url)
             ```
-
-            Apply and wait separately when the caller needs to interleave
-            other work between publishing and waiting:
-
-            ```python
-            async def on_create(self):
-                db = DatabaseResource(name=f"{self.name}-db", config=DbConfig(...))
-                await db.apply()
-                await db.wait_ready(timeout=120.0)
-                return AppOutputs(db_url=db.outputs.connection_url)
-            ```
-        """
-        current_owner = resource_owner()
-        if current_owner is not None and current_owner not in self.owner_references:
-            self.owner_references.append(current_owner)
-
-        resource_data = {
-            "project_id": self.project_id,
+        """  # noqa: DOC502
+        resource_data: dict[str, Any] = {
             "provider": self.provider,
             "resource": self.resource,
             "name": self.name,
             "config": self.config.model_dump(),
-            "owner_references": [ref.model_dump() for ref in self.owner_references],
         }
+
         if self.tags:
             resource_data["tags"] = self.tags
 
         await apply_resource(resource_data)
-        self.lifecycle_state = LifecycleState.PENDING
 
-        if wait:
-            await self.wait_ready(timeout)
+    async def read(self) -> Self | None:
+        """Read this resource as the platform records it, when the resource whose lifecycle method runs owns it.
 
-        return self
+        Call it from ``on_create`` or ``on_update`` on a child resource the
+        running resource applied, to learn its lifecycle state, its stored
+        configuration and its outputs, and return ``ChildrenPending()`` while
+        it is not READY. The platform reads in the running resource's
+        project.
 
-    async def wait_ready(self, timeout: float = 60.0) -> Resource[ConfigT, OutputsT]:
-        """Wait for this resource to reach READY state.
-
-        Updates self with the lifecycle state and outputs the resource
-        reached.
-
-        Args:
-            timeout: Maximum seconds to wait.
+        The result is read as this class: top-level config keys a strict
+        Config does not declare are dropped and logged as
+        ``child_config_keys_ignored``. Its config is the one the owner
+        applied, references unresolved, so a dependency or field reference
+        reads back as the reference and a Pragmatiks file reference as its
+        ``pragma://files/...`` text. It carries no dependencies, tags or
+        error, and keeps this instance's ``project_id``.
 
         Returns:
-            Self with updated outputs and lifecycle_state.
+            A new instance carrying the recorded ``lifecycle_state``,
+            ``config`` and ``outputs``, or ``None`` when no live resource has
+            this identity.
 
         Raises:
+            CallbackRefusedError: If the platform refused the read: a live
+                resource has this identity and the running resource does not
+                own it, or the running operation is no longer current.
             RuntimeError: If called outside ``on_create``, ``on_update`` or
-                ``on_delete`` run by the Pragmatiks runtime, or the host's
-                wait fails, including when READY is not reached within
-                ``timeout``.
-            ValidationError: If the reached outputs do not match the
-                resource's Outputs class.
-
-        Example:
-            ```python
-            async def on_create(self):
-                db = DatabaseResource(name=f"{self.name}-db", config=DbConfig(...))
-                await db.apply()  # Owner automatically set from context
-                await db.wait_ready(timeout=120.0)
-                return AppOutputs(db_url=db.outputs.connection_url)
-            ```
+                ``on_delete`` run by the Pragmatiks runtime, such as in
+                ``on_observe``, or the read fails otherwise.
+            ValidationError: If the recorded resource does not match this
+                class's Config or Outputs class; its message names fields,
+                never values.
         """  # noqa: DOC502
-        data = await wait_for_resource_state(self.id, LifecycleState.READY, timeout)
+        child = await read_resource(self.provider, self.resource, self.name)
 
-        self.lifecycle_state = LifecycleState(data["lifecycle_state"])
+        if child is None:
+            return None
 
-        outputs_data = data["outputs"]
-        if outputs_data is not None:
-            outputs_type = derive_outputs_class(type(self))
-            if outputs_type is not None:
-                self.outputs = typing.cast("OutputsT", outputs_type.model_validate(outputs_data))
-            else:
-                self.outputs = outputs_data
+        config, ignored_keys = drop_undeclared_config_keys(type(self), child.config)
 
-        return self
+        if ignored_keys:
+            logger.info(
+                "child_config_keys_ignored",
+                resource_type=type(self).__name__,
+                ignored_keys=ignored_keys,
+                resource_id=self.id,
+            )
+
+        return type(self).model_validate({
+            "project_id": self.project_id,
+            "name": self.name,
+            "config": config,
+            "outputs": child.outputs,
+            "lifecycle_state": child.lifecycle_state,
+        })
+
+
+def drop_undeclared_config_keys(resource_type: type[Resource], config: Any) -> tuple[Any, list[str]]:
+    """Compute a resource's config without the top-level keys a strict Config does not declare.
+
+    The config of a resource another provider version recorded, such as a
+    dependency or a child resource, may carry keys a newer version added.
+    Only a Config forbidding extra keys is filtered; nested values stay
+    strict. The caller logs the dropped keys by name, never by value.
+
+    Args:
+        resource_type: Resource type the config is read as.
+        config: The recorded config.
+
+    Returns:
+        A copy of the config without the undeclared keys, or the config
+        itself when nothing is dropped, and the dropped keys, sorted.
+
+    Note:
+        Keys are dropped before validation, so a ``mode="before"`` model
+        validator on the Config does not see them. A resource type whose
+        ``config`` field is not a Config subclass is left unfiltered.
+    """
+    config_field = resource_type.model_fields.get("config")
+    config_class = config_field.annotation if config_field is not None else None
+
+    if (
+        not isinstance(config_class, type)
+        or not issubclass(config_class, Config)
+        or config_class.model_config.get("extra") != "forbid"
+        or not isinstance(config, dict)
+    ):
+        return config, []
+
+    declared_keys = compute_declared_keys(config_class)
+    ignored_keys = sorted(key for key in config if key not in declared_keys)
+
+    if not ignored_keys:
+        return config, []
+
+    return {key: value for key, value in config.items() if key in declared_keys}, ignored_keys
 
 
 def derive_outputs_class(resource_class: type[Resource]) -> type[Outputs] | None:

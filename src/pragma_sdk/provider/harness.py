@@ -2,6 +2,8 @@
 
 Provides a mock runtime environment for testing Resource lifecycle methods
 (on_create, on_update, on_delete) without connecting to NATS or the platform.
+No platform callback is served, so ``Resource.apply`` and ``Resource.read``
+raise in a method the harness runs.
 
 Example:
     from typing import ClassVar
@@ -43,9 +45,9 @@ from typing import Any
 from uuid import uuid4
 
 from pragma_sdk.context import package_catalog_names_scope
-from pragma_sdk.models import Config, Outputs, Resource
+from pragma_sdk.models import ChildrenPending, Config, Outputs, Resource
 from pragma_sdk.protocol.codec import build_json_payload
-from pragma_sdk.provider.outputs import normalize_outputs
+from pragma_sdk.provider.outputs import normalize_outputs, refuse_children_pending
 from pragma_sdk.types import CopyContext, CopyResult, LifecycleState, PatchDefinition, PatchResult
 
 
@@ -81,13 +83,16 @@ class LifecycleResult:
     and `.error` for any exception raised. `.normalized_outputs` holds the
     outputs as the platform compares a create's or an update's with an
     observe's: validated against the type's Outputs class and encoded as
-    plain JSON data, secrets revealed. For copy and patch operations, use
+    plain JSON data, secrets revealed. `.children_pending` is set when
+    ``on_create`` or ``on_update`` returned ``ChildrenPending``; such a
+    result carries no outputs. For copy and patch operations, use
     `.copy_result` and `.patch_result` respectively.
     """
 
     success: bool
     outputs: Outputs | None = None
     normalized_outputs: dict[str, Any] | None = None
+    children_pending: bool = False
     copy_result: CopyResult | None = None
     patch_result: PatchResult | None = None
     error: Exception | None = None
@@ -116,6 +121,28 @@ def build_package_catalog_names(
         mapped to ``provider_name``.
     """
     return {**package_catalog_names, resource_class.__module__.partition(".")[0]: provider_name}
+
+
+async def run_refusing_children_pending[ResultT](
+    lifecycle_call: Awaitable[ResultT], resource_class: type[Resource], method_name: str
+) -> ResultT:
+    """Await a lifecycle method that may not return ``ChildrenPending``, refusing it when it does.
+
+    Args:
+        lifecycle_call: The started lifecycle method call, such as ``resource.on_delete()``.
+        resource_class: The Resource subclass under test.
+        method_name: The lifecycle method called, named in the refusal.
+
+    Returns:
+        What the method returned.
+
+    Raises:
+        ValueError: If the method returned ``ChildrenPending``.
+    """  # noqa: DOC502
+    result = await lifecycle_call
+    refuse_children_pending(result, resource_class, method_name)
+
+    return result
 
 
 class ProviderHarness:
@@ -214,7 +241,7 @@ class ProviderHarness:
         config: Config,
         previous_config: Config | None,
         tags: list[str] | None,
-        handler: Callable[[Resource], Awaitable[Outputs | None]],
+        handler: Callable[[Resource], Awaitable[Outputs | ChildrenPending | None]],
     ) -> LifecycleResult:
         """Run one lifecycle handler on a freshly built resource, recording the event and result.
 
@@ -229,8 +256,8 @@ class ProviderHarness:
 
         Returns:
             Result carrying the handler's outputs and their normalized form,
-            or the exception it raised, an outputs validation failure
-            included.
+            whether it returned ``ChildrenPending``, or the exception it
+            raised, an outputs validation failure included.
         """
         event = LifecycleEvent(
             event_id=str(uuid4()),
@@ -255,12 +282,14 @@ class ProviderHarness:
             with package_catalog_names_scope(
                 build_package_catalog_names(resource_class, self._provider_name, self.package_catalog_names)
             ):
-                outputs = await handler(resource)
-            normalized_outputs = build_json_payload(normalize_outputs(resource_class, outputs))
+                handler_result = await handler(resource)
+
+            outputs = None if isinstance(handler_result, ChildrenPending) else handler_result
             result = LifecycleResult(
                 success=True,
                 outputs=outputs,
-                normalized_outputs=normalized_outputs,
+                normalized_outputs=build_json_payload(normalize_outputs(resource_class, outputs)),
+                children_pending=isinstance(handler_result, ChildrenPending),
                 resource=resource,
                 event=event,
             )
@@ -328,7 +357,7 @@ class ProviderHarness:
             config,
             None,
             tags,
-            lambda resource: resource.on_observe(),
+            lambda resource: run_refusing_children_pending(resource.on_observe(), resource_class, "on_observe"),
         )
 
     async def invoke_update(
@@ -386,7 +415,7 @@ class ProviderHarness:
             config,
             None,
             tags,
-            lambda resource: resource.on_delete(),
+            lambda resource: run_refusing_children_pending(resource.on_delete(), resource_class, "on_delete"),
         )
 
     async def invoke_copy(

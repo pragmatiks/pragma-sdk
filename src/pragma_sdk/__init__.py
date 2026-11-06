@@ -3,6 +3,7 @@
 Core exports for provider authoring:
     Provider: Decorator for defining providers.
     Resource: Base class for provider resources.
+    ChildrenPending: Returned from a lifecycle method to wait for the resources it applied.
     Config: Base class for resource configuration.
     Outputs: Base class for resource outputs.
     Field, FieldReference, Dependency: For cross-resource references.
@@ -26,6 +27,7 @@ from pragma_sdk.client import (
 )
 from pragma_sdk.exceptions import (
     AlreadyExistsError,
+    CallbackRefusedError,
     ProjectHasResourcesError,
     ProjectMismatchError,
     RenamedWheelWriteError,
@@ -37,6 +39,7 @@ from pragma_sdk.exceptions import (
 from pragma_sdk.models import (
     SETTLED_VERSION_STATUSES,
     AdmissionFailureCategory,
+    ChildrenPending,
     Config,
     CreateProjectRequest,
     DeclaredProviderVersion,
@@ -111,6 +114,8 @@ __all__ = [
     "AlreadyExistsError",
     "AsyncPragmaClient",
     "AsyncProjectResources",
+    "CallbackRefusedError",
+    "ChildrenPending",
     "CompatibilityConstraint",
     "Config",
     "CopyContext",
