@@ -17,11 +17,14 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, GetJsonSchemaHandler, field_validator, model_validator
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import CoreSchema
 
 
 _PRAGMA_FILE_SCHEME = "pragma://files/"
 _DEFAULT_TIMEOUT_SECONDS = 30.0
+_PRAGMA_FILE_PATTERN = "^pragma://files/.+$"
 
 
 class FileReference(BaseModel):
@@ -33,6 +36,10 @@ class FileReference(BaseModel):
     stream, or save the file. A fresh ``httpx.AsyncClient`` is created per
     call to avoid sharing connection state across unrelated downloads.
 
+    The published JSON schema is the applied form, a ``pragma://files/<name>``
+    string, since Pragmatiks validates the applied config against it before
+    the runtime resolves the reference.
+
     Attributes:
         url: Signed HTTPS URL produced by the runtime's file resolver.
         name: Original ``pragma://files/<name>`` reference, when known.
@@ -41,6 +48,23 @@ class FileReference(BaseModel):
 
     url: str
     name: str | None = None
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
+        """Publish the applied ``pragma://files/<name>`` string as the schema.
+
+        Args:
+            core_schema: Pydantic core schema of the model, unused.
+            handler: Pydantic JSON schema handler, unused.
+
+        Returns:
+            A string schema matching a Pragmatiks file reference.
+        """
+        return {
+            "type": "string",
+            "pattern": _PRAGMA_FILE_PATTERN,
+            "description": "Pragmatiks file reference, `pragma://files/<name>`.",
+        }
 
     @model_validator(mode="before")
     @classmethod
