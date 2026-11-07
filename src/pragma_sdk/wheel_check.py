@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import collections
 import hashlib
 import zipfile
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import BinaryIO
 
 from pragma_sdk.exceptions import WheelExpansionLimitError
-from pragma_sdk.wheel import MAXIMUM_WHEEL_BYTES, ExpansionBudget, read_dist_info_files
+from pragma_sdk.wheel import (
+    MAXIMUM_WHEEL_BYTES,
+    ExpansionBudget,
+    open_wheel_archive,
+    read_dist_info_files,
+    stream_archive_member_within_budget,
+)
 
 
 class DistInfoRefusalReason(StrEnum):
@@ -38,6 +46,65 @@ class DistInfoRefusal:
     dist_info_directory: str | None = None
     dist_info_sha256: str | None = None
     error: Exception | None = None
+
+
+def read_wheel_refusal(
+    wheel_file: BinaryIO,
+    wheel_name: str,
+    declared_dist_info_directory: str,
+    declared_dist_info_sha256: str,
+) -> DistInfoRefusal | None:
+    """Read why a whole wheel is refused against the ``.dist-info`` directory and digest it was declared with.
+
+    The wheel is opened with :func:`~pragma_sdk.wheel.open_wheel_archive`,
+    which bounds its central directory; every member is then decompressed
+    under one :data:`~pragma_sdk.wheel.MAXIMUM_WHEEL_BYTES` budget, and the
+    ``.dist-info`` is compared as :func:`read_dist_info_refusal` describes.
+    Nothing is raised for the wheel's content: a wheel expanding past the
+    budget is ``wheel_too_large``; a refused central directory, a damaged
+    archive or member, an unsupported compression method, or a member the
+    expansion pass refuses with a ``ValueError`` is ``wheel_unreadable``,
+    as :func:`read_dist_info_refusal` treats them.
+
+    Args:
+        wheel_file: The wheel file, opened in binary mode and seekable. It
+            is left at its start on every return.
+        wheel_name: The wheel's file name, for error messages.
+        declared_dist_info_directory: Declared ``.dist-info`` directory name.
+        declared_dist_info_sha256: Declared digest, as
+            :func:`compute_dist_info_sha256` computes it.
+
+    Returns:
+        Why the wheel is refused, or ``None`` when it stays within the limits
+        and its ``.dist-info`` matches the declaration.
+    """
+    try:
+        with open_wheel_archive(wheel_file, wheel_name) as archive:
+            require_wheel_within_expansion_limit(archive, wheel_name)
+            return read_dist_info_refusal(archive, wheel_name, declared_dist_info_directory, declared_dist_info_sha256)
+    except WheelExpansionLimitError as error:
+        return DistInfoRefusal(reason=DistInfoRefusalReason.WHEEL_TOO_LARGE, error=error)
+    except (zipfile.BadZipFile, ValueError) as error:
+        return DistInfoRefusal(reason=DistInfoRefusalReason.WHEEL_UNREADABLE, error=error)
+    finally:
+        wheel_file.seek(0)
+
+
+def require_wheel_within_expansion_limit(archive: zipfile.ZipFile, wheel_name: str) -> None:
+    """Refuse a wheel whose members together decompress past :data:`~pragma_sdk.wheel.MAXIMUM_WHEEL_BYTES`.
+
+    Args:
+        archive: The open wheel archive.
+        wheel_name: The wheel's file name, for error messages.
+
+    Raises:
+        WheelExpansionLimitError: When the members decompress past the limit.
+        zipfile.BadZipFile: When a member cannot be read.
+    """  # noqa: DOC502
+    budget = ExpansionBudget(MAXIMUM_WHEEL_BYTES)
+
+    for member in archive.infolist():
+        collections.deque(stream_archive_member_within_budget(archive, wheel_name, member, budget), maxlen=0)
 
 
 def read_dist_info_refusal(
