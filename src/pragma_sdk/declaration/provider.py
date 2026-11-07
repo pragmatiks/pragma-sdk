@@ -77,7 +77,7 @@ def build_resource_type_capabilities(resource: str, resource_class: type[Resourc
 
     Returns:
         Whether the class defines ``on_observe``, is declared computed, and
-        overrides ``logs`` and ``health``, and the
+        overrides ``logs`` and ``vitals``, and the
         ``operation_deadline_seconds`` it declares.
     """
     return ResourceTypeCapabilities(
@@ -85,7 +85,7 @@ def build_resource_type_capabilities(resource: str, resource_class: type[Resourc
         observe=resource_class.on_observe is not Resource.on_observe,
         computed=resource_class.computed,
         logs=resource_class.logs is not Resource.logs,
-        health=resource_class.health is not Resource.health,
+        vitals=resource_class.vitals is not Resource.vitals,
         operation_deadline_seconds=resource_class.operation_deadline_seconds,
     )
 

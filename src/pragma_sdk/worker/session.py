@@ -48,8 +48,8 @@ from pragma_sdk.protocol.constants import (
     METHOD_NOT_FOUND_CODE,
     MIGRATE_METHOD,
     OBSERVE_METHOD,
-    RESOURCE_HEALTH_METHOD,
     RESOURCE_LOGS_METHOD,
+    RESOURCE_VITALS_METHOD,
     SHUTDOWN_METHOD,
 )
 from pragma_sdk.protocol.frames import (
@@ -156,7 +156,7 @@ class RequestRoute:
         params_model: Model the request's params are validated against.
         failure_log_event: Log event recorded when the handler fails.
         logs_start: Whether ``request_started`` is logged as the handler
-            starts; health and logs queries, polled often, are not.
+            starts; vitals and logs queries, polled often, are not.
         log_fields: Picks the fields identifying what the request acts on
             from its validated params; every event logged while the request
             runs carries them.
@@ -288,12 +288,12 @@ class WorkerSession:
                 log_fields=self.build_targeted_log_fields,
                 handler=request_handlers.run_resource_logs,
             ),
-            RESOURCE_HEALTH_METHOD: RequestRoute(
+            RESOURCE_VITALS_METHOD: RequestRoute(
                 params_model=ResourceQueryParams,
-                failure_log_event="resource_health_failed",
+                failure_log_event="resource_vitals_failed",
                 logs_start=False,
                 log_fields=self.build_targeted_log_fields,
-                handler=request_handlers.run_resource_health,
+                handler=request_handlers.run_resource_vitals,
             ),
         }
 
@@ -1034,7 +1034,7 @@ class WorkerSession:
         return {"event_type": params.event_type, **self.build_target_log_fields(params.target)}
 
     def build_targeted_log_fields(self, params: ObserveParams | ResourceQueryParams) -> dict[str, Any]:
-        """Pick the fields identifying the resource an observe, logs or health request targets, for its log events.
+        """Pick the fields identifying the resource an observe, logs or vitals request targets, for its log events.
 
         Args:
             params: The request's validated params.

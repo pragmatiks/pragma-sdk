@@ -212,7 +212,7 @@ class ResourceTypeCapabilities(BaseModel):
         observe: Whether the type defines ``on_observe``.
         computed: Whether the type is declared computed.
         logs: Whether the type overrides ``logs``.
-        health: Whether the type overrides ``health``.
+        vitals: Whether the type overrides ``vitals``.
         operation_deadline_seconds: Ceiling in whole seconds, from 1 to
             ``MAXIMUM_OPERATION_DEADLINE_SECONDS``, that heartbeats may
             carry one operation of the type to, or ``None`` when the type
@@ -223,7 +223,7 @@ class ResourceTypeCapabilities(BaseModel):
     observe: bool
     computed: bool
     logs: bool
-    health: bool
+    vitals: bool
     operation_deadline_seconds: int | None = Field(default=None, gt=0, le=MAXIMUM_OPERATION_DEADLINE_SECONDS)
 
 
@@ -489,13 +489,13 @@ class MigrateResult(BaseModel):
 
 
 class ResourceQueryParams(BaseModel):
-    """Parameters of a ``resource_logs`` or ``resource_health`` request.
+    """Parameters of a ``resource_logs`` or ``resource_vitals`` request.
 
     Attributes:
         target: The resource to query.
         since: Earliest log timestamp to include, with its UTC offset, or
-            ``None``; health ignores it.
-        tail: Maximum number of recent log entries; health ignores it.
+            ``None``; vitals ignores it.
+        tail: Maximum number of recent log entries; vitals ignores it.
         resolved_files: Signed download URLs keyed by Pragmatiks file reference.
     """
 
