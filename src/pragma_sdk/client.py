@@ -714,11 +714,14 @@ class PragmaClient(BaseClient):
         version: str | None = None,
         config: dict[str, str] | None = None,
     ) -> ProviderInstallation:
-        """Install a provider from the catalog.
+        """Install a provider from the catalog, or install a failed installation again.
 
         Args:
             provider_name: Namespaced provider name ('org/name').
-            version: Specific version to install (latest if None).
+            version: Specific version to install. ``None`` installs the
+                latest published version on a first install, and the
+                failed installation's stored version (its
+                ``operation_version``) when it is installed again.
             config: Key-value pairs passed as environment variables
                 only to this provider.
 
@@ -1384,11 +1387,14 @@ class AsyncPragmaClient(BaseClient):
         version: str | None = None,
         config: dict[str, str] | None = None,
     ) -> ProviderInstallation:
-        """Install a provider from the catalog.
+        """Install a provider from the catalog, or install a failed installation again.
 
         Args:
             provider_name: Namespaced provider name ('org/name').
-            version: Specific version to install (latest if None).
+            version: Specific version to install. ``None`` installs the
+                latest published version on a first install, and the
+                failed installation's stored version (its
+                ``operation_version``) when it is installed again.
             config: Key-value pairs passed as environment variables
                 only to this provider.
 
