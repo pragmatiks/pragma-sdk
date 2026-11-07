@@ -1,4 +1,4 @@
-"""Reading what a built provider wheel declares, within bounded decompression."""
+"""Bounded reading of a provider wheel archive, and the declaration read of a built wheel."""
 
 from __future__ import annotations
 
@@ -7,13 +7,12 @@ import collections
 import contextlib
 import errno
 import hashlib
-import importlib.metadata
 import io
 import struct
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, NoReturn
+from typing import TYPE_CHECKING, BinaryIO
 
 from pragma_sdk.exceptions import (
     WheelCentralDirectoryRefusedError,
@@ -21,11 +20,9 @@ from pragma_sdk.exceptions import (
     build_wheel_too_large_message,
 )
 from pragma_sdk.models.provider import ProviderVersionDeclaration
-from pragma_sdk.provider_entry_point import PROVIDER_ENTRY_POINT_GROUP, parse_provider_package
 
 
 if TYPE_CHECKING:
-    import os
     from collections.abc import Generator
 
 
@@ -73,9 +70,6 @@ READ_CHUNK_SIZE = 65536
 WHEEL_COMPRESSION_METHODS = frozenset({zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED})
 """Compression methods a wheel's members may use: the only ones whose decompression a read bounds per chunk."""
 
-type EntryPointGroups = dict[str, dict[str, str]]
-"""Entry point group names mapped to their entry names and object references."""
-
 
 @dataclass(frozen=True)
 class DistInfoFiles:
@@ -90,20 +84,6 @@ class DistInfoFiles:
     directory: str
     metadata: bytes
     entry_points: bytes | None
-
-
-@dataclass(frozen=True)
-class ProviderEntryPoint:
-    """The provider a wheel declares under ``pragma.provider``.
-
-    Attributes:
-        name: Provider short name, the entry point's key.
-        package: Importable package holding the provider, the entry point's
-            whole module path.
-    """
-
-    name: str
-    package: str
 
 
 class ExpansionBudget:
@@ -142,40 +122,6 @@ class ExpansionBudget:
 
         if self.consumed_bytes > self.limit_bytes:
             raise WheelExpansionLimitError(self.limit_bytes, wheel_name, member_name)
-
-
-class EntryPointsDistribution(importlib.metadata.Distribution):
-    """A distribution holding nothing but an ``entry_points.txt``, read the way an installed one is."""
-
-    def __init__(self, entry_points_text: str) -> None:
-        """Hold the ``entry_points.txt`` text.
-
-        Args:
-            entry_points_text: Decoded contents of ``entry_points.txt``.
-        """
-        self.entry_points_text = entry_points_text
-
-    def read_text(self, filename: str) -> str | None:
-        """Read one metadata file of the distribution.
-
-        Args:
-            filename: Metadata file name, such as ``entry_points.txt``.
-
-        Returns:
-            The ``entry_points.txt`` text, or ``None`` for any other file.
-        """
-        return self.entry_points_text if filename == "entry_points.txt" else None
-
-    def locate_file(self, path: str | os.PathLike[str]) -> NoReturn:
-        """Refuse to locate a file: the distribution has no installed files.
-
-        Args:
-            path: Path of a file relative to the distribution.
-
-        Raises:
-            FileNotFoundError: Always.
-        """
-        raise FileNotFoundError(path)
 
 
 def read_wheel_declaration(wheel_path: Path | str, changelog: str | None = None) -> ProviderVersionDeclaration:
@@ -680,125 +626,3 @@ def derive_member_name(member: zipfile.ZipInfo | str) -> str:
         The member's name in the archive.
     """
     return member.filename if isinstance(member, zipfile.ZipInfo) else member
-
-
-def parse_entry_points(entry_points: bytes | None, wheel_name: str) -> EntryPointGroups:
-    """Parse a wheel's ``entry_points.txt`` the way :mod:`importlib.metadata` reads it once installed.
-
-    Entry names keep their case, a group may be split over several sections,
-    and lines before the first section are ignored. An entry name declared
-    twice in one group is refused.
-
-    Args:
-        entry_points: Contents of ``entry_points.txt``, or ``None`` when the
-            wheel has none.
-        wheel_name: The wheel's file name, for error messages.
-
-    Returns:
-        Every declared group with its entries; empty when the wheel has no file.
-
-    Raises:
-        ValueError: When the file is not UTF-8, has an entry line without
-            ``=`` or an entry whose object reference is not a module, optionally
-            followed by a colon and an object, or declares an entry name twice
-            in one group;
-            the message names the wheel, the same on every Python.
-    """
-    if entry_points is None:
-        return {}
-
-    try:
-        entry_points_text = entry_points.decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise ValueError(f"Wheel {wheel_name} has an entry_points.txt that is not UTF-8: {error}") from error
-
-    try:
-        declared = tuple(EntryPointsDistribution(entry_points_text).entry_points)
-    except TypeError as error:
-        raise ValueError(
-            f"Wheel {wheel_name} has an entry_points.txt entry line without '='; write each entry as 'name = reference'"
-        ) from error
-    except ValueError as error:
-        raise ValueError(build_invalid_entry_point_reference_message(wheel_name)) from error
-
-    groups: EntryPointGroups = {}
-
-    for entry_point in declared:
-        if entry_point.pattern.match(entry_point.value) is None:
-            raise ValueError(build_invalid_entry_point_reference_message(wheel_name))
-
-        group = groups.setdefault(entry_point.group, {})
-
-        if entry_point.name in group:
-            raise ValueError(
-                f"Wheel {wheel_name} has an entry_points.txt declaring {entry_point.name!r} "
-                f"twice in {entry_point.group!r}"
-            )
-
-        group[entry_point.name] = entry_point.value
-
-    return groups
-
-
-def build_invalid_entry_point_reference_message(wheel_name: str) -> str:
-    """Build the message refusing an ``entry_points.txt`` entry whose object reference is invalid.
-
-    Args:
-        wheel_name: The wheel's file name.
-
-    Returns:
-        A sentence naming the wheel, the same on every Python.
-    """
-    return f"Wheel {wheel_name} has an entry_points.txt entry whose reference is not 'module' or 'module:object'"
-
-
-def find_provider_entry_point(entry_points: EntryPointGroups, wheel_name: str) -> ProviderEntryPoint | None:
-    """Find the provider a wheel declares under ``pragma.provider``.
-
-    Args:
-        entry_points: Parsed entry point groups of the wheel.
-        wheel_name: The wheel's file name, for error messages.
-
-    Returns:
-        The provider short name and its importable package, as
-        :func:`~pragma_sdk.provider_entry_point.parse_provider_package`
-        parses it, or ``None`` unless the group holds exactly one entry point.
-
-    Raises:
-        ValueError: When the entry point does not name a package, as
-            :func:`parse_wheel_provider_package` describes.
-    """  # noqa: DOC502
-    provider_entry_points = entry_points.get(PROVIDER_ENTRY_POINT_GROUP, {})
-
-    if len(provider_entry_points) != 1:
-        return None
-
-    name, reference = next(iter(provider_entry_points.items()))
-    package = parse_wheel_provider_package(name, reference, wheel_name)
-
-    return ProviderEntryPoint(name=name, package=package)
-
-
-def parse_wheel_provider_package(name: str, reference: str, wheel_name: str) -> str:
-    """Parse the package a wheel's ``pragma.provider`` entry point names.
-
-    Args:
-        name: The entry point's name.
-        reference: The entry point's object reference.
-        wheel_name: The wheel's file name, for error messages.
-
-    Returns:
-        The package, as
-        :func:`~pragma_sdk.provider_entry_point.parse_provider_package`
-        parses it.
-
-    Raises:
-        ValueError: When the entry point does not name a package; the
-            message names the wheel.
-    """
-    try:
-        return parse_provider_package(name, reference)
-    except ValueError as error:
-        raise ValueError(
-            f"Wheel {wheel_name} has an invalid {PROVIDER_ENTRY_POINT_GROUP!r} entry point. {error}"
-        ) from error

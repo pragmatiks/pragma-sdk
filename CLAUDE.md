@@ -23,8 +23,8 @@ pragma-sdk/
     ├── worker/            # `python -m pragma_sdk.worker --socket <path>`: runs lifecycle methods
     │   └── executor.py    # Default executor recording each request's work, and the request scope
     ├── introspection/     # `python -m pragma_sdk.introspection --output <path>`: writes the report
-    ├── provider_entry_point.py  # The `pragma.provider` entry point group and its package parsing
-    ├── wheel.py           # Bounded wheel archive reads and the publish declaration read
+    ├── provider_entry_point.py  # The `pragma.provider` entry point: group, package parsing, `entry_points.txt` parsing, `ProviderEntryPoint` lookup
+    ├── wheel.py           # Bounded wheel archive reads (central directory, expansion) and the publish declaration read
     ├── wheel_check.py     # Whole-wheel refusal read (expansion pass, then `.dist-info`) against a declaration
     ├── wheel_names.py     # Distribution, filename and `.dist-info` naming contract
     ├── wheel_rename.py    # Renaming a wheel to its organization's distribution name

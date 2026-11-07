@@ -20,13 +20,12 @@ from packaging.utils import canonicalize_name
 from packaging.version import InvalidVersion, Version
 
 from pragma_sdk.exceptions import RenamedWheelWriteError
+from pragma_sdk.provider_entry_point import find_provider_entry_point, parse_entry_points
 from pragma_sdk.wheel import (
     MAXIMUM_WHEEL_BYTES,
     DistInfoFiles,
     ExpansionBudget,
-    find_provider_entry_point,
     open_wheel_archive,
-    parse_entry_points,
     read_dist_info_files,
     stream_archive_member_within_budget,
 )
