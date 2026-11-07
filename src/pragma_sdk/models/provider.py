@@ -324,6 +324,9 @@ class ProviderInstallation(BaseModel):
             version still serving (that text reads "Upgrading <provider> to
             <version> failed: <what went wrong> The installed version keeps
             serving; <recovery>"); ``None`` otherwise.
+        operation_running: Whether the latest operation still runs: true
+            while the installation is ``pending`` or ``processing``, or
+            ``ready`` under a host boot's ``start``; false once it settled.
     """
 
     prefix: str = Field(frozen=True)
@@ -337,6 +340,7 @@ class ProviderInstallation(BaseModel):
     operation_type: InstallationOperationType | None = None
     operation_version: str | None = None
     failure_message: str | None = None
+    operation_running: bool = False
 
     @computed_field
     @property
