@@ -10,6 +10,7 @@ from pydantic import Field as PydanticField
 
 from pragma_sdk.models.enums import (
     MemberRole,
+    OrganizationBootstrapState,
     OrganizationStatus,
     ProviderFailureCode,
     ResponseStatus,
@@ -202,6 +203,16 @@ class Organization(BaseModel):
     status: OrganizationStatus
     created_at: datetime
     updated_at: datetime
+
+
+class OrganizationBootstrapStatus(BaseModel):
+    """Bootstrap status of the caller's organization.
+
+    Attributes:
+        status: Public bootstrap state of the organization.
+    """
+
+    status: OrganizationBootstrapState
 
 
 class OrganizationMember(BaseModel):
