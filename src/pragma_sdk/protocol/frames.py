@@ -496,8 +496,10 @@ class ResourceQueryParams(BaseModel):
         since: Earliest log timestamp to include, with its UTC offset, or
             ``None``; health ignores it.
         tail: Maximum number of recent log entries; health ignores it.
+        resolved_files: Signed download URLs keyed by Pragmatiks file reference.
     """
 
     target: ResourcePayload
     since: AwareDatetime | None
     tail: int
+    resolved_files: dict[str, str]
