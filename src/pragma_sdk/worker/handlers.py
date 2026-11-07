@@ -221,8 +221,8 @@ class RequestHandlers:
                 class has no Config-typed ``config`` field.
             ValidationError: If the config does not match the resource's Config class.
             MissingResolvedFileError: If the config holds a Pragmatiks file
-                reference. Any exception the resource's ``logs`` raises
-                propagates unchanged.
+                reference the query carries no signed URL for.
+                Any exception the resource's ``logs`` raises propagates unchanged.
         """  # noqa: DOC502
         resource = self.build_queried_resource(params)
 
@@ -242,8 +242,8 @@ class RequestHandlers:
                 class has no Config-typed ``config`` field.
             ValidationError: If the config does not match the resource's Config class.
             MissingResolvedFileError: If the config holds a Pragmatiks file
-                reference. Any exception the resource's ``health`` raises
-                propagates unchanged.
+                reference the query carries no signed URL for.
+                Any exception the resource's ``health`` raises propagates unchanged.
         """  # noqa: DOC502
         resource = self.build_queried_resource(params)
 
@@ -251,9 +251,6 @@ class RequestHandlers:
 
     def build_queried_resource(self, params: ResourceQueryParams) -> Resource:
         """Build the resource a logs or health query targets.
-
-        A query carries no signed file URLs, so a resource whose config holds
-        a Pragmatiks file reference cannot be built for one.
 
         Args:
             params: The query parameters.
@@ -265,9 +262,10 @@ class RequestHandlers:
             ValueError: If the provider defines no such resource type, or its
                 class has no Config-typed ``config`` field.
             ValidationError: If the config does not match the resource's Config class.
-            MissingResolvedFileError: If the config holds a Pragmatiks file reference.
+            MissingResolvedFileError: If the config holds a Pragmatiks file
+                reference the query carries no signed URL for.
         """  # noqa: DOC502
-        _, resource = self.build_target_resource(params.target, {})
+        _, resource = self.build_target_resource(params.target, params.resolved_files)
 
         return resource
 

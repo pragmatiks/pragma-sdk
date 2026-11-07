@@ -20,7 +20,7 @@ the host answers a callback the platform refused with
 from __future__ import annotations
 
 
-PROTOCOL_VERSION = 5
+PROTOCOL_VERSION = 6
 OFFERED_PROTOCOL_VERSIONS = [PROTOCOL_VERSION]
 
 JSONRPC_VERSION = "2.0"
