@@ -1,3 +1,22 @@
+## v26.0.0 (2026-11-07)
+
+### BREAKING CHANGE
+
+- EntryPointGroups, ProviderEntryPoint, EntryPointsDistribution, parse_entry_points, build_invalid_entry_point_reference_message, find_provider_entry_point and parse_wheel_provider_package move from pragma_sdk.wheel to pragma_sdk.provider_entry_point.
+
+### Feat
+
+- **wheel_check**: read a wheel's refusal under one expansion budget
+
+### Fix
+
+- **wheel**: bound the central directory in open_wheel_archive
+
+### Refactor
+
+- **wheel**: move the central-directory bound to its own module
+- **provider_entry_point**: move entry-point parsing out of wheel
+
 ## v25.2.0 (2026-11-07)
 
 ### Feat
