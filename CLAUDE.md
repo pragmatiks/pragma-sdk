@@ -33,7 +33,7 @@ pragma-sdk/
     └── blocking.py        # Cancel-shielded worker-thread runner for the async client
 ```
 
-`wheel.py`, `wheel_check.py`, `wheel_names.py`, `provider_entry_point.py` and the `WheelExpansionLimitError` and `build_wheel_too_large_message` parts of `exceptions.py` are the wheel contract the hub's admission imports: changing them changes what the platform admits.
+`wheel.py`, `wheel_check.py`, `wheel_names.py`, `provider_entry_point.py` and the `WheelExpansionLimitError`, `WheelCentralDirectoryRefusedError` and `build_wheel_too_large_message` parts of `exceptions.py` are the wheel contract the hub's admission imports: changing them changes what the platform admits. `open_wheel_archive` refuses a central directory past `MAXIMUM_CENTRAL_DIRECTORY_BYTES` (1 MiB), or a zip64 layout `zipfile` releases could read differently, with `WheelCentralDirectoryRefusedError` (a `BadZipFile`) before any member is listed.
 
 `protocol/` imports nothing from the SDK but `types`; the Pragmatiks host speaks only it. Changing a frame shape, the introspection report, or the worker's method set is a new `PROTOCOL_VERSION`.
 

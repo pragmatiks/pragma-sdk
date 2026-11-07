@@ -161,7 +161,9 @@ def rename_provider_wheel(wheel_path: Path | str, organization_slug: str, destin
             renamed.
         WheelExpansionLimitError: When the renamed wheel's members decompress
             past :data:`~pragma_sdk.wheel.MAXIMUM_WHEEL_BYTES`.
-        zipfile.BadZipFile: When the file is not a readable zip archive or a
+        zipfile.BadZipFile: When the file is not a readable zip archive, its
+            central directory is refused as
+            :func:`pragma_sdk.wheel.open_wheel_archive` describes, or a
             member cannot be read, a compression method other than stored or
             deflate included. When reading the open wheel failed with an
             ``OSError``, that ``OSError`` is its ``__cause__``.
