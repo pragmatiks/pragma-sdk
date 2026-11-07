@@ -1,3 +1,9 @@
+## v27.0.1 (2026-11-07)
+
+### Fix
+
+- publish a file reference's JSON schema as its applied pragma://files string (PRA-572)
+
 ## v27.0.0 (2026-11-07)
 
 ### BREAKING CHANGE
