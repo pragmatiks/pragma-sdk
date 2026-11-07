@@ -25,7 +25,7 @@ pragma-sdk/
     ├── introspection/     # `python -m pragma_sdk.introspection --output <path>`: writes the report
     ├── provider_entry_point.py  # The `pragma.provider` entry point group and its package parsing
     ├── wheel.py           # Bounded wheel archive reads and the publish declaration read
-    ├── wheel_check.py     # `.dist-info` refusal check against a declaration
+    ├── wheel_check.py     # Whole-wheel refusal read (expansion pass, then `.dist-info`) against a declaration
     ├── wheel_names.py     # Distribution, filename and `.dist-info` naming contract
     ├── wheel_rename.py    # Renaming a wheel to its organization's distribution name
     ├── wheel_upload.py    # Direct wheel upload to the signed storage address
