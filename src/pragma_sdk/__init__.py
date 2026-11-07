@@ -87,6 +87,7 @@ from pragma_sdk.models import (
 from pragma_sdk.models import Provider as ProviderModel
 from pragma_sdk.protocol.constants import MAXIMUM_OPERATION_DEADLINE_SECONDS
 from pragma_sdk.provider import (
+    DuplicateResourceTypeError,
     MissingObserveError,
     MissingOutputsError,
     OperationDeadlineOutOfRangeError,
@@ -125,6 +126,7 @@ __all__ = [
     "DeclaredProviderVersion",
     "DeleteProjectRequest",
     "Dependency",
+    "DuplicateResourceTypeError",
     "Field",
     "FieldReference",
     "FileField",

@@ -39,7 +39,7 @@ Example:
         assert result.success
 """
 
-from pragma_sdk.provider.discovery import discover_resources, is_registered_resource
+from pragma_sdk.provider.discovery import DuplicateResourceTypeError, discover_resources, is_registered_resource
 from pragma_sdk.provider.harness import (
     EventType,
     LifecycleEvent,
@@ -58,6 +58,7 @@ from pragma_sdk.provider.provider import (
 
 __all__ = [
     "RESOURCE_MARKER",
+    "DuplicateResourceTypeError",
     "EventType",
     "LifecycleEvent",
     "LifecycleResult",

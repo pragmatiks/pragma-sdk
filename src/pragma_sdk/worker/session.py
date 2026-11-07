@@ -20,7 +20,7 @@ from typing import Any, Literal
 
 import structlog
 from packaging.utils import canonicalize_name
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, RootModel, ValidationError
 
 from pragma_sdk.context import RuntimeContext, compute_defining_provider, package_catalog_names_scope
 from pragma_sdk.declaration.provider import ProviderDeclarationError
@@ -45,6 +45,7 @@ from pragma_sdk.protocol.constants import (
     INTERNAL_ERROR_CODE,
     INVALID_PARAMS_CODE,
     MAXIMUM_FRAME_BYTES,
+    METHOD_NOT_FOUND_CODE,
     MIGRATE_METHOD,
     OBSERVE_METHOD,
     RESOURCE_HEALTH_METHOD,
@@ -168,6 +169,56 @@ class RequestRoute:
     logs_start: bool
     log_fields: Callable[[Any], dict[str, Any]]
     handler: Callable[[Any], Awaitable[Any]]
+
+
+class MethodNotFoundError(Exception):
+    """Raised by the route of a request for a method the worker does not serve."""
+
+    def __init__(self, method: str) -> None:
+        """Name the method the worker does not serve.
+
+        Args:
+            method: Method name of the request.
+        """
+        super().__init__(f"Method {method!r} is not served.")
+
+
+class UnknownMethodParams(RootModel[Any]):
+    """Params of a request for a method the worker does not serve, accepted as they are."""
+
+
+def build_unknown_method_route(method: str) -> RequestRoute:
+    """Build the route answering a request for a method the worker does not serve.
+
+    Its params are not checked, its handler raises :class:`MethodNotFoundError`,
+    answered with ``METHOD_NOT_FOUND_CODE`` and logged as ``request_method_unknown``.
+
+    Args:
+        method: Method name of the request.
+
+    Returns:
+        The route refusing the method.
+    """
+    return RequestRoute(
+        params_model=UnknownMethodParams,
+        failure_log_event="request_method_unknown",
+        logs_start=False,
+        log_fields=lambda _params: {},
+        handler=partial(refuse_unknown_method, method),
+    )
+
+
+async def refuse_unknown_method(method: str, _params: Any) -> None:
+    """Refuse a request for a method the worker does not serve.
+
+    Args:
+        method: Method name of the request.
+        _params: The request's params, ignored.
+
+    Raises:
+        MethodNotFoundError: Always.
+    """
+    raise MethodNotFoundError(method)
 
 
 class WorkerSession:
@@ -597,18 +648,14 @@ class WorkerSession:
         method = envelope.method
         route = self.find_request_route(correlation_id, method)
 
-        if route is None:
-            log_ignored_frame(envelope, "unknown_method")
-
-            return
-
         self.cancelled_correlation_ids.discard(correlation_id)
         self.answered_correlation_ids.discard(correlation_id)
+
         task = asyncio.create_task(self.run_request(correlation_id, method, envelope.params, route), name=method)
         self.request_tasks[correlation_id] = task
         task.add_done_callback(partial(self.forget_request_task, correlation_id))
 
-    def find_request_route(self, correlation_id: int, method: str) -> RequestRoute | None:
+    def find_request_route(self, correlation_id: int, method: str) -> RequestRoute:
         """Find how to run a request.
 
         Args:
@@ -616,13 +663,13 @@ class WorkerSession:
             method: Method name of the request.
 
         Returns:
-            The route to run the request with, or ``None`` when the worker
-            does not serve the method.
+            The route to run the request with; for a method the worker does
+            not serve, a route answering ``METHOD_NOT_FOUND_CODE``.
         """
         if method == DISPATCH_METHOD:
             return self.build_dispatch_route(correlation_id)
 
-        return self.request_routes.get(method)
+        return self.request_routes.get(method) or build_unknown_method_route(method)
 
     def build_dispatch_route(self, dispatch_id: int) -> RequestRoute:
         """Build the route of one dispatch, bound to a runtime context of its own.
@@ -888,12 +935,19 @@ class WorkerSession:
             error: What the handler raised.
 
         Returns:
-            A failure with ``ALREADY_EXISTS_CODE`` for a create dispatch
+            A failure with ``METHOD_NOT_FOUND_CODE`` for a method the worker
+            does not serve, with ``ALREADY_EXISTS_CODE`` for a create dispatch
             refused because its object already exists, or an observe that
             found an object this resource did not create, otherwise with
             ``INTERNAL_ERROR_CODE``.
         """
         duration_seconds = measure_elapsed_seconds(started_at)
+
+        if isinstance(error, MethodNotFoundError):
+            logger.warning(route.failure_log_event, duration_seconds=duration_seconds)
+
+            return self.codec.build_failure(correlation_id, METHOD_NOT_FOUND_CODE, str(error))
+
         already_exists_error = (
             find_already_exists_error(error) if is_already_exists_answered(validated_params) else None
         )
@@ -1055,7 +1109,7 @@ def log_ignored_frame(envelope: Envelope, reason: str) -> None:
         envelope: The dropped frame.
         reason: Why it was dropped: ``notification``, ``invalid_params``
             (a cancel whose params are invalid), ``unsolicited_response``,
-            ``missing_id`` or ``unknown_method``.
+            or ``missing_id``.
     """
     logger.warning(
         "frame_ignored", reason=reason, correlation_id=envelope.id, method=envelope.method, kind=envelope.kind

@@ -118,6 +118,8 @@ def load_provider_schemas(package_name: str, catalog_name: str) -> list[dict[str
         ValueError: If a resource class has no Config-typed config field.
         PydanticInvalidForJsonSchema: If a config or outputs type cannot be
             expressed as JSON schema.
+        DuplicateResourceTypeError: If two distinct classes the package
+            defines register the same resource name.
         MissingObserveError: If a non-computed resource type in a module the
             package imports defines no ``on_observe``.
         MissingOutputsError: If a non-computed resource type in a module the
