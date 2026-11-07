@@ -248,6 +248,9 @@ def discover_declared_resources(normalized_distribution: str, package: str) -> d
         Resource classes the package defines, by resource name.
 
     Raises:
+        DuplicateResourceTypeError: If two distinct classes the package
+            defines register the same resource name; discovery yields only
+            classes defined inside the package, so it always propagates.
         ProviderDeclarationError: If the entry point names a plain module
             instead of a package, the package defines no resource types, or a
             resource type in a module the package imports from outside itself

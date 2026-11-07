@@ -60,7 +60,8 @@ class IntrospectionFailure(ProtocolOffer):
         detail: Error message; for ``"import_failed"``, ``"{Type}: {message}"``.
         resource: Offending resource type for ``"missing_observe"``,
             ``"missing_outputs"`` and ``"operation_deadline_out_of_range"``,
-            otherwise ``None``.
+            and for an ``"import_failed"`` where two classes register one
+            resource name, otherwise ``None``.
     """
 
     outcome: Literal["failure"]

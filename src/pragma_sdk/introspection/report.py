@@ -6,6 +6,7 @@ from pragma_sdk.declaration.provider import DeclaredProvider
 from pragma_sdk.diagnostics.error_descriptions import build_error_message
 from pragma_sdk.protocol.constants import OFFERED_PROTOCOL_VERSIONS
 from pragma_sdk.protocol.introspection import IntrospectionFailure, IntrospectionSuccess
+from pragma_sdk.provider.discovery import DuplicateResourceTypeError
 from pragma_sdk.provider.loading import build_resource_type_schema
 from pragma_sdk.provider.provider import MissingObserveError, MissingOutputsError, OperationDeadlineOutOfRangeError
 
@@ -46,7 +47,8 @@ def build_introspection_failure(error: BaseException) -> IntrospectionFailure:
         failure naming it when such a type declares no ``Outputs`` class,
         an ``operation_deadline_out_of_range`` failure naming the type that
         declares an ``operation_deadline_seconds`` out of range; otherwise an
-        ``import_failed`` failure whose detail is ``"{Type}: {message}"``,
+        ``import_failed`` failure, naming the resource type for a
+        :class:`DuplicateResourceTypeError`, whose detail is ``"{Type}: {message}"``,
         or ``"{Type}"`` alone when the exception has no readable text. The
         message repeats no rejected input or URL secret, and characters
         UTF-8 cannot encode, such as lone surrogates, are written as
@@ -88,5 +90,5 @@ def build_introspection_failure(error: BaseException) -> IntrospectionFailure:
         outcome="failure",
         category="import_failed",
         detail=detail.encode("utf-8", "backslashreplace").decode("utf-8"),
-        resource=None,
+        resource=error.resource_name if isinstance(error, DuplicateResourceTypeError) else None,
     )

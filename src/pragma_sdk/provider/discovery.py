@@ -11,6 +11,29 @@ from pragma_sdk.provider.provider import RESOURCE_MARKER
 from pragma_sdk.provider_entry_point import is_module_in_package
 
 
+class DuplicateResourceTypeError(TypeError):
+    """Two distinct Resource classes of one package register the same resource name.
+
+    Attributes:
+        resource_name: The resource name both classes register.
+    """
+
+    def __init__(self, resource_name: str, first: type[Resource], second: type[Resource]) -> None:
+        """Name the resource and both classes registering it.
+
+        Args:
+            resource_name: The resource name both classes register.
+            first: The class found first.
+            second: The class found second.
+        """
+        self.resource_name = resource_name
+        super().__init__(
+            f"Resource type {resource_name!r} is registered by both "
+            f"{first.__module__}.{first.__qualname__} and {second.__module__}.{second.__qualname__}. "
+            "Give each @provider.resource() class its own resource name."
+        )
+
+
 def discover_resources(package_name: str) -> dict[str, type[Resource]]:
     """Discover the registered Resource classes a Python package defines.
 
@@ -19,7 +42,8 @@ def discover_resources(package_name: str) -> dict[str, type[Resource]]:
     inside the package. A class the package only imports from another
     package, such as an embedded provider's resource type, is left out, and
     so is an undecorated subclass of a decorated class. When two classes
-    register the same resource name, the first one found is kept.
+    register the same resource name, discovery is refused; one class
+    found in several modules counts once.
 
     Args:
         package_name: Provider package to scan (e.g., "postgres_provider").
@@ -28,6 +52,8 @@ def discover_resources(package_name: str) -> dict[str, type[Resource]]:
         Dictionary mapping resource names to Resource classes.
 
     Raises:
+        DuplicateResourceTypeError: If two distinct classes the package
+            defines register the same resource name.
         MissingObserveError: If a non-computed resource type in an imported
             module defines no on_observe.
         MissingOutputsError: If a non-computed resource type in an imported
@@ -42,7 +68,10 @@ def discover_resources(package_name: str) -> dict[str, type[Resource]]:
     resources: dict[str, type[Resource]] = {}
 
     for resource_name, resource_class in discover_module_resources(package_name, package_name):
-        resources.setdefault(resource_name, resource_class)
+        registered_class = resources.setdefault(resource_name, resource_class)
+
+        if registered_class is not resource_class:
+            raise DuplicateResourceTypeError(resource_name, registered_class, resource_class)
 
     return resources
 
