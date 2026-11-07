@@ -1,3 +1,9 @@
+## v27.2.0 (2026-11-07)
+
+### Feat
+
+- add organization member and account deletion client methods (PRA-851)
+
 ## v27.1.0 (2026-11-07)
 
 ### Feat
