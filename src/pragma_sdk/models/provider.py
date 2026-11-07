@@ -19,6 +19,7 @@ from pragma_sdk.models.enums import (
 
 
 UPLOAD_URL_SCHEMES = frozenset({"http", "https"})
+UPLOAD_URL_PORTS = range(1, 65536)
 """URL schemes a signed upload address may use."""
 
 UPLOAD_HEADER_NAME_PATTERN = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
@@ -200,7 +201,7 @@ class WheelUploadAddress(BaseModel):
     @field_validator("url")
     @classmethod
     def require_http_url(cls, url: SecretStr) -> SecretStr:
-        """Refuse an address that is not an ``http`` or ``https`` URL with a host.
+        """Refuse an address that is not an ``http`` or ``https`` URL with a host and a usable port.
 
         Args:
             url: The signed address.
@@ -210,7 +211,7 @@ class WheelUploadAddress(BaseModel):
 
         Raises:
             ValueError: When httpx cannot parse the address, or it has
-                another scheme or no host; the message never carries the
+                another scheme, no host, or a port outside 1 to 65535; the message never carries the
                 address.
         """
         try:
@@ -218,7 +219,12 @@ class WheelUploadAddress(BaseModel):
         except httpx.InvalidURL:
             parsed_url = None
 
-        if parsed_url is None or parsed_url.scheme not in UPLOAD_URL_SCHEMES or not parsed_url.host:
+        if (
+            parsed_url is None
+            or parsed_url.scheme not in UPLOAD_URL_SCHEMES
+            or not parsed_url.host
+            or (parsed_url.port is not None and parsed_url.port not in UPLOAD_URL_PORTS)
+        ):
             raise ValueError("The upload address must be an http or https URL with a host")
 
         return url
