@@ -1,3 +1,9 @@
+## v27.1.0 (2026-11-07)
+
+### Feat
+
+- **models**: add the dependency_build_failed admission failure category
+
 ## v27.0.1 (2026-11-07)
 
 ### Fix
