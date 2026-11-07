@@ -431,26 +431,6 @@ class PragmaClient(BaseClient):
         response = self._request("GET", "/resources/schemas", params=params)
         return [ResourceSchema.model_validate(item) for item in response]
 
-    def upload_file(self, name: str, content: bytes, content_type: str) -> dict[str, Any]:
-        """Upload a file to the Pragma file storage.
-
-        Args:
-            name: Name of the file (used in the storage path).
-            content: Raw file content as bytes.
-            content_type: MIME type of the file (e.g., "image/png", "application/pdf").
-
-        Returns:
-            Dict containing url, public_url, size, content_type, checksum, uploaded_at.
-
-        Raises:
-            httpx.HTTPStatusError: If the upload fails.
-        """  # noqa: DOC502
-        return self._request(
-            "POST",
-            f"/files/{name}/upload",
-            files={"file": (name, content, content_type)},
-        )
-
     def list_providers(
         self,
         query: str | None = None,
@@ -1226,26 +1206,6 @@ class AsyncPragmaClient(BaseClient):
         response = await self._request("GET", "/resources/schemas", params=params)
         return [ResourceSchema.model_validate(item) for item in response]
 
-    async def upload_file(self, name: str, content: bytes, content_type: str) -> dict[str, Any]:
-        """Upload a file to the Pragma file storage.
-
-        Args:
-            name: Name of the file (used in the storage path).
-            content: Raw file content as bytes.
-            content_type: MIME type of the file (e.g., "image/png", "application/pdf").
-
-        Returns:
-            Dict containing url, public_url, size, content_type, checksum, uploaded_at.
-
-        Raises:
-            httpx.HTTPStatusError: If the upload fails.
-        """  # noqa: DOC502
-        return await self._request(
-            "POST",
-            f"/files/{name}/upload",
-            files={"file": (name, content, content_type)},
-        )
-
     async def list_providers(
         self,
         query: str | None = None,
@@ -1861,6 +1821,29 @@ class ProjectResources:
         """Project identifier this handle is scoped to."""
         return self._project_id
 
+    def upload_file(self, name: str, content: bytes, content_type: str) -> dict[str, Any]:
+        """Upload a file into this project's file storage.
+
+        A ``pragma://files/<name>`` reference resolves to the file of the
+        referencing resource's project.
+
+        Args:
+            name: Name of the file in this project.
+            content: Raw file content as bytes.
+            content_type: MIME type of the file (e.g., "image/png", "application/pdf").
+
+        Returns:
+            Dict containing url, public_url, size, content_type, checksum, uploaded_at.
+
+        Raises:
+            httpx.HTTPStatusError: If the upload fails.
+        """  # noqa: DOC502
+        return self._client._request(
+            "POST",
+            f"/projects/{quote(self._project_id, safe='')}/files/{quote(name, safe='')}/upload",
+            files={"file": (name, content, content_type)},
+        )
+
     def list_resources[ResourceT: Resource](
         self,
         provider: str | None = None,
@@ -2226,6 +2209,29 @@ class AsyncProjectResources:
     def project_id(self) -> str:
         """Project identifier this handle is scoped to."""
         return self._project_id
+
+    async def upload_file(self, name: str, content: bytes, content_type: str) -> dict[str, Any]:
+        """Upload a file into this project's file storage.
+
+        A ``pragma://files/<name>`` reference resolves to the file of the
+        referencing resource's project.
+
+        Args:
+            name: Name of the file in this project.
+            content: Raw file content as bytes.
+            content_type: MIME type of the file (e.g., "image/png", "application/pdf").
+
+        Returns:
+            Dict containing url, public_url, size, content_type, checksum, uploaded_at.
+
+        Raises:
+            httpx.HTTPStatusError: If the upload fails.
+        """  # noqa: DOC502
+        return await self._client._request(
+            "POST",
+            f"/projects/{quote(self._project_id, safe='')}/files/{quote(name, safe='')}/upload",
+            files={"file": (name, content, content_type)},
+        )
 
     async def list_resources[ResourceT: Resource](
         self,
