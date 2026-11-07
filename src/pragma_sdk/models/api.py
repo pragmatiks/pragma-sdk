@@ -193,6 +193,32 @@ class LifecycleEventFrame(BaseModel):
     error: str | None = None
 
 
+class ResourceHistoryEvent(BaseModel):
+    """One recorded lifecycle transition in a resource's history.
+
+    History is kept for 30 days, also after the resource is deleted, and
+    includes earlier lifetimes of a resource deleted and recreated under the
+    same ID.
+
+    Attributes:
+        from_state: State before the transition, absent for a resource's first event.
+        to_state: State the resource entered.
+        event_type: Lifecycle event recorded for the transition.
+        provider_version: Version of the provider that ran the operation this
+            transition settles; None when the transition settles no operation
+            or the operation ran past its deadline.
+        error: Failure message, when the transition recorded one.
+        timestamp: When the transition happened.
+    """
+
+    from_state: LifecycleState | None = None
+    to_state: LifecycleState
+    event_type: str
+    provider_version: str | None = None
+    error: str | None = None
+    timestamp: datetime
+
+
 class Organization(BaseModel):
     """Organization details.
 

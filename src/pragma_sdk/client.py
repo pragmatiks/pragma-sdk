@@ -35,6 +35,7 @@ from pragma_sdk.models import (
     ProviderVersion,
     ProviderVersionDeclaration,
     Resource,
+    ResourceHistoryEvent,
     ResourceSchema,
     TeardownResponse,
     UserInfo,
@@ -1932,6 +1933,29 @@ class ProjectResources:
             return model.model_validate(response)
         return response
 
+    def list_resource_history(self, provider: str, resource: str, name: str) -> list[ResourceHistoryEvent]:
+        """List the history of a resource in this project, newest first.
+
+        The history keeps 30 days of transitions, outlives a delete, and shows
+        every lifetime of a resource deleted and recreated under the same ID.
+        An ID with no history, one that never existed included, returns an
+        empty list.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+
+        Returns:
+            Recorded transitions, newest first.
+
+        Raises:
+            httpx.HTTPStatusError: If the project is not found or the request fails.
+        """  # noqa: DOC502
+        params = {"provider": provider, "resource": resource, "name": name}
+        response = self._client._request("GET", build_scoped_path(self._project_id, "history"), params=params)
+        return [ResourceHistoryEvent.model_validate(item) for item in response]
+
     def apply_resource[ResourceT: Resource](
         self,
         resource: ResourceT,
@@ -2274,6 +2298,29 @@ class AsyncProjectResources:
         if model is not None:
             return model.model_validate(response)
         return response
+
+    async def list_resource_history(self, provider: str, resource: str, name: str) -> list[ResourceHistoryEvent]:
+        """List the history of a resource in this project, newest first.
+
+        The history keeps 30 days of transitions, outlives a delete, and shows
+        every lifetime of a resource deleted and recreated under the same ID.
+        An ID with no history, one that never existed included, returns an
+        empty list.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+
+        Returns:
+            Recorded transitions, newest first.
+
+        Raises:
+            httpx.HTTPStatusError: If the project is not found or the request fails.
+        """  # noqa: DOC502
+        params = {"provider": provider, "resource": resource, "name": name}
+        response = await self._client._request("GET", build_scoped_path(self._project_id, "history"), params=params)
+        return [ResourceHistoryEvent.model_validate(item) for item in response]
 
     async def apply_resource[ResourceT: Resource](
         self,
