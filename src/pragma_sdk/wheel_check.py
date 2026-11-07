@@ -1,4 +1,4 @@
-"""Checking a wheel's ``.dist-info`` against the declaration it was published with."""
+"""Whole-wheel refusal read: central directory bound, expansion pass, then ``.dist-info`` against its declaration."""
 
 from __future__ import annotations
 

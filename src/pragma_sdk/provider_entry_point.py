@@ -157,11 +157,9 @@ def parse_entry_points(entry_points: bytes | None, wheel_name: str) -> EntryPoin
         Every declared group with its entries; empty when the wheel has no file.
 
     Raises:
-        ValueError: When the file is not UTF-8, has an entry line without
-            ``=`` or an entry whose object reference is not a module, optionally
-            followed by a colon and an object, or declares an entry name twice
-            in one group;
-            the message names the wheel, the same on every Python.
+        ValueError: When the file is not UTF-8, has an entry line without ``=`` or an entry whose object reference
+            is not a module, optionally followed by a colon and an object, or declares an entry name twice in one
+            group; the message names the wheel, the same on every Python.
     """
     if entry_points is None:
         return {}
@@ -219,9 +217,8 @@ def find_provider_entry_point(entry_points: EntryPointGroups, wheel_name: str) -
         wheel_name: The wheel's file name, for error messages.
 
     Returns:
-        The provider short name and its importable package, as
-        :func:`parse_provider_package`
-        parses it, or ``None`` unless the group holds exactly one entry point.
+        The provider short name and its importable package, as :func:`parse_provider_package` parses it, or
+        ``None`` unless the group holds exactly one entry point.
 
     Raises:
         ValueError: When the entry point does not name a package, as
@@ -247,9 +244,7 @@ def parse_wheel_provider_package(name: str, reference: str, wheel_name: str) -> 
         wheel_name: The wheel's file name, for error messages.
 
     Returns:
-        The package, as
-        :func:`parse_provider_package`
-        parses it.
+        The package, as :func:`parse_provider_package` parses it.
 
     Raises:
         ValueError: When the entry point does not name a package; the

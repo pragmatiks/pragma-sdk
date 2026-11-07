@@ -149,9 +149,9 @@ class WheelCentralDirectoryRefusedError(zipfile.BadZipFile):
     A :class:`zipfile.BadZipFile`, so callers that treat an unreadable wheel
     as ``wheel_unreadable`` refuse it the same way; the type lets logs name
     the reason. Raised when the central directory passes
-    :data:`pragma_sdk.wheel.MAXIMUM_CENTRAL_DIRECTORY_BYTES`, the archive spans
-    several disks, or its zip64 layout could be read differently by releases
-    of :mod:`zipfile`.
+    :data:`pragma_sdk.wheel_central_directory.MAXIMUM_CENTRAL_DIRECTORY_BYTES`,
+    the archive spans several disks, or its zip64 layout could be read
+    differently by releases of :mod:`zipfile`.
     """
 
 
