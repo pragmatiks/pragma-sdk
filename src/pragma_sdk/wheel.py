@@ -8,12 +8,18 @@ import contextlib
 import errno
 import hashlib
 import importlib.metadata
+import io
+import struct
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, NoReturn
 
-from pragma_sdk.exceptions import WheelExpansionLimitError, build_wheel_too_large_message
+from pragma_sdk.exceptions import (
+    WheelCentralDirectoryRefusedError,
+    WheelExpansionLimitError,
+    build_wheel_too_large_message,
+)
 from pragma_sdk.models.provider import ProviderVersionDeclaration
 from pragma_sdk.provider_entry_point import PROVIDER_ENTRY_POINT_GROUP, parse_provider_package
 
@@ -28,6 +34,38 @@ MAXIMUM_WHEEL_BYTES = 256 * 1024 * 1024
 
 WHEEL_TOO_LARGE_MESSAGE = build_wheel_too_large_message(MAXIMUM_WHEEL_BYTES)
 """Message refusing a wheel that expands past :data:`MAXIMUM_WHEEL_BYTES`, worded as the platform words it."""
+
+MAXIMUM_CENTRAL_DIRECTORY_BYTES = 1024 * 1024
+"""Largest zip central directory a wheel may have; bounds the members listed and the memory they take.
+
+Listing reads members until the central directory's bytes run out,
+whatever member count the end record states, and each member takes at
+least 46 of those bytes, so one listing holds at most about 22,800 members.
+"""
+
+END_RECORD = struct.Struct("<4s4H2LH")
+"""Layout of a zip end of central directory record, before its comment."""
+
+END_RECORD_SIGNATURE = b"PK\x05\x06"
+"""Signature opening a zip end of central directory record."""
+
+END_RECORD_CENTRAL_DIRECTORY_SIZE_FIELD = 5
+"""Position of the central directory's size among the fields of :data:`END_RECORD`."""
+
+MAXIMUM_COMMENT_BYTES = 0xFFFF
+"""Longest comment that may follow a zip end of central directory record."""
+
+ZIP64_LOCATOR = struct.Struct("<4sLQL")
+"""Layout of a zip64 end of central directory locator, which sits right before the end record."""
+
+ZIP64_LOCATOR_SIGNATURE = b"PK\x06\x07"
+"""Signature opening a zip64 end of central directory locator."""
+
+ZIP64_END_RECORD = struct.Struct("<4sQ2H2L4Q")
+"""Layout of a zip64 end of central directory record, without extensible data."""
+
+ZIP64_END_RECORD_SIGNATURE = b"PK\x06\x06"
+"""Signature opening a zip64 end of central directory record."""
 
 READ_CHUNK_SIZE = 65536
 """Largest number of decompressed bytes an archive member yields at once."""
@@ -164,8 +202,9 @@ def read_wheel_declaration(wheel_path: Path | str, changelog: str | None = None)
             file in it.
         WheelExpansionLimitError: When ``METADATA`` and ``entry_points.txt``
             decompress past :data:`MAXIMUM_WHEEL_BYTES`.
-        zipfile.BadZipFile: When the file is not a readable zip archive, or
-            reading the archive or a member the declaration needs fails,
+        zipfile.BadZipFile: When the file is not a readable zip archive, its
+            central directory is refused as :func:`open_wheel_archive`
+            describes, or reading the archive or a member the declaration needs fails,
             whatever the cause: a damaged directory or header, a CRC mismatch,
             a corrupt or truncated compressed stream, an encrypted member, or
             a compression method other than stored or deflate. When reading
@@ -208,27 +247,204 @@ def encode_base64(content: bytes | None) -> str | None:
 
 
 def open_wheel_archive(wheel_file: BinaryIO, wheel_name: str) -> zipfile.ZipFile:
-    """Open an already opened wheel file as a zip archive for reading.
+    """Open an already opened wheel file as a zip archive for reading, its central directory bounded.
+
+    The central directory is measured from the end records before any
+    member is listed, so a wheel whose central directory passes
+    :data:`MAXIMUM_CENTRAL_DIRECTORY_BYTES` never takes memory in proportion
+    to it.
 
     Args:
         wheel_file: The wheel file, opened in binary mode and seekable. The
-            archive does not close it.
+            archive does not close it. When the wheel is refused the file is
+            left at its start.
         wheel_name: The wheel's file name, for error messages.
 
     Returns:
         The archive, positioned to list and read its members.
 
     Raises:
+        WheelCentralDirectoryRefusedError: When the central directory passes
+            :data:`MAXIMUM_CENTRAL_DIRECTORY_BYTES`, the archive spans several
+            disks, or it has a zip64 layout that releases of :mod:`zipfile`
+            could read differently. A :class:`zipfile.BadZipFile`.
         zipfile.BadZipFile: When the file is not a readable zip archive; when
             reading the file failed with an ``OSError``, that ``OSError`` is
             its ``__cause__`` (see ``find_unreadable_archive_cause``).
-    """
+    """  # noqa: DOC502
     unreadable_message = f"Wheel {wheel_name} is not a readable zip archive"
+
+    try:
+        require_bounded_central_directory(wheel_file, wheel_name)
+    except OSError as error:
+        raise zipfile.BadZipFile(f"{unreadable_message}: {error}") from find_unreadable_archive_cause(error)
+    finally:
+        wheel_file.seek(0)
 
     try:
         return zipfile.ZipFile(wheel_file)
     except Exception as error:
         raise zipfile.BadZipFile(f"{unreadable_message}: {error}") from find_unreadable_archive_cause(error)
+
+
+def require_bounded_central_directory(file: BinaryIO, wheel_name: str) -> None:
+    """Refuse a wheel archive whose central directory is too large to list, before any member is listed.
+
+    Args:
+        file: Seekable binary file holding the wheel.
+        wheel_name: Filename of the wheel, for error messages.
+
+    Raises:
+        WheelCentralDirectoryRefusedError: When the file spans several disks,
+            has a zip64 layout that releases of :mod:`zipfile` could read
+            differently, or its central directory passes
+            :data:`MAXIMUM_CENTRAL_DIRECTORY_BYTES`.
+        zipfile.BadZipFile: When the file has no zip end record.
+    """  # noqa: DOC502
+    central_directory_bytes = read_central_directory_size(file, wheel_name)
+
+    if central_directory_bytes > MAXIMUM_CENTRAL_DIRECTORY_BYTES:
+        raise WheelCentralDirectoryRefusedError(
+            f"Wheel {wheel_name} has a {central_directory_bytes}-byte central directory, "
+            f"past {MAXIMUM_CENTRAL_DIRECTORY_BYTES} bytes"
+        )
+
+
+def read_central_directory_size(file: BinaryIO, wheel_name: str) -> int:
+    """Read the central directory size a zip archive states, as :class:`zipfile.ZipFile` reads it when listing.
+
+    The zip64 end record's size, when the archive has one right before its
+    zip64 locator, takes the place of the end record's.
+
+    Args:
+        file: Seekable binary file holding the archive.
+        wheel_name: Filename of the wheel, for error messages.
+
+    Returns:
+        The central directory's size in bytes.
+
+    Raises:
+        WheelCentralDirectoryRefusedError: When the file spans several
+            disks, or has a zip64 layout that releases of :mod:`zipfile`
+            could read differently.
+        zipfile.BadZipFile: When the file has no zip end record.
+    """  # noqa: DOC502
+    end_record_offset, end_record_central_directory_size = read_end_record(file, wheel_name)
+    zip64_central_directory_size = read_zip64_central_directory_size(file, end_record_offset, wheel_name)
+
+    if zip64_central_directory_size is None:
+        return end_record_central_directory_size
+
+    return zip64_central_directory_size
+
+
+def read_end_record(file: BinaryIO, wheel_name: str) -> tuple[int, int]:
+    """Read a zip archive's end of central directory record, found as :class:`zipfile.ZipFile` finds it.
+
+    A record closing the file without a comment is taken first; otherwise
+    the last record signature within the file's final
+    :data:`MAXIMUM_COMMENT_BYTES` plus one record is.
+
+    Args:
+        file: Seekable binary file holding the archive.
+        wheel_name: Filename of the wheel, for error messages.
+
+    Returns:
+        The record's offset in the file, and the central directory size it states.
+
+    Raises:
+        zipfile.BadZipFile: When the file holds no whole end record.
+    """  # noqa: DOC502
+    file_size = file.seek(0, io.SEEK_END)
+    unreadable = zipfile.BadZipFile(f"Wheel {wheel_name} is not a readable zip archive")
+
+    if file_size < END_RECORD.size:
+        raise unreadable
+
+    file.seek(file_size - END_RECORD.size)
+    final_record = file.read(END_RECORD.size)
+
+    if final_record.startswith(END_RECORD_SIGNATURE) and final_record.endswith(b"\x00\x00"):
+        central_directory_size = END_RECORD.unpack(final_record)[END_RECORD_CENTRAL_DIRECTORY_SIZE_FIELD]
+        return file_size - END_RECORD.size, central_directory_size
+
+    search_start = max(file_size - MAXIMUM_COMMENT_BYTES - END_RECORD.size, 0)
+    file.seek(search_start)
+    tail = file.read(MAXIMUM_COMMENT_BYTES + END_RECORD.size)
+    record_start = tail.rfind(END_RECORD_SIGNATURE)
+    record = tail[record_start : record_start + END_RECORD.size]
+
+    if record_start < 0 or len(record) != END_RECORD.size:
+        raise unreadable
+
+    central_directory_size = END_RECORD.unpack(record)[END_RECORD_CENTRAL_DIRECTORY_SIZE_FIELD]
+    return search_start + record_start, central_directory_size
+
+
+def read_zip64_central_directory_size(file: BinaryIO, end_record_offset: int, wheel_name: str) -> int | None:
+    """Read the central directory size a zip archive's zip64 end record states, refusing a layout read two ways.
+
+    The zip64 locator is read right before the end record, and the zip64
+    end record right before the locator. Releases of :mod:`zipfile` differ
+    in where they read the zip64 end record: older ones right before the
+    locator, newer ones at the offset the locator states, with any extensible
+    data. A zip64 layout on which they could disagree is refused: a locator
+    whose offset is not that of the record right before it, or a central
+    directory that does not fit between its stated offset and the end of the
+    file.
+
+    Args:
+        file: Seekable binary file holding the archive.
+        end_record_offset: Offset of the archive's end of central directory record.
+        wheel_name: Filename of the wheel, for error messages.
+
+    Returns:
+        The size, or ``None`` when the archive has no zip64 locator or no
+        zip64 end record before it.
+
+    Raises:
+        WheelCentralDirectoryRefusedError: When the zip64 locator names a disk other than
+            the first or more than one disk, or does not point at the zip64
+            end record right before it, or when the central directory does not
+            fit between its offset and the end of the file.
+    """
+    locator_offset = end_record_offset - ZIP64_LOCATOR.size
+
+    if locator_offset < 0:
+        return None
+
+    file.seek(locator_offset)
+    signature, disk_number, stated_record_offset, disk_count = ZIP64_LOCATOR.unpack(file.read(ZIP64_LOCATOR.size))
+
+    if signature != ZIP64_LOCATOR_SIGNATURE:
+        return None
+
+    if disk_number != 0 or disk_count > 1:
+        raise WheelCentralDirectoryRefusedError(f"Wheel {wheel_name} spans several disks")
+
+    record_offset = locator_offset - ZIP64_END_RECORD.size
+
+    if stated_record_offset != record_offset:
+        raise WheelCentralDirectoryRefusedError(
+            f"Wheel {wheel_name} has a zip64 locator that does not point at the zip64 end record before it"
+        )
+
+    file.seek(record_offset)
+    signature, *_, central_directory_size, central_directory_offset = ZIP64_END_RECORD.unpack(
+        file.read(ZIP64_END_RECORD.size)
+    )
+
+    if signature != ZIP64_END_RECORD_SIGNATURE:
+        return None
+
+    file_size = file.seek(0, io.SEEK_END)
+
+    if central_directory_offset + central_directory_size > file_size:
+        raise WheelCentralDirectoryRefusedError(
+            f"Wheel {wheel_name} has a zip64 central directory past the end of the file"
+        )
+
+    return central_directory_size
 
 
 def find_unreadable_archive_cause(error: Exception) -> BaseException | None:

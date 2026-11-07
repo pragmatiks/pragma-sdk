@@ -7,6 +7,7 @@ next, which is the caller's to tell its user; the one exception is the
 
 from __future__ import annotations
 
+import zipfile
 from typing import Any
 
 
@@ -140,6 +141,18 @@ class WheelExpansionLimitError(Exception):
             The message :func:`build_wheel_too_large_message` builds for the budget.
         """
         return build_wheel_too_large_message(self.limit_bytes)
+
+
+class WheelCentralDirectoryRefusedError(zipfile.BadZipFile):
+    """Raised when a wheel's zip central directory is refused before any member is listed.
+
+    A :class:`zipfile.BadZipFile`, so callers that treat an unreadable wheel
+    as ``wheel_unreadable`` refuse it the same way; the type lets logs name
+    the reason. Raised when the central directory passes
+    :data:`pragma_sdk.wheel.MAXIMUM_CENTRAL_DIRECTORY_BYTES`, the archive spans
+    several disks, or its zip64 layout could be read differently by releases
+    of :mod:`zipfile`.
+    """
 
 
 class RenamedWheelWriteError(Exception):
