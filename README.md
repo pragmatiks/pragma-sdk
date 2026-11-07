@@ -187,9 +187,9 @@ The platform then waits until every child this operation applied is `READY` and 
 - The platform tears owned children down before their owner, so `on_delete` deletes none of them.
 - `ProviderHarness` serves no platform callback yet, so `apply()` and `read()` raise in a method it runs; it records a returned `ChildrenPending()` as `children_pending`.
 
-### Logs and health
+### Logs and vitals
 
-`logs()` and `health()` run on the resource as last applied: `self.config` holds the applied config with every dependency reference resolved, and a Pragmatiks file reference in it reads as it does in `on_create`. Pragmatiks answers a logs or health query of a resource that was never applied with a conflict, without calling the provider.
+`logs()` and `vitals()` run on the resource as last applied: `self.config` holds the applied config with every dependency reference resolved, and a Pragmatiks file reference in it reads as it does in `on_create`. Pragmatiks answers a logs or vitals query of a resource that was never applied with a conflict, without calling the provider.
 
 ### Operation deadline
 

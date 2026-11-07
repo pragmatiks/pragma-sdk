@@ -14,7 +14,7 @@ Core exports for API consumers:
 
 Additional imports available from submodules:
     pragma_sdk.models: Data models (ProviderVersion, ProviderInstallation, etc.)
-    pragma_sdk.types: Type definitions (LifecycleState, HealthStatus, LogEntry)
+    pragma_sdk.types: Type definitions (LifecycleState, Vitals, VitalsStatus, LogEntry)
     pragma_sdk.context: Runtime context utilities
     pragma_sdk.platform: Platform resource types (SecretConfig, etc.)
 """
@@ -98,11 +98,12 @@ from pragma_sdk.types import (
     CopyContext,
     CopyResult,
     CopyStrategy,
-    HealthStatus,
     LifecycleState,
     LogEntry,
     PatchDefinition,
     PatchResult,
+    Vitals,
+    VitalsStatus,
 )
 from pragma_sdk.wheel import read_wheel_declaration
 from pragma_sdk.wheel_rename import rename_provider_wheel
@@ -131,7 +132,6 @@ __all__ = [
     "FieldReference",
     "FileField",
     "FileReference",
-    "HealthStatus",
     "Immutable",
     "ImmutableDependency",
     "ImmutableField",
@@ -179,6 +179,8 @@ __all__ = [
     "TeardownResponse",
     "UpdateProjectRequest",
     "VersionStatus",
+    "Vitals",
+    "VitalsStatus",
     "WheelExpansionLimitError",
     "WheelUploadAddress",
     "WheelUploadError",

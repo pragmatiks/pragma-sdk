@@ -20,7 +20,7 @@ the host answers a callback the platform refused with
 from __future__ import annotations
 
 
-PROTOCOL_VERSION = 6
+PROTOCOL_VERSION = 7
 OFFERED_PROTOCOL_VERSIONS = [PROTOCOL_VERSION]
 
 JSONRPC_VERSION = "2.0"
@@ -33,7 +33,7 @@ APPLY_RESOURCE_METHOD = "apply_resource"
 READ_RESOURCE_METHOD = "read_resource"
 MIGRATE_METHOD = "migrate"
 RESOURCE_LOGS_METHOD = "resource_logs"
-RESOURCE_HEALTH_METHOD = "resource_health"
+RESOURCE_VITALS_METHOD = "resource_vitals"
 CANCEL_METHOD = "cancel"
 HEARTBEAT_METHOD = "heartbeat"
 

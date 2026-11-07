@@ -48,10 +48,20 @@ class LogEntry(BaseModel):
     metadata: dict[str, Any] | None = None
 
 
-class HealthStatus(BaseModel):
-    """Health status of a resource."""
+VitalsStatus = Literal["nominal", "impaired", "down"]
 
-    status: Literal["healthy", "unhealthy", "degraded"]
+
+class Vitals(BaseModel):
+    """Live condition a provider reads off the object a resource manages.
+
+    Attributes:
+        status: ``nominal`` when the object works as configured, ``impaired``
+            when it works with reduced capacity, ``down`` when it does not work.
+        message: Human-readable explanation of the status.
+        details: Provider-specific values, such as replica readiness or counters.
+    """
+
+    status: VitalsStatus
     message: str | None = None
     details: dict[str, Any] | None = None
 

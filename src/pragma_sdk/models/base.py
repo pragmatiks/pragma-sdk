@@ -30,11 +30,11 @@ from pragma_sdk.models.references import (
 from pragma_sdk.types import (
     CopyContext,
     CopyResult,
-    HealthStatus,
     LifecycleState,
     LogEntry,
     PatchDefinition,
     PatchResult,
+    Vitals,
 )
 
 
@@ -1025,13 +1025,13 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         raise NotImplementedError("Subclass must implement logs()")
         yield
 
-    async def health(self) -> HealthStatus:
-        """Override to provide health status for this resource.
+    async def vitals(self) -> Vitals:
+        """Override to report the live condition of the object this resource manages.
 
         Returns:
-            Health status. Default implementation returns healthy.
+            The resource's vitals. Default implementation returns ``nominal``.
         """
-        return HealthStatus(status="healthy")
+        return Vitals(status="nominal")
 
     async def apply(self) -> None:
         """Apply this resource through the platform, owned by the resource whose lifecycle method runs.
