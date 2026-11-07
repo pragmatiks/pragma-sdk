@@ -19,12 +19,6 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-[project.optional-dependencies]
-# gcp = ["pragmatiks-gcp-provider"]  # future
-# aws = ["pragmatiks-aws-provider"]  # future
-# azure = ["pragmatiks-azure-provider"]  # future
-# all = ["pragmatiks-gcp-provider"]  # future
-
 [dependency-groups]
 dev = [
     "ruff>=0.17.1",
