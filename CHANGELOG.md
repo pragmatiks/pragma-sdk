@@ -1,3 +1,14 @@
+## v27.0.0 (2026-11-07)
+
+### BREAKING CHANGE
+
+- PROTOCOL_VERSION is 6; a host speaking protocol 5 refuses
+providers built on this SDK, and ResourceQueryParams requires resolved_files.
+
+### Feat
+
+- logs and health queries carry signed file URLs (protocol 6, PRA-572)
+
 ## v26.0.1 (2026-11-07)
 
 ### Fix
