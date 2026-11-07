@@ -1,3 +1,9 @@
+## v25.2.0 (2026-11-07)
+
+### Feat
+
+- **models**: report whether an installation's operation is running
+
 ## v25.1.1 (2026-11-07)
 
 ### Fix
