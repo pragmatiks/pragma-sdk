@@ -20,7 +20,7 @@ from pragma_sdk.protocol.frames import (
     ResourceQueryParams,
 )
 from pragma_sdk.provider.outputs import normalize_outputs, refuse_children_pending
-from pragma_sdk.types import EventType, HealthStatus, LogEntry
+from pragma_sdk.types import EventType, LogEntry, Vitals
 from pragma_sdk.worker.resource_builder import ResourceBuilder
 
 
@@ -228,14 +228,14 @@ class RequestHandlers:
 
         return [entry async for entry in resource.logs(since=params.since, tail=params.tail)]
 
-    async def run_resource_health(self, params: ResourceQueryParams) -> HealthStatus:
-        """Read a resource's health.
+    async def run_resource_vitals(self, params: ResourceQueryParams) -> Vitals:
+        """Read a resource's vitals.
 
         Args:
             params: The query parameters.
 
         Returns:
-            The resource's health status.
+            The resource's vitals.
 
         Raises:
             ValueError: If the provider defines no such resource type, or its
@@ -243,14 +243,14 @@ class RequestHandlers:
             ValidationError: If the config does not match the resource's Config class.
             MissingResolvedFileError: If the config holds a Pragmatiks file
                 reference the query carries no signed URL for.
-                Any exception the resource's ``health`` raises propagates unchanged.
+                Any exception the resource's ``vitals`` raises propagates unchanged.
         """  # noqa: DOC502
         resource = self.build_queried_resource(params)
 
-        return await resource.health()
+        return await resource.vitals()
 
     def build_queried_resource(self, params: ResourceQueryParams) -> Resource:
-        """Build the resource a logs or health query targets.
+        """Build the resource a logs or vitals query targets.
 
         Args:
             params: The query parameters.

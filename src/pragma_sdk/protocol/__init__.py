@@ -31,8 +31,8 @@ from pragma_sdk.protocol.constants import (
     OFFERED_PROTOCOL_VERSIONS,
     PROTOCOL_VERSION,
     READ_RESOURCE_METHOD,
-    RESOURCE_HEALTH_METHOD,
     RESOURCE_LOGS_METHOD,
+    RESOURCE_VITALS_METHOD,
     SHUTDOWN_METHOD,
     UNSUPPORTED_PROTOCOL_CODE,
 )
@@ -72,7 +72,7 @@ from pragma_sdk.protocol.introspection import (
     ResourceTypeSchema,
 )
 from pragma_sdk.protocol.pending import PendingResponses
-from pragma_sdk.types import EventType, HealthStatus, LifecycleState, LogEntry
+from pragma_sdk.types import EventType, LifecycleState, LogEntry, Vitals, VitalsStatus
 
 
 __all__ = [
@@ -95,8 +95,8 @@ __all__ = [
     "OFFERED_PROTOCOL_VERSIONS",
     "PROTOCOL_VERSION",
     "READ_RESOURCE_METHOD",
-    "RESOURCE_HEALTH_METHOD",
     "RESOURCE_LOGS_METHOD",
+    "RESOURCE_VITALS_METHOD",
     "SHUTDOWN_METHOD",
     "UNSUPPORTED_PROTOCOL_CODE",
     "ApplyResourceParams",
@@ -116,7 +116,6 @@ __all__ = [
     "FrameTooLargeError",
     "HandshakeParams",
     "HandshakeResult",
-    "HealthStatus",
     "IntrospectionFailure",
     "IntrospectionReport",
     "IntrospectionSuccess",
@@ -140,4 +139,6 @@ __all__ = [
     "ResourceTypeSchema",
     "SuccessFrame",
     "UnsupportedProtocolData",
+    "Vitals",
+    "VitalsStatus",
 ]
