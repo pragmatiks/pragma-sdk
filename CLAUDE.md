@@ -24,7 +24,8 @@ pragma-sdk/
     │   └── executor.py    # Default executor recording each request's work, and the request scope
     ├── introspection/     # `python -m pragma_sdk.introspection --output <path>`: writes the report
     ├── provider_entry_point.py  # The `pragma.provider` entry point: group, package parsing, `entry_points.txt` parsing, `ProviderEntryPoint` lookup
-    ├── wheel.py           # Bounded wheel archive reads (central directory, expansion) and the publish declaration read
+    ├── wheel.py           # Bounded wheel archive open and member reads, and the publish declaration read
+    ├── wheel_central_directory.py  # Central directory bound from the zip end records, zip64 layouts refused
     ├── wheel_check.py     # Whole-wheel refusal read (expansion pass, then `.dist-info`) against a declaration
     ├── wheel_names.py     # Distribution, filename and `.dist-info` naming contract
     ├── wheel_rename.py    # Renaming a wheel to its organization's distribution name
@@ -33,7 +34,7 @@ pragma-sdk/
     └── blocking.py        # Cancel-shielded worker-thread runner for the async client
 ```
 
-`wheel.py`, `wheel_check.py`, `wheel_names.py`, `provider_entry_point.py` and the `WheelExpansionLimitError`, `WheelCentralDirectoryRefusedError` and `build_wheel_too_large_message` parts of `exceptions.py` are the wheel contract the hub's admission imports: changing them changes what the platform admits. `open_wheel_archive` refuses a central directory past `MAXIMUM_CENTRAL_DIRECTORY_BYTES` (1 MiB), or a zip64 layout `zipfile` releases could read differently, with `WheelCentralDirectoryRefusedError` (a `BadZipFile`) before any member is listed.
+`wheel.py`, `wheel_central_directory.py`, `wheel_check.py`, `wheel_names.py`, `provider_entry_point.py` and the `WheelExpansionLimitError`, `WheelCentralDirectoryRefusedError` and `build_wheel_too_large_message` parts of `exceptions.py` are the wheel contract the hub's admission imports: changing them changes what the platform admits. `open_wheel_archive` refuses, through `wheel_central_directory.require_bounded_central_directory`, a central directory past `MAXIMUM_CENTRAL_DIRECTORY_BYTES` (1 MiB), or a zip64 layout `zipfile` releases could read differently, with `WheelCentralDirectoryRefusedError` (a `BadZipFile`) before any member is listed.
 
 `protocol/` imports nothing from the SDK but `types`; the Pragmatiks host speaks only it. Changing a frame shape, the introspection report, or the worker's method set is a new `PROTOCOL_VERSION`.
 
