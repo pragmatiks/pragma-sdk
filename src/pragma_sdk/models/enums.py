@@ -66,6 +66,7 @@ class AdmissionFailureCategory(StrEnum):
     DIGEST_MISMATCH = "digest_mismatch"
     PYTHON_UNAVAILABLE = "python_unavailable"
     DEPENDENCY_RESOLUTION_FAILED = "dependency_resolution_failed"
+    DEPENDENCY_BUILD_FAILED = "dependency_build_failed"
     UNDECLARED_EMBEDDED_PROVIDER = "undeclared_embedded_provider"
     UNREGISTERED_EMBEDDED_PROVIDER = "unregistered_embedded_provider"
     EMBEDDED_PROVIDER_NOT_DEPENDED_ON = "embedded_provider_not_depended_on"
