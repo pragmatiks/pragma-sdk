@@ -1,3 +1,9 @@
+## v25.1.1 (2026-11-07)
+
+### Fix
+
+- answer unknown worker methods and refuse duplicate resource type names (PRA-550)
+
 ## v25.1.0 (2026-11-06)
 
 ### Feat
