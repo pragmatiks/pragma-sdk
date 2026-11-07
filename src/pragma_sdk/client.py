@@ -25,6 +25,7 @@ from pragma_sdk.models import (
     LifecycleEventFrame,
     MemberRole,
     Organization,
+    OrganizationBootstrapStatus,
     OrganizationMember,
     PaginatedResponse,
     Provider,
@@ -173,6 +174,15 @@ class BaseClient:
             resolved_token = auth_token if isinstance(auth_token, str) else None
 
         self._auth = BearerAuth(resolved_token) if resolved_token else None
+
+    @property
+    def auth_token(self) -> str | None:
+        """Bearer token the client authenticates with.
+
+        Returns:
+            The token, or None when the client holds no credentials.
+        """
+        return self._auth.token if self._auth else None
 
 
 class PragmaClient(BaseClient):
@@ -863,6 +873,21 @@ class PragmaClient(BaseClient):
         """  # noqa: DOC502
         response = self._request("GET", "/organizations/me")
         return Organization.model_validate(response)
+
+    def get_current_organization_status(self) -> OrganizationBootstrapStatus:
+        """Get the bootstrap status of the caller's organization.
+
+        Safe to poll while the organization is still bootstrapping.
+
+        Returns:
+            The organization's public bootstrap status.
+
+        Raises:
+            httpx.HTTPStatusError: If the caller is unauthenticated or the
+                request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", "/organizations/me/status")
+        return OrganizationBootstrapStatus.model_validate(response)
 
     def cleanup_organization(self, organization_id: str) -> None:
         """Trigger cleanup for an organization.
@@ -1610,6 +1635,21 @@ class AsyncPragmaClient(BaseClient):
         """  # noqa: DOC502
         response = await self._request("GET", "/organizations/me")
         return Organization.model_validate(response)
+
+    async def get_current_organization_status(self) -> OrganizationBootstrapStatus:
+        """Get the bootstrap status of the caller's organization.
+
+        Safe to poll while the organization is still bootstrapping.
+
+        Returns:
+            The organization's public bootstrap status.
+
+        Raises:
+            httpx.HTTPStatusError: If the caller is unauthenticated or the
+                request fails.
+        """  # noqa: DOC502
+        response = await self._request("GET", "/organizations/me/status")
+        return OrganizationBootstrapStatus.model_validate(response)
 
     async def cleanup_organization(self, organization_id: str) -> None:
         """Trigger cleanup for an organization.

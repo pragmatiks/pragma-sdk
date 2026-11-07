@@ -178,3 +178,17 @@ class OrganizationStatus(StrEnum):
     BOOTSTRAP_FAILED = "bootstrap_failed"
     DEACTIVATING = "deactivating"
     DELETED = "deleted"
+
+
+class OrganizationBootstrapState(StrEnum):
+    """Public bootstrap state of the caller's organization.
+
+    The API collapses the organization lifecycle into three states:
+    ``BOOTSTRAPPING`` while setup runs (keep polling), ``READY`` once the
+    organization is usable, and ``FAILED`` for a terminal state that does
+    not recover on its own.
+    """
+
+    BOOTSTRAPPING = "bootstrapping"
+    READY = "ready"
+    FAILED = "failed"
