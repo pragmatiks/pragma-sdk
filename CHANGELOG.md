@@ -1,3 +1,9 @@
+## v26.0.1 (2026-11-07)
+
+### Fix
+
+- refuse an upload address whose port is outside 1 to 65535
+
 ## v26.0.0 (2026-11-07)
 
 ### BREAKING CHANGE
