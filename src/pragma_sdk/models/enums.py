@@ -151,6 +151,17 @@ class ProviderScope(StrEnum):
     TENANT = "tenant"
 
 
+class MemberRole(StrEnum):
+    """Role a member holds in a Pragmatiks organization.
+
+    An admin manages the organization: its members, its API keys and its
+    deletion. A member uses the organization's projects and resources.
+    """
+
+    ADMIN = "admin"
+    MEMBER = "member"
+
+
 class OrganizationStatus(StrEnum):
     """Lifecycle status of an organization.
 
