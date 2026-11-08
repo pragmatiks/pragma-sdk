@@ -1,3 +1,9 @@
+## v27.4.0 (2026-11-08)
+
+### Feat
+
+- share the recovery guidance failure reasons end with (PRA-896)
+
 ## v27.3.0 (2026-11-07)
 
 ### Feat
