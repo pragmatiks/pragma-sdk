@@ -94,13 +94,21 @@ class ProviderResponse(BaseModel):
 
 
 class ResourceSchema(BaseModel):
-    """Metadata about a registered resource type."""
+    """Metadata about a registered resource type.
+
+    Attributes:
+        serving: Whether Pragmatiks would accept an apply of this type now.
+            False while its provider has never served a version, after its
+            installation failed, while it is being uninstalled, or while it
+            moves its resources to a new version.
+    """
 
     provider: str
     resource: str
     config_schema: dict[str, Any] | None = None
     outputs_schema: dict[str, Any] = PydanticField(default_factory=dict)
     description: str | None = None
+    serving: bool
     tags: list[str] | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
