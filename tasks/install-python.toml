@@ -11,6 +11,6 @@ sources = [
 outputs = [".venv/.install-complete"]
 run = [
   "rm -f .venv/.install-complete",
-  "uv sync --all-groups",
+  "uv sync --all-groups --locked",
   "touch .venv/.install-complete",
 ]
