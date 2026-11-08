@@ -4,7 +4,10 @@ A request runs inside :func:`request_scope`. Work its task, or any task it
 spawns, submits to the event loop's default executor while the scope is
 active, through ``asyncio.to_thread``, ``loop.run_in_executor(None, ...)`` or
 the loop's own ``getaddrinfo``, is recorded under the request's correlation
-id until it ends. Work submitted outside any scope, and threads, processes or
+id until it ends. Every piece of work runs in a copy of the context it was
+submitted from, as ``asyncio.to_thread`` does, so context variables a handler
+sets are visible to it whether it was submitted through ``to_thread`` or
+``run_in_executor``. Work submitted outside any scope, and threads, processes or
 executors a handler starts itself, are not recorded.
 """
 
@@ -15,7 +18,7 @@ import threading
 from collections.abc import Callable, Generator
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
-from contextvars import ContextVar
+from contextvars import ContextVar, copy_context
 from functools import partial
 from typing import Any
 
@@ -65,7 +68,7 @@ class RequestScopedExecutor(ThreadPoolExecutor):
         self.recorded_futures: dict[int, set[Future[Any]]] = {}
 
     def submit[**P, T](self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> Future[T]:
-        """Schedule a callable on the pool, recording it under the active request's correlation id.
+        """Schedule a callable on the pool in a copy of the caller's context, recording it under the active request.
 
         Args:
             fn: Callable to run in a pool thread.
@@ -79,7 +82,8 @@ class RequestScopedExecutor(ThreadPoolExecutor):
         Raises:
             RuntimeError: If the pool is shut down, as ``ThreadPoolExecutor`` raises.
         """  # noqa: DOC502
-        future = super().submit(fn, *args, **kwargs)
+        context = copy_context()
+        future: Future[T] = super().submit(partial(context.run, fn, *args, **kwargs))
         correlation_id = request_correlation_id.get()
 
         if correlation_id is None:
