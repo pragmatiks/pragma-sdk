@@ -20,22 +20,6 @@ from pragma_sdk.protocol.frames import CHILDREN_PENDING_WITH_OUTPUTS_MESSAGE
 from pragma_sdk.types import EventType, LifecycleState
 
 
-class ProviderDeleteResult(BaseModel):
-    """User-facing result of a provider delete operation.
-
-    Minimal representation without internal infrastructure details.
-
-    Attributes:
-        provider_id: Provider that was deleted.
-        deployment_deleted: Whether the running deployment was removed.
-        resources_deleted: Number of resources deleted (if cascade was used).
-    """
-
-    provider_id: str
-    deployment_deleted: bool = False
-    resources_deleted: int = 0
-
-
 class ProviderResponse(BaseModel):
     """Provider response reporting the outcome of a lifecycle event.
 
