@@ -29,6 +29,7 @@ from pragma_sdk.models.enums import (
     VersionStatus,
     WheelUploadOutcome,
 )
+from pragma_sdk.models.failure import RECOVERY_GUIDANCE
 from pragma_sdk.models.file import FileReference
 from pragma_sdk.models.identity import InvalidResourceIdentityError, ResourceIdentity
 from pragma_sdk.models.project import (
@@ -69,6 +70,7 @@ from pragma_sdk.types import EventType
 
 
 __all__ = [
+    "RECOVERY_GUIDANCE",
     "SETTLED_VERSION_STATUSES",
     "AdmissionFailureCategory",
     "ChildrenPending",

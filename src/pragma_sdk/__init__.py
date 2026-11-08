@@ -37,6 +37,7 @@ from pragma_sdk.exceptions import (
     WheelUploadExpiredError,
 )
 from pragma_sdk.models import (
+    RECOVERY_GUIDANCE,
     SETTLED_VERSION_STATUSES,
     AdmissionFailureCategory,
     ChildrenPending,
@@ -114,6 +115,7 @@ from pragma_sdk.wheel_rename import rename_provider_wheel
 
 __all__ = [
     "MAXIMUM_OPERATION_DEADLINE_SECONDS",
+    "RECOVERY_GUIDANCE",
     "SETTLED_VERSION_STATUSES",
     "AdmissionFailureCategory",
     "AlreadyExistsError",
