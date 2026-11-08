@@ -88,6 +88,8 @@ Use mise tasks (`mise tasks` lists them all):
 |---------|---------|
 | `mise run install` | Install the locked toolchain, dependencies and git hooks |
 | `mise run lock:toolchain` | Re-lock the toolchain after editing `mise.toml` (needs mise at the `min_version` in `mise.toml`) |
+| `mise run check:mise-pins` | Fail when a `jdx/mise-action` step's `version:` or `sha256:` differs from `min_version` and its runner's mise binary checksum |
+| `mise run check:toolchain-scripts` | Fail when a shared toolchain script under `scripts/tasks/` differs from the public repositories' copies (same-named branch, else `main`) |
 | `mise run format` | Format with ruff |
 | `mise run check` | Lint + type check |
 
