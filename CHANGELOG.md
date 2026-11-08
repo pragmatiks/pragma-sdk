@@ -1,3 +1,9 @@
+## v27.4.1 (2026-11-08)
+
+### Fix
+
+- **worker**: run default-executor work in a copy of the submitting context (PRA-937)
+
 ## v27.4.0 (2026-11-08)
 
 ### Feat
