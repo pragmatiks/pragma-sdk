@@ -152,6 +152,17 @@ class ProviderScope(StrEnum):
     TENANT = "tenant"
 
 
+class MemberRole(StrEnum):
+    """Role a member holds in a Pragmatiks organization.
+
+    An admin manages the organization: its members, its API keys and its
+    deletion. A member uses the organization's projects and resources.
+    """
+
+    ADMIN = "admin"
+    MEMBER = "member"
+
+
 class OrganizationStatus(StrEnum):
     """Lifecycle status of an organization.
 
@@ -167,3 +178,17 @@ class OrganizationStatus(StrEnum):
     BOOTSTRAP_FAILED = "bootstrap_failed"
     DEACTIVATING = "deactivating"
     DELETED = "deleted"
+
+
+class OrganizationBootstrapState(StrEnum):
+    """Public bootstrap state of the caller's organization.
+
+    The API collapses the organization lifecycle into three states:
+    ``BOOTSTRAPPING`` while setup runs (keep polling), ``READY`` once the
+    organization is usable, and ``FAILED`` for a terminal state that does
+    not recover on its own.
+    """
+
+    BOOTSTRAPPING = "bootstrapping"
+    READY = "ready"
+    FAILED = "failed"

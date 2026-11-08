@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from pydantic import Field as PydanticField
 
 from pragma_sdk.models.enums import (
+    MemberRole,
+    OrganizationBootstrapState,
     OrganizationStatus,
     ProviderFailureCode,
     ResponseStatus,
@@ -16,22 +18,6 @@ from pragma_sdk.models.enums import (
 )
 from pragma_sdk.protocol.frames import CHILDREN_PENDING_WITH_OUTPUTS_MESSAGE
 from pragma_sdk.types import EventType, LifecycleState
-
-
-class ProviderDeleteResult(BaseModel):
-    """User-facing result of a provider delete operation.
-
-    Minimal representation without internal infrastructure details.
-
-    Attributes:
-        provider_id: Provider that was deleted.
-        deployment_deleted: Whether the running deployment was removed.
-        resources_deleted: Number of resources deleted (if cascade was used).
-    """
-
-    provider_id: str
-    deployment_deleted: bool = False
-    resources_deleted: int = 0
 
 
 class ProviderResponse(BaseModel):
@@ -201,6 +187,31 @@ class Organization(BaseModel):
     status: OrganizationStatus
     created_at: datetime
     updated_at: datetime
+
+
+class OrganizationBootstrapStatus(BaseModel):
+    """Bootstrap status of the caller's organization.
+
+    Attributes:
+        status: Public bootstrap state of the organization.
+    """
+
+    status: OrganizationBootstrapState
+
+
+class OrganizationMember(BaseModel):
+    """One member of the caller's organization.
+
+    Attributes:
+        user_id: Pragmatiks user ID of the member.
+        identifier: Email address or username the member signs in to
+            Pragmatiks with, or None when none is shared.
+        role: Role the member holds in the organization.
+    """
+
+    user_id: str
+    identifier: str | None = None
+    role: MemberRole
 
 
 class UserInfo(BaseModel):

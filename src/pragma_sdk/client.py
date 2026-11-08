@@ -23,7 +23,10 @@ from pragma_sdk.exceptions import (
 from pragma_sdk.models import (
     DeclaredProviderVersion,
     LifecycleEventFrame,
+    MemberRole,
     Organization,
+    OrganizationBootstrapStatus,
+    OrganizationMember,
     PaginatedResponse,
     Provider,
     ProviderInstallation,
@@ -171,6 +174,15 @@ class BaseClient:
             resolved_token = auth_token if isinstance(auth_token, str) else None
 
         self._auth = BearerAuth(resolved_token) if resolved_token else None
+
+    @property
+    def auth_token(self) -> str | None:
+        """Bearer token the client authenticates with.
+
+        Returns:
+            The token, or None when the client holds no credentials.
+        """
+        return self._auth.token if self._auth else None
 
 
 class PragmaClient(BaseClient):
@@ -862,6 +874,21 @@ class PragmaClient(BaseClient):
         response = self._request("GET", "/organizations/me")
         return Organization.model_validate(response)
 
+    def get_current_organization_status(self) -> OrganizationBootstrapStatus:
+        """Get the bootstrap status of the caller's organization.
+
+        Safe to poll while the organization is still bootstrapping.
+
+        Returns:
+            The organization's public bootstrap status.
+
+        Raises:
+            httpx.HTTPStatusError: If the caller is unauthenticated or the
+                request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", "/organizations/me/status")
+        return OrganizationBootstrapStatus.model_validate(response)
+
     def cleanup_organization(self, organization_id: str) -> None:
         """Trigger cleanup for an organization.
 
@@ -874,6 +901,80 @@ class PragmaClient(BaseClient):
             httpx.HTTPStatusError: If organization not found or cleanup fails.
         """  # noqa: DOC502
         self._request("POST", f"/organizations/{organization_id}/cleanup")
+
+    def list_organization_members(self) -> list[OrganizationMember]:
+        """List the members of the caller's organization.
+
+        Only a signed-in user can list members; an API key is refused.
+
+        Returns:
+            Every member of the caller's organization with its role.
+
+        Raises:
+            httpx.HTTPStatusError: 403 for an API key, 503 when membership
+                details are temporarily unavailable (try again later), or
+                any other failed request.
+        """  # noqa: DOC502
+        response = self._request("GET", "/organizations/me/members")
+        return [OrganizationMember.model_validate(item) for item in response]
+
+    def update_organization_member_role(self, user_id: str, role: MemberRole) -> OrganizationMember:
+        """Update the role of a member of the caller's organization.
+
+        Only an organization admin signed in as a user can update roles.
+
+        Args:
+            user_id: Pragmatiks user ID of the member.
+            role: Role the member holds once the change is applied.
+
+        Returns:
+            The member with its updated role.
+
+        Raises:
+            httpx.HTTPStatusError: 403 for an API key or a caller who is not
+                an admin, 404 when no such member belongs to the
+                organization, 409 when the change would leave the
+                organization without an admin, 503 when membership details
+                are temporarily unavailable, or any other failed request.
+        """  # noqa: DOC502
+        response = self._request(
+            "PATCH",
+            f"/organizations/me/members/{quote(user_id, safe='')}",
+            json_data={"role": role.value},
+        )
+        return OrganizationMember.model_validate(response)
+
+    def delete_organization_member(self, user_id: str) -> None:
+        """Delete a membership of the caller's organization.
+
+        An admin can delete any membership; any member can delete their own,
+        which leaves the organization.
+
+        Args:
+            user_id: Pragmatiks user ID of the member.
+
+        Raises:
+            httpx.HTTPStatusError: 403 for an API key or a non-admin
+                deleting another member, 404 when no such member belongs to
+                the organization, 409 when the deletion would leave the
+                organization without an admin, 503 when membership details
+                are temporarily unavailable, or any other failed request.
+        """  # noqa: DOC502
+        self._request("DELETE", f"/organizations/me/members/{quote(user_id, safe='')}")
+
+    def delete_account(self) -> None:
+        """Delete the signed-in user's Pragmatiks account and every membership it holds.
+
+        Only a signed-in user can delete their account; the account's
+        sessions end with it.
+
+        Raises:
+            httpx.HTTPStatusError: 403 for an API key or a machine token,
+                409 when the account is the last admin of an organization,
+                503 when membership details are temporarily unavailable, or
+                any other failed request.
+        """  # noqa: DOC502
+        self._request("DELETE", "/accounts/me")
 
 
 class AsyncPragmaClient(BaseClient):
@@ -1535,6 +1636,21 @@ class AsyncPragmaClient(BaseClient):
         response = await self._request("GET", "/organizations/me")
         return Organization.model_validate(response)
 
+    async def get_current_organization_status(self) -> OrganizationBootstrapStatus:
+        """Get the bootstrap status of the caller's organization.
+
+        Safe to poll while the organization is still bootstrapping.
+
+        Returns:
+            The organization's public bootstrap status.
+
+        Raises:
+            httpx.HTTPStatusError: If the caller is unauthenticated or the
+                request fails.
+        """  # noqa: DOC502
+        response = await self._request("GET", "/organizations/me/status")
+        return OrganizationBootstrapStatus.model_validate(response)
+
     async def cleanup_organization(self, organization_id: str) -> None:
         """Trigger cleanup for an organization.
 
@@ -1547,6 +1663,80 @@ class AsyncPragmaClient(BaseClient):
             httpx.HTTPStatusError: If organization not found or cleanup fails.
         """  # noqa: DOC502
         await self._request("POST", f"/organizations/{organization_id}/cleanup")
+
+    async def list_organization_members(self) -> list[OrganizationMember]:
+        """List the members of the caller's organization.
+
+        Only a signed-in user can list members; an API key is refused.
+
+        Returns:
+            Every member of the caller's organization with its role.
+
+        Raises:
+            httpx.HTTPStatusError: 403 for an API key, 503 when membership
+                details are temporarily unavailable (try again later), or
+                any other failed request.
+        """  # noqa: DOC502
+        response = await self._request("GET", "/organizations/me/members")
+        return [OrganizationMember.model_validate(item) for item in response]
+
+    async def update_organization_member_role(self, user_id: str, role: MemberRole) -> OrganizationMember:
+        """Update the role of a member of the caller's organization.
+
+        Only an organization admin signed in as a user can update roles.
+
+        Args:
+            user_id: Pragmatiks user ID of the member.
+            role: Role the member holds once the change is applied.
+
+        Returns:
+            The member with its updated role.
+
+        Raises:
+            httpx.HTTPStatusError: 403 for an API key or a caller who is not
+                an admin, 404 when no such member belongs to the
+                organization, 409 when the change would leave the
+                organization without an admin, 503 when membership details
+                are temporarily unavailable, or any other failed request.
+        """  # noqa: DOC502
+        response = await self._request(
+            "PATCH",
+            f"/organizations/me/members/{quote(user_id, safe='')}",
+            json_data={"role": role.value},
+        )
+        return OrganizationMember.model_validate(response)
+
+    async def delete_organization_member(self, user_id: str) -> None:
+        """Delete a membership of the caller's organization.
+
+        An admin can delete any membership; any member can delete their own,
+        which leaves the organization.
+
+        Args:
+            user_id: Pragmatiks user ID of the member.
+
+        Raises:
+            httpx.HTTPStatusError: 403 for an API key or a non-admin
+                deleting another member, 404 when no such member belongs to
+                the organization, 409 when the deletion would leave the
+                organization without an admin, 503 when membership details
+                are temporarily unavailable, or any other failed request.
+        """  # noqa: DOC502
+        await self._request("DELETE", f"/organizations/me/members/{quote(user_id, safe='')}")
+
+    async def delete_account(self) -> None:
+        """Delete the signed-in user's Pragmatiks account and every membership it holds.
+
+        Only a signed-in user can delete their account; the account's
+        sessions end with it.
+
+        Raises:
+            httpx.HTTPStatusError: 403 for an API key or a machine token,
+                409 when the account is the last admin of an organization,
+                503 when membership details are temporarily unavailable, or
+                any other failed request.
+        """  # noqa: DOC502
+        await self._request("DELETE", "/accounts/me")
 
     async def stream_lifecycle_events(self, *, timeout: float | None = None) -> AsyncGenerator[LifecycleEventFrame]:
         """Stream resource lifecycle transitions as they happen.
