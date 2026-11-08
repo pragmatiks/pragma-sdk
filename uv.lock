@@ -90,7 +90,7 @@ wheels = [
 
 [[package]]
 name = "pragmatiks-sdk"
-version = "27.4.1"
+version = "27.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },

@@ -1,3 +1,9 @@
+## v27.5.0 (2026-11-08)
+
+### Feat
+
+- carry a resource schema's serving flag (PRA-908)
+
 ## v27.4.1 (2026-11-08)
 
 ### Fix
