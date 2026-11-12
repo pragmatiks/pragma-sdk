@@ -1,3 +1,9 @@
+## v29.2.0 (2026-11-12)
+
+### Feat
+
+- filter list_resources by health (PRA-860)
+
 ## v29.1.0 (2026-11-12)
 
 ### Feat
