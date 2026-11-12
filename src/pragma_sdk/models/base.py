@@ -26,6 +26,7 @@ from pragma_sdk.models.references import (
     Immutable,
     ResourceReference,
     Sensitive,
+    require_resolved,
 )
 from pragma_sdk.types import (
     CopyContext,
@@ -1032,6 +1033,36 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
             Health status. Default implementation returns healthy.
         """
         return HealthStatus(status="healthy")
+
+    def resolved[ValueT](self, value: ValueT | FieldReference) -> ValueT:
+        """Return a config value of this resource typed as resolved, refusing an unresolved field reference.
+
+        Use it in ``on_create``, ``on_update`` and ``on_delete`` to read a
+        ``Field[T]`` config value as ``T`` without a ``cast``: the platform
+        resolves every field reference before it runs them. Only the value
+        itself is checked, so a ``list[Field[str]]`` keeps its element type.
+        Never use it on the config of a child returned by :meth:`read`, which
+        holds references unresolved. Unlike ``Dependency.resolve``, it reads
+        no other resource.
+
+        Args:
+            value: A config value declared as ``Field[T]`` or a variant, such
+                as ``self.config.region``.
+
+        Returns:
+            The value, typed as its resolved type.
+
+        Raises:
+            UnresolvedReferenceError: If the value is still a
+                ``FieldReference``.
+
+        Example:
+            ```python
+            async def on_create(self) -> BucketOutputs:
+                region: str = self.resolved(self.config.region)
+            ```
+        """  # noqa: DOC502
+        return require_resolved(value)
 
     async def apply(self) -> None:
         """Apply this resource through the platform, owned by the resource whose lifecycle method runs.

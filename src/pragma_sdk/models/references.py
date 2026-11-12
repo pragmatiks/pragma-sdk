@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from pydantic import BaseModel, PrivateAttr, field_validator
 from pydantic import Field as PydanticField
 
+from pragma_sdk.exceptions import UnresolvedReferenceError
 from pragma_sdk.models.file import FileReference
 from pragma_sdk.models.identity import ResourceIdentity, _validate_segment
 
@@ -69,6 +70,34 @@ class FieldReference(ResourceReference):
     """Reference to a specific output field of another resource."""
 
     field: str
+
+
+def require_resolved[ValueT](value: ValueT | FieldReference) -> ValueT:
+    """Return a config value as its resolved type, refusing one that is still a field reference.
+
+    Only the value itself is checked: a container such as ``list[Field[str]]``
+    passes through with its elements' declared type. ``Dependency`` and
+    ``ImmutableDependency`` values are not field references and pass through
+    unchanged.
+
+    Args:
+        value: A config value declared as ``Field[T]`` or a variant.
+
+    Returns:
+        The value, typed as its resolved type.
+
+    Raises:
+        UnresolvedReferenceError: If the value is a ``FieldReference``; the
+            message names its resource identity and field, never a value.
+    """
+    if isinstance(value, FieldReference):
+        raise UnresolvedReferenceError(
+            f"Field {value.field!r} of resource {value.provider}/{value.resource}/{value.name} is an unresolved "
+            "reference. Read resolved config values only in on_create, on_update or on_delete, never in a "
+            "child's config returned by read()."
+        )
+
+    return value
 
 
 class Dependency[ResourceT: "Resource"](_ResourceIdentityFields):
