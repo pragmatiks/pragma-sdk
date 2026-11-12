@@ -23,6 +23,16 @@ backend = "pypi:commitizen"
 specifiers = ["4.19.2"]
 uv = { path = ".mise/locks/pypi-commitizen/4.19.2", digest = "sha256:7f63ce18cfeb82f6d8a73a46e97fa25b399fcd39c5b3e42c72b78e359ff3d445" }
 
+[[tools."pypi:pragmatiks-cli"]]
+version = "17.7.1"
+backend = "pypi:pragmatiks-cli"
+specifiers = ["17.7.1"]
+uv = { path = ".mise/locks/pypi-pragmatiks-cli/17.7.1~3c0babf5", digest = "sha256:fa76c44748053477142ff84464f6609dc05fb234edb60fd9c992987318484957" }
+
+[tools."pypi:pragmatiks-cli".options]
+expose = '["semgrep==1.185.0"]'
+with = '["pragmatiks-lint[check]==0.11.1"]'
+
 [[tools.python]]
 version = "3.13.7"
 backend = "core:python"
