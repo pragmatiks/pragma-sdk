@@ -49,7 +49,7 @@ from pragma_sdk.models.project import (
     Project,
     UpdateProjectRequest,
 )
-from pragma_sdk.types import LifecycleState
+from pragma_sdk.types import LifecycleState, Vitals
 from pragma_sdk.wheel import read_wheel_declaration
 from pragma_sdk.wheel_publish import (
     build_version_without_upload_address,
@@ -1939,6 +1939,28 @@ class ProjectResources:
         response = self._client._request("GET", build_scoped_path(self._project_id, "history"), params=params)
         return [ResourceHistoryEvent.model_validate(item) for item in response]
 
+    def get_resource_vitals(self, provider: str, resource: str, name: str) -> Vitals:
+        """Fetch the vitals a resource's provider reports for it in this project.
+
+        The provider reads them live from the object on each call, so the
+        answer reflects the object at the moment of the call.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+
+        Returns:
+            Vitals the provider reported for the resource.
+
+        Raises:
+            httpx.HTTPStatusError: If the resource is not found or not applied yet,
+                the provider cannot report its vitals, or the request fails.
+        """  # noqa: DOC502
+        params = {"provider": provider, "resource": resource, "name": name}
+        response = self._client._request("GET", build_scoped_path(self._project_id, "vitals"), params=params)
+        return Vitals.model_validate(response)
+
     def apply_resource[ResourceT: Resource](
         self,
         resource: ResourceT,
@@ -2327,6 +2349,28 @@ class AsyncProjectResources:
         params = {"provider": provider, "resource": resource, "name": name}
         response = await self._client._request("GET", build_scoped_path(self._project_id, "history"), params=params)
         return [ResourceHistoryEvent.model_validate(item) for item in response]
+
+    async def get_resource_vitals(self, provider: str, resource: str, name: str) -> Vitals:
+        """Fetch the vitals a resource's provider reports for it in this project.
+
+        The provider reads them live from the object on each call, so the
+        answer reflects the object at the moment of the call.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+
+        Returns:
+            Vitals the provider reported for the resource.
+
+        Raises:
+            httpx.HTTPStatusError: If the resource is not found or not applied yet,
+                the provider cannot report its vitals, or the request fails.
+        """  # noqa: DOC502
+        params = {"provider": provider, "resource": resource, "name": name}
+        response = await self._client._request("GET", build_scoped_path(self._project_id, "vitals"), params=params)
+        return Vitals.model_validate(response)
 
     async def apply_resource[ResourceT: Resource](
         self,
