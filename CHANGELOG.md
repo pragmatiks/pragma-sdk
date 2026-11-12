@@ -1,3 +1,14 @@
+## v28.0.0 (2026-11-12)
+
+### BREAKING CHANGE
+
+- PragmaClient.upload_file and AsyncPragmaClient.upload_file
+are removed; call client.project(project_id).upload_file(...).
+
+### Feat
+
+- upload_file moves to the project handle (PRA-593)
+
 ## v27.7.0 (2026-11-12)
 
 ### Feat
