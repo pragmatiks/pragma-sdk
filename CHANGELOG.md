@@ -1,3 +1,9 @@
+## v27.7.0 (2026-11-12)
+
+### Feat
+
+- list a resource's history (PRA-859)
+
 ## v27.6.0 (2026-11-12)
 
 ### Feat
