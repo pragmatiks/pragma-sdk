@@ -80,6 +80,17 @@ class CallbackRefusedError(RuntimeError):
     """
 
 
+class UnresolvedReferenceError(RuntimeError):
+    """Raised by ``Resource.resolved`` for a config value that is still a field reference.
+
+    The platform resolves every field reference before ``on_create``,
+    ``on_update`` or ``on_delete`` runs, so an unresolved one was read
+    elsewhere, such as in a child's config from ``Resource.read``. The
+    message names the reference's resource identity and field, never a
+    value.
+    """
+
+
 class ProjectHasResourcesError(Exception):
     """Raised when deleting a non-empty project without orphan_resources=True.
 
