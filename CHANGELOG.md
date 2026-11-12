@@ -1,3 +1,9 @@
+## v29.1.0 (2026-11-12)
+
+### Feat
+
+- add get_resource_vitals to both clients (PRA-855)
+
 ## v29.0.0 (2026-11-12)
 
 ### BREAKING CHANGE
