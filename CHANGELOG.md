@@ -1,3 +1,15 @@
+## v29.0.0 (2026-11-12)
+
+### BREAKING CHANGE
+
+- `Resource.health()` and `HealthStatus` are removed; the
+worker serves `resource_vitals` instead of `resource_health`, the
+capability field is `vitals`, and protocol 7 is the only version offered.
+
+### Feat
+
+- rename the provider-reported health check to vitals (PRA-855)
+
 ## v28.0.0 (2026-11-12)
 
 ### BREAKING CHANGE
