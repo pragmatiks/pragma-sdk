@@ -1,3 +1,10 @@
+## v27.6.0 (2026-11-12)
+
+### Feat
+
+- broker child applies and reads in ProviderHarness (PRA-893)
+- read resolved config values typed through Resource.resolved (PRA-917)
+
 ## v27.5.0 (2026-11-08)
 
 ### Feat
