@@ -27,6 +27,15 @@ class LifecycleState(StrEnum):
     DELETED = "deleted"
 
 
+class HealthStatus(StrEnum):
+    """Health of a resource as the platform projects it from its lifecycle state and dependencies."""
+
+    BLOCKED = "blocked"
+    FAILED = "failed"
+    DEGRADED = "degraded"
+    HEALTHY = "healthy"
+
+
 class EventType(StrEnum):
     """Resource lifecycle event type."""
 
