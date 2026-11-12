@@ -14,7 +14,7 @@ Core exports for API consumers:
 
 Additional imports available from submodules:
     pragma_sdk.models: Data models (ProviderVersion, ProviderInstallation, etc.)
-    pragma_sdk.types: Type definitions (LifecycleState, Vitals, VitalsStatus, LogEntry)
+    pragma_sdk.types: Type definitions (LifecycleState, HealthStatus, Vitals, VitalsStatus, LogEntry)
     pragma_sdk.context: Runtime context utilities
     pragma_sdk.platform: Platform resource types (SecretConfig, etc.)
 """
@@ -105,6 +105,7 @@ from pragma_sdk.types import (
     CopyContext,
     CopyResult,
     CopyStrategy,
+    HealthStatus,
     LifecycleState,
     LogEntry,
     PatchDefinition,
@@ -140,6 +141,7 @@ __all__ = [
     "FieldReference",
     "FileField",
     "FileReference",
+    "HealthStatus",
     "Immutable",
     "ImmutableDependency",
     "ImmutableField",

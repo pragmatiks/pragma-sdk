@@ -49,7 +49,7 @@ from pragma_sdk.models.project import (
     Project,
     UpdateProjectRequest,
 )
-from pragma_sdk.types import LifecycleState, Vitals
+from pragma_sdk.types import HealthStatus, LifecycleState, Vitals
 from pragma_sdk.wheel import read_wheel_declaration
 from pragma_sdk.wheel_publish import (
     build_version_without_upload_address,
@@ -1849,6 +1849,7 @@ class ProjectResources:
         provider: str | None = None,
         resource: str | None = None,
         tags: list[str] | None = None,
+        health: HealthStatus | None = None,
         *,
         model: type[ResourceT] | None = None,
         reveal: bool = False,
@@ -1859,6 +1860,7 @@ class ProjectResources:
             provider: Filter by provider name.
             resource: Filter by resource type.
             tags: Filter by tags (must match all).
+            health: Filter by projected health.
             model: Resource subclass for typed response; returns raw dicts if None.
             reveal: Include sensitive field values in the response.
 
@@ -1875,6 +1877,8 @@ class ProjectResources:
             params["resource"] = resource
         if tags:
             params["tags"] = tags
+        if health is not None:
+            params["health"] = health.value
         if reveal:
             params["reveal"] = "true"
 
@@ -2260,6 +2264,7 @@ class AsyncProjectResources:
         provider: str | None = None,
         resource: str | None = None,
         tags: list[str] | None = None,
+        health: HealthStatus | None = None,
         *,
         model: type[ResourceT] | None = None,
         reveal: bool = False,
@@ -2270,6 +2275,7 @@ class AsyncProjectResources:
             provider: Filter by provider name.
             resource: Filter by resource type.
             tags: Filter by tags (must match all).
+            health: Filter by projected health.
             model: Resource subclass for typed response; returns raw dicts if None.
             reveal: Include sensitive field values in the response.
 
@@ -2286,6 +2292,8 @@ class AsyncProjectResources:
             params["resource"] = resource
         if tags:
             params["tags"] = tags
+        if health is not None:
+            params["health"] = health.value
         if reveal:
             params["reveal"] = "true"
 
