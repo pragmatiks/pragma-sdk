@@ -1,3 +1,16 @@
+## v30.0.0 (2026-11-13)
+
+### BREAKING CHANGE
+
+- the worker's --socket <path> option is removed. The host
+spawns the worker as `python -m pragma_sdk.worker --socket-descriptor <n>`,
+naming the inherited descriptor its end of the socket pair arrives on; a
+host passing --socket no longer starts a worker.
+
+### Feat
+
+- **worker**: serve the host over an inherited socket descriptor
+
 ## v29.2.0 (2026-11-12)
 
 ### Feat
