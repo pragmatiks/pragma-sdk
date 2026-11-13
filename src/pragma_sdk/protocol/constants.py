@@ -1,8 +1,8 @@
 """Version, method names, error codes and framing limits of the worker protocol.
 
-The host and the worker exchange JSON-RPC 2.0 messages over a Unix socket.
-Each frame is a 4-byte big-endian length prefix followed by one UTF-8 JSON
-body of at most :data:`MAXIMUM_FRAME_BYTES`.
+The host and the worker exchange JSON-RPC 2.0 messages over a connected Unix
+socket. Each frame is a 4-byte big-endian length prefix followed by one UTF-8
+JSON body of at most :data:`MAXIMUM_FRAME_BYTES`.
 
 The host sends the requests (``handshake``, ``dispatch``, ``observe``,
 ``migrate``, the resource queries and ``shutdown``) and the ``cancel``

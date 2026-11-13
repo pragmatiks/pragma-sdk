@@ -1,7 +1,8 @@
 """Protocol between the Pragmatiks host and a provider worker.
 
-Messages are JSON-RPC 2.0 frames over a Unix socket. The worker's first frame
-is a ``handshake`` request; the host sends nothing before it accepts one.
+Messages are JSON-RPC 2.0 frames over a connected Unix socket. The worker's
+first frame is a ``handshake`` request; the host sends nothing before it
+accepts one.
 """
 
 from pragma_sdk.protocol.codec import (
