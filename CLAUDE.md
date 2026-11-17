@@ -15,7 +15,6 @@ pragma-sdk/
 └── src/pragma_sdk/
     ├── client.py          # PragmaClient (sync) and AsyncPragmaClient
     ├── models/            # Pydantic models (shared with API)
-    ├── resources/         # Resource-specific client methods
     ├── provider/          # Provider authoring (Provider, Resource, Config, Outputs)
     ├── protocol/          # Host <-> worker protocol: frames, codec, handshake, introspection report
     ├── declaration/       # Provider declared by a distribution's `pragma.provider` entry point
@@ -73,12 +72,13 @@ Protocol 7 renames the provider-reported live check to vitals: the `resource_vit
 - `pydantic` - Data validation and serialization
 - `pydantic-settings` - Worker and introspection settings from `PRAGMA_PROVIDER_*` environment variables
 - `pyyaml` - YAML parsing for resource definitions
+- `structlog` - Structured logging
 
 Every downstream Pragmatiks package resolves this SDK's dependencies, so a new top-level dependency here has a high bar: keep the surface lean.
 
 ## Development
 
-mise is the only toolchain source: `mise.toml` pins python, uv, pre-commit, commitizen and yq, and `mise.lock` plus `.mise/locks/` lock them for macOS arm64 and Linux x64.
+mise is the only toolchain source: `mise.toml` pins python, uv, pre-commit, commitizen, the pragma CLI (`pragmatiks-cli`, with `pragmatiks-lint[check]` and semgrep) and yq, and `mise.lock` plus `.mise/locks/` lock them for macOS arm64 and Linux x64.
 
 `[tool.uv] required-version` in `pyproject.toml` equals the uv pin in `mise.toml`; uv refuses to run at any other version, and the `Toolchain` workflow fails a pull request where they differ.
 
@@ -131,7 +131,7 @@ If any job after **push** fails, the tag is on `main` but the release is incompl
 
 Pre-bumping `pyproject.toml` in a feature branch is forbidden:
 
-- The local `cz bump` creates a `v$next` tag pointing at the branch commit. After squash-merge, that tag becomes orphan (points to an unreachable commit).
+- The local `cz bump` creates a `v$next` tag pointing at the branch commit. The rebase-merge recreates that commit on `main`, so the tag becomes orphan (points to an unreachable commit).
 - `pyproject.toml` is now ahead of the latest git tag on origin. The next CI `cz bump` gets confused — depending on the commit history it can detect the wrong increment (e.g. MAJOR instead of MINOR) and fail on incremental-changelog generation.
 - Recovery requires reverting `pyproject.toml` and `CHANGELOG.md` back to the previous version in a `chore:` pull request and merging it, so CI can re-anchor.
 
