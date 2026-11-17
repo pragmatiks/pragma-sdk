@@ -107,8 +107,8 @@ Use mise tasks (`mise tasks` lists them all):
 **Do not write unit tests in this repository.** No `tests/` tree, no
 `pytest` files, no test-only fixtures. If a change feels like it
 needs a test, surface that to the user instead of adding one — they
-will decide where the coverage should live (often in pragma-os e2e
-suites or downstream consumers).
+will decide where the coverage should live (often in downstream
+consumers).
 
 ## Publishing to PyPI
 
