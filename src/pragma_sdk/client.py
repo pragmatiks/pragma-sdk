@@ -21,6 +21,8 @@ from pragma_sdk.exceptions import (
     ResourceFailedError,
 )
 from pragma_sdk.models import (
+    ApiKey,
+    CreatedApiKey,
     DeclaredProviderVersion,
     LifecycleEventFrame,
     MemberRole,
@@ -943,6 +945,59 @@ class PragmaClient(BaseClient):
         """  # noqa: DOC502
         self._request("DELETE", f"/organizations/me/members/{quote(user_id, safe='')}")
 
+    def create_api_key(self, name: str) -> CreatedApiKey:
+        """Create an API key for the caller's organization.
+
+        Only an organization admin signed in as a user can create keys. The
+        returned secret is the only copy Pragmatiks ever hands out: store it
+        immediately, because it cannot be retrieved again.
+
+        Args:
+            name: Human-readable label for the key, unique within the
+                organization for good: a revoked key keeps its name.
+
+        Returns:
+            The created key with its one-time secret.
+
+        Raises:
+            httpx.HTTPStatusError: 403 for an API key or a caller who is not
+                an admin, 409 when the organization already has, or once
+                had, a key with this name, or any other failed request.
+        """  # noqa: DOC502
+        response = self._request("POST", "/api-keys", json_data={"name": name})
+        return CreatedApiKey.model_validate(response)
+
+    def list_api_keys(self) -> list[ApiKey]:
+        """List the active API keys of the caller's organization.
+
+        Any member, and an API key, can list keys; secrets are never
+        included.
+
+        Returns:
+            The organization's active API keys.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        response = self._request("GET", "/api-keys")
+        return [ApiKey.model_validate(item) for item in response]
+
+    def revoke_api_key(self, api_key_id: str) -> None:
+        """Revoke an API key of the caller's organization.
+
+        Only an organization admin signed in as a user can revoke keys. A
+        revoked key stops authenticating and keeps its name.
+
+        Args:
+            api_key_id: Identifier of the key to revoke.
+
+        Raises:
+            httpx.HTTPStatusError: 403 for an API key or a caller who is not
+                an admin, 404 when no such key belongs to the organization,
+                or any other failed request.
+        """  # noqa: DOC502
+        self._request("DELETE", f"/api-keys/{quote(api_key_id, safe='')}")
+
     def delete_account(self) -> None:
         """Delete the signed-in user's Pragmatiks account and every membership it holds.
 
@@ -1684,6 +1739,59 @@ class AsyncPragmaClient(BaseClient):
                 are temporarily unavailable, or any other failed request.
         """  # noqa: DOC502
         await self._request("DELETE", f"/organizations/me/members/{quote(user_id, safe='')}")
+
+    async def create_api_key(self, name: str) -> CreatedApiKey:
+        """Create an API key for the caller's organization.
+
+        Only an organization admin signed in as a user can create keys. The
+        returned secret is the only copy Pragmatiks ever hands out: store it
+        immediately, because it cannot be retrieved again.
+
+        Args:
+            name: Human-readable label for the key, unique within the
+                organization for good: a revoked key keeps its name.
+
+        Returns:
+            The created key with its one-time secret.
+
+        Raises:
+            httpx.HTTPStatusError: 403 for an API key or a caller who is not
+                an admin, 409 when the organization already has, or once
+                had, a key with this name, or any other failed request.
+        """  # noqa: DOC502
+        response = await self._request("POST", "/api-keys", json_data={"name": name})
+        return CreatedApiKey.model_validate(response)
+
+    async def list_api_keys(self) -> list[ApiKey]:
+        """List the active API keys of the caller's organization.
+
+        Any member, and an API key, can list keys; secrets are never
+        included.
+
+        Returns:
+            The organization's active API keys.
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails.
+        """  # noqa: DOC502
+        response = await self._request("GET", "/api-keys")
+        return [ApiKey.model_validate(item) for item in response]
+
+    async def revoke_api_key(self, api_key_id: str) -> None:
+        """Revoke an API key of the caller's organization.
+
+        Only an organization admin signed in as a user can revoke keys. A
+        revoked key stops authenticating and keeps its name.
+
+        Args:
+            api_key_id: Identifier of the key to revoke.
+
+        Raises:
+            httpx.HTTPStatusError: 403 for an API key or a caller who is not
+                an admin, 404 when no such key belongs to the organization,
+                or any other failed request.
+        """  # noqa: DOC502
+        await self._request("DELETE", f"/api-keys/{quote(api_key_id, safe='')}")
 
     async def delete_account(self) -> None:
         """Delete the signed-in user's Pragmatiks account and every membership it holds.
