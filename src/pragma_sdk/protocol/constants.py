@@ -4,11 +4,12 @@ The host and the worker exchange JSON-RPC 2.0 messages over a connected Unix
 socket. Each frame is a 4-byte big-endian length prefix followed by one UTF-8
 JSON body of at most :data:`MAXIMUM_FRAME_BYTES`.
 
-The host sends the requests (``handshake``, ``dispatch``, ``observe``,
-``migrate``, the resource queries and ``shutdown``) and the ``cancel``
-notification; the worker sends the ``heartbeat`` notification and, from a
-dispatch, the :data:`APPLY_RESOURCE_METHOD` and :data:`READ_RESOURCE_METHOD`
-callbacks. Beside the JSON-RPC codes, a handshake offering no supported
+The worker opens with the ``handshake`` request. The host sends the other
+requests (``dispatch``, ``observe``, ``migrate``, the resource queries and
+``shutdown``) and the ``cancel`` notification; the worker sends the
+``heartbeat`` notification and, from a dispatch, the
+:data:`APPLY_RESOURCE_METHOD` and :data:`READ_RESOURCE_METHOD` callbacks.
+Beside the JSON-RPC codes, a handshake offering no supported
 protocol version fails with :data:`UNSUPPORTED_PROTOCOL_CODE`, a create
 dispatch refused because its external object already exists, and an
 observe that finds an object the resource did not create, with
