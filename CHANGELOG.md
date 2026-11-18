@@ -1,3 +1,9 @@
+## v30.1.0 (2026-11-18)
+
+### Feat
+
+- add API key client methods (PRA-983)
+
 ## v30.0.0 (2026-11-13)
 
 ### BREAKING CHANGE
