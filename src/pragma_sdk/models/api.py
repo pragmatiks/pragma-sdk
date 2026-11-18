@@ -1,11 +1,11 @@
-"""API response models for provider, organization, and user operations."""
+"""API response models for provider, organization, API key and user operations."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Self
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, SecretStr, model_validator
 from pydantic import Field as PydanticField
 
 from pragma_sdk.models.enums import (
@@ -262,6 +262,43 @@ class OrganizationMember(BaseModel):
     user_id: str
     identifier: str | None = None
     role: MemberRole
+
+
+class ApiKey(BaseModel):
+    """An API key of the caller's organization, without its secret.
+
+    Attributes:
+        id: Unique key identifier.
+        name: Human-readable label supplied at creation.
+        created_at: When the key was created.
+        last_used_at: When the key last authenticated a request, or None
+            when it has never been used.
+    """
+
+    id: str
+    name: str
+    created_at: datetime
+    last_used_at: datetime | None = None
+
+
+class CreatedApiKey(BaseModel):
+    """A freshly created API key, including its one-time secret.
+
+    Attributes:
+        id: Unique key identifier.
+        name: Human-readable label supplied at creation.
+        secret: The key secret, returned only by the creation call and
+            never retrievable afterwards. Masked in repr and logs; read it
+            with ``get_secret_value()``.
+        created_at: When the key was created.
+    """
+
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    id: str
+    name: str
+    secret: SecretStr
+    created_at: datetime
 
 
 class UserInfo(BaseModel):
