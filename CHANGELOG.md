@@ -1,3 +1,9 @@
+## v30.1.2 (2026-11-20)
+
+### Refactor
+
+- **protocol**: own the config reference markers in the protocol package (PRA-574)
+
 ## v30.1.1 (2026-11-20)
 
 ### Fix
