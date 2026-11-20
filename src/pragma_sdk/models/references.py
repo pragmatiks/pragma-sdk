@@ -16,6 +16,7 @@ from pydantic import Field as PydanticField
 from pragma_sdk.exceptions import UnresolvedReferenceError
 from pragma_sdk.models.file import FileReference
 from pragma_sdk.models.identity import ResourceIdentity, _validate_segment
+from pragma_sdk.protocol.references import DEPENDENCY_MARKER_KEY
 
 
 if TYPE_CHECKING:
@@ -122,8 +123,8 @@ class Dependency[ResourceT: "Resource"](_ResourceIdentityFields):
 
     dependency_marker: bool = PydanticField(
         default=True,
-        alias="__dependency__",
-        serialization_alias="__dependency__",
+        alias=DEPENDENCY_MARKER_KEY,
+        serialization_alias=DEPENDENCY_MARKER_KEY,
     )
 
     _resolved: ResourceT | None = PrivateAttr(default=None)
@@ -207,40 +208,3 @@ type ImmutableSensitiveField[T] = Annotated[T | FieldReference, Immutable(), Sen
 
 type SensitiveOutput[T] = Annotated[T, Sensitive()]
 """Output field that is redacted in responses. No FieldReference union (outputs are produced, not configured)."""
-
-
-def is_dependency_marker(value: Any) -> bool:
-    """Check if a value is a serialized Dependency marker.
-
-    When Dependency[T] is serialized (e.g., sent via API), it becomes a dict
-    with __dependency__=True and project_id/provider/resource/name keys. This
-    function detects such markers regardless of whether they've been resolved.
-
-    Args:
-        value: Any value to check.
-
-    Returns:
-        True if value is a dict with the required dependency keys and __dependency__=True.
-    """
-    if not isinstance(value, dict):
-        return False
-    required = {"__dependency__", "project_id", "provider", "resource", "name"}
-    return required.issubset(value.keys()) and value.get("__dependency__") is True
-
-
-def is_field_ref_marker(value: Any) -> bool:
-    """Check if a value is a serialized FieldReference marker.
-
-    When a FieldReference is resolved, it becomes a dict with __field_ref__=True,
-    a 'ref' key containing the original reference, and a 'resolved_value' key.
-    This function detects such markers for re-resolution during propagation.
-
-    Args:
-        value: Any value to check.
-
-    Returns:
-        True if value is a __field_ref__ marker dict.
-    """
-    if not isinstance(value, dict):
-        return False
-    return value.get("__field_ref__") is True and "ref" in value and "resolved_value" in value

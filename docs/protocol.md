@@ -4,7 +4,7 @@ The contract between the Pragmatiks host and the worker and introspection entry 
 
 ## Contract
 
-`protocol/` imports nothing from the SDK but `types`; the Pragmatiks host speaks only it. Changing a frame shape, the introspection report, or the worker's method set is a new `PROTOCOL_VERSION`.
+`protocol/` imports nothing from the SDK but `types`; the Pragmatiks host speaks only it. Changing a frame shape, the introspection report, the config reference markers, or the worker's method set is a new `PROTOCOL_VERSION`.
 
 The worker serves only over the connected Unix socket the host passes as an inherited descriptor (`python -m pragma_sdk.worker --socket-descriptor <number>`): it creates no socket file and listens for nothing, so the host's end is the only way in. `worker/__main__.py` adopts the descriptor (`adopt_host_socket`: a descriptor below 3, one that is not open, and one that does not hold a connected Unix stream socket are each refused, the last two as `worker_socket_descriptor_rejected`) before it loads the provider, so the socket is non-inheritable before any provider code runs and a child the provider `exec`s never holds the host connection; the worker's first frame still waits for the loaded provider, so a provider that cannot load never reaches the host. A child the provider forks without `exec` keeps the descriptor, which is the provider's own trust domain; the host treats the worker's process exit, not the end of the connection, as its death. The transport, like the framing, the handshake method and the offered `protocol_versions`, is fixed across protocol versions, because version negotiation runs over the connection and cannot pick the channel it runs on. Changing it therefore moves the host's minimum SDK version, not `PROTOCOL_VERSION`.
 
@@ -79,3 +79,5 @@ Vitals are the provider-reported live check: `resource_vitals` runs `Resource.vi
 ## Config and outputs
 
 `Outputs` ignore undeclared properties; `Config` forbids them. A dependency reference or a child resource read whose Config forbids extras is read with the top-level config keys it does not declare dropped (`models.base.drop_undeclared_config_keys`, pure) and logged by each caller (`dependency_config_keys_ignored`, `child_config_keys_ignored`). `Resource.resolved(value)` (`models.references.require_resolved`) types a `Field[T]` config value as `T`, raising `UnresolvedReferenceError` for a top-level `FieldReference`.
+
+`config`, `previous_config` and child configs carry two reference marker shapes, owned by `protocol/references.py`: a dependency marker (`__dependency__: true` with `project_id`, `provider`, `resource` and `name`, plus `ref` once resolved) and a field-reference marker (`__field_ref__: true` with `ref` and `resolved_value`). Changing either is a new `PROTOCOL_VERSION`.

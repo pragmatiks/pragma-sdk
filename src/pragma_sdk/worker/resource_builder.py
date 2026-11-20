@@ -9,9 +9,10 @@ import structlog
 from pydantic import ValidationError
 
 from pragma_sdk.diagnostics.validation_errors import build_validation_error_details
-from pragma_sdk.models import Config, Dependency, Resource, is_dependency_marker, is_field_ref_marker
+from pragma_sdk.models import Config, Dependency, Resource
 from pragma_sdk.models.base import drop_undeclared_config_keys, is_union_origin
 from pragma_sdk.protocol.frames import ResourcePayload
+from pragma_sdk.protocol.references import is_dependency_marker, is_field_ref_marker
 from pragma_sdk.provider.loading import derive_config_class
 from pragma_sdk.types import LifecycleState
 
