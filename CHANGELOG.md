@@ -1,3 +1,13 @@
+## v31.0.0 (2026-11-20)
+
+### BREAKING CHANGE
+
+- PROTOCOL_VERSION is 8; a host speaking 7 refuses this worker.
+
+### Feat
+
+- **protocol**: stream followed resource logs over protocol 8 (PRA-479)
+
 ## v30.1.2 (2026-11-20)
 
 ### Refactor
