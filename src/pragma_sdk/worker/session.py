@@ -40,6 +40,7 @@ from pragma_sdk.protocol.constants import (
     CANCEL_METHOD,
     CANCELLED_CODE,
     DISPATCH_METHOD,
+    FOLLOW_LOGS_UNSUPPORTED_CODE,
     HANDSHAKE_METHOD,
     HEARTBEAT_METHOD,
     INTERNAL_ERROR_CODE,
@@ -48,6 +49,8 @@ from pragma_sdk.protocol.constants import (
     METHOD_NOT_FOUND_CODE,
     MIGRATE_METHOD,
     OBSERVE_METHOD,
+    RESOURCE_LOGS_FOLLOW_EVENT_METHOD,
+    RESOURCE_LOGS_FOLLOW_METHOD,
     RESOURCE_LOGS_METHOD,
     RESOURCE_VITALS_METHOD,
     SHUTDOWN_METHOD,
@@ -62,6 +65,9 @@ from pragma_sdk.protocol.frames import (
     HandshakeResult,
     MigrateParams,
     ObserveParams,
+    ResourceLogsFollowEvent,
+    ResourceLogsFollowEventParams,
+    ResourceLogsFollowParams,
     ResourcePayload,
     ResourceQueryParams,
     SuccessFrame,
@@ -69,7 +75,7 @@ from pragma_sdk.protocol.frames import (
 from pragma_sdk.protocol.pending import PendingResponses
 from pragma_sdk.types import EventType
 from pragma_sdk.worker.executor import RequestScopedExecutor, request_scope
-from pragma_sdk.worker.handlers import RequestHandlers
+from pragma_sdk.worker.handlers import FollowLogsUnsupportedError, RequestHandlers
 
 
 logger = structlog.get_logger()
@@ -669,6 +675,9 @@ class WorkerSession:
         if method == DISPATCH_METHOD:
             return self.build_dispatch_route(correlation_id)
 
+        if method == RESOURCE_LOGS_FOLLOW_METHOD:
+            return self.build_log_follow_route(correlation_id)
+
         return self.request_routes.get(method) or build_unknown_method_route(method)
 
     def build_dispatch_route(self, dispatch_id: int) -> RequestRoute:
@@ -689,6 +698,43 @@ class WorkerSession:
             log_fields=self.build_dispatch_log_fields,
             handler=partial(self.request_handlers.run_dispatch, context=context),
         )
+
+    def build_log_follow_route(self, correlation_id: int) -> RequestRoute:
+        """Build the route of one ``resource_logs_follow`` request, sending its events under its correlation id.
+
+        Args:
+            correlation_id: Correlation id of the request.
+
+        Returns:
+            The route streaming the resource's logs.
+        """
+        return RequestRoute(
+            params_model=ResourceLogsFollowParams,
+            failure_log_event="resource_logs_follow_failed",
+            logs_start=True,
+            log_fields=self.build_targeted_log_fields,
+            handler=partial(
+                self.request_handlers.run_resource_logs_follow,
+                send_event=partial(self.send_resource_logs_follow_event, correlation_id),
+            ),
+        )
+
+    async def send_resource_logs_follow_event(self, correlation_id: int, event: ResourceLogsFollowEvent) -> None:
+        """Write one ``resource_logs_follow_event`` notification and wait until the connection takes it.
+
+        Args:
+            correlation_id: Correlation id of the ``resource_logs_follow`` request.
+            event: The stream event.
+
+        Raises:
+            FrameTooLargeError: If the event exceeds ``MAXIMUM_FRAME_BYTES``.
+            ValueError: If the event cannot be encoded as JSON.
+            ConnectionError: If the host closed the connection.
+        """  # noqa: DOC502
+        notification = self.codec.build_notification(
+            RESOURCE_LOGS_FOLLOW_EVENT_METHOD, ResourceLogsFollowEventParams(correlation_id=correlation_id, event=event)
+        )
+        await self.codec.write(self.writer, notification)
 
     async def run_request(self, correlation_id: int, method: str, params: Any, route: RequestRoute) -> None:
         """Run a request and write its response to the host.
@@ -936,7 +982,9 @@ class WorkerSession:
 
         Returns:
             A failure with ``METHOD_NOT_FOUND_CODE`` for a method the worker
-            does not serve, with ``ALREADY_EXISTS_CODE`` for a create dispatch
+            does not serve, with ``FOLLOW_LOGS_UNSUPPORTED_CODE`` for a
+            ``resource_logs_follow`` on a type that does not override
+            ``follow_logs``, with ``ALREADY_EXISTS_CODE`` for a create dispatch
             refused because its object already exists, or an observe that
             found an object this resource did not create, otherwise with
             ``INTERNAL_ERROR_CODE``.
@@ -947,6 +995,11 @@ class WorkerSession:
             logger.warning(route.failure_log_event, duration_seconds=duration_seconds)
 
             return self.codec.build_failure(correlation_id, METHOD_NOT_FOUND_CODE, str(error))
+
+        if isinstance(error, FollowLogsUnsupportedError):
+            logger.warning(route.failure_log_event, duration_seconds=duration_seconds)
+
+            return self.codec.build_failure(correlation_id, FOLLOW_LOGS_UNSUPPORTED_CODE, str(error))
 
         already_exists_error = (
             find_already_exists_error(error) if is_already_exists_answered(validated_params) else None

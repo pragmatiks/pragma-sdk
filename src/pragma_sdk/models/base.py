@@ -1026,6 +1026,39 @@ class Resource[ConfigT: Config, OutputsT: Outputs](BaseModel):
         raise NotImplementedError("Subclass must implement logs()")
         yield
 
+    async def follow_logs(
+        self,
+        since: datetime | None = None,
+        tail: int = 100,
+    ) -> AsyncIterator[LogEntry]:
+        """Override to stream this resource's logs as they are written.
+
+        Yield the ``tail`` most recent entries at or after ``since`` first,
+        then each new entry as it is written; return when nothing is left to
+        follow, such as every source having ended. The stream is delivered at
+        most once, with no replay, in order per source.
+
+        Args:
+            since: Only include logs at or after this timestamp.
+            tail: Maximum number of existing entries to send before following.
+
+        Yields:
+            Log entries for this resource, backlog first.
+
+        Raises:
+            NotImplementedError: Subclass must implement this method.
+
+        Note:
+            Overrides must be async generators that wait only on
+            cancellation-safe async sources, such as an async HTTP stream.
+            Following stops by cancelling the generator, and a blocking call
+            run in an executor is never ended by a cancel, so it would hold
+            the stream open. The default raises ``NotImplementedError`` on
+            first iteration.
+        """
+        raise NotImplementedError("Subclass must implement follow_logs()")
+        yield
+
     async def vitals(self) -> Vitals:
         """Override to report the live condition of the object this resource manages.
 

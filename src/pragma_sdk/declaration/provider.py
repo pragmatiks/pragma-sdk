@@ -68,6 +68,18 @@ class DeclaredProvider:
         )
 
 
+def overrides_follow_logs(resource_class: type[Resource]) -> bool:
+    """Tell whether a resource class can follow its logs.
+
+    Args:
+        resource_class: The resource class.
+
+    Returns:
+        Whether the class overrides ``Resource.follow_logs``.
+    """
+    return resource_class.follow_logs is not Resource.follow_logs
+
+
 def build_resource_type_capabilities(resource: str, resource_class: type[Resource]) -> ResourceTypeCapabilities:
     """Build what a resource type implements.
 
@@ -77,7 +89,7 @@ def build_resource_type_capabilities(resource: str, resource_class: type[Resourc
 
     Returns:
         Whether the class defines ``on_observe``, is declared computed, and
-        overrides ``logs`` and ``vitals``, and the
+        overrides ``logs``, ``vitals`` and ``follow_logs``, and the
         ``operation_deadline_seconds`` it declares.
     """
     return ResourceTypeCapabilities(
@@ -86,6 +98,7 @@ def build_resource_type_capabilities(resource: str, resource_class: type[Resourc
         computed=resource_class.computed,
         logs=resource_class.logs is not Resource.logs,
         vitals=resource_class.vitals is not Resource.vitals,
+        follow_logs=overrides_follow_logs(resource_class),
         operation_deadline_seconds=resource_class.operation_deadline_seconds,
     )
 

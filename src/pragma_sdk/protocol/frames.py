@@ -22,7 +22,7 @@ from pydantic import (
 )
 
 from pragma_sdk.protocol.constants import MAXIMUM_OPERATION_DEADLINE_SECONDS
-from pragma_sdk.types import EventType, LifecycleState
+from pragma_sdk.types import EventType, LifecycleState, LogEntry
 
 
 CatalogName = Annotated[
@@ -213,6 +213,7 @@ class ResourceTypeCapabilities(BaseModel):
         computed: Whether the type is declared computed.
         logs: Whether the type overrides ``logs``.
         vitals: Whether the type overrides ``vitals``.
+        follow_logs: Whether the type overrides ``follow_logs``.
         operation_deadline_seconds: Ceiling in whole seconds, from 1 to
             ``MAXIMUM_OPERATION_DEADLINE_SECONDS``, that heartbeats may
             carry one operation of the type to, or ``None`` when the type
@@ -224,6 +225,7 @@ class ResourceTypeCapabilities(BaseModel):
     computed: bool
     logs: bool
     vitals: bool
+    follow_logs: bool
     operation_deadline_seconds: int | None = Field(default=None, gt=0, le=MAXIMUM_OPERATION_DEADLINE_SECONDS)
 
 
@@ -503,3 +505,51 @@ class ResourceQueryParams(BaseModel):
     since: AwareDatetime | None
     tail: int
     resolved_files: dict[str, str]
+
+
+class ResourceLogsFollowParams(ResourceQueryParams):
+    """Parameters of a ``resource_logs_follow`` request.
+
+    The worker first sends the ``tail`` most recent entries at or after
+    ``since``, then each new entry as the resource writes it, until the
+    provider's stream ends or the host cancels the request.
+    """
+
+
+class ResourceLogsFollowStarted(BaseModel):
+    """The ``resource_logs_follow_event`` event a worker sends once the provider's stream is open, before any entry.
+
+    Attributes:
+        kind: Always ``started``.
+    """
+
+    kind: Literal["started"] = "started"
+
+
+class ResourceLogsFollowEntry(BaseModel):
+    """The ``resource_logs_follow_event`` event carrying one log entry.
+
+    Attributes:
+        kind: Always ``entry``.
+        entry: The log entry.
+    """
+
+    kind: Literal["entry"] = "entry"
+    entry: LogEntry
+
+
+ResourceLogsFollowEvent = Annotated[ResourceLogsFollowStarted | ResourceLogsFollowEntry, Field(discriminator="kind")]
+"""One event of a followed log stream, told apart by ``kind``."""
+
+
+class ResourceLogsFollowEventParams(BaseModel):
+    """Parameters of one ``resource_logs_follow_event`` notification of a ``resource_logs_follow`` request.
+
+    Attributes:
+        correlation_id: Correlation id of the ``resource_logs_follow``
+            request the event belongs to; a notification carries no ``id``.
+        event: The stream event.
+    """
+
+    correlation_id: int
+    event: ResourceLogsFollowEvent
