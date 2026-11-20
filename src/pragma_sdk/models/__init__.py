@@ -66,9 +66,8 @@ from pragma_sdk.models.references import (
     SensitiveDependency,
     SensitiveField,
     SensitiveOutput,
-    is_dependency_marker,
-    is_field_ref_marker,
 )
+from pragma_sdk.protocol.references import is_dependency_marker, is_field_ref_marker
 from pragma_sdk.types import EventType
 
 

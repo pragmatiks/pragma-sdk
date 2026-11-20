@@ -10,7 +10,7 @@ pragma-sdk/
     ├── client.py          # PragmaClient (sync) and AsyncPragmaClient
     ├── models/            # Pydantic models (shared with API)
     ├── provider/          # Provider authoring (Provider, Resource, Config, Outputs)
-    ├── protocol/          # Host <-> worker protocol: frames, codec, handshake, introspection report
+    ├── protocol/          # Host <-> worker protocol: frames, codec, handshake, introspection report, config reference markers
     ├── declaration/       # Provider declared by a distribution's `pragma.provider` entry point
     ├── diagnostics/       # Log output and secret-free error descriptions for worker and introspection
     ├── worker/            # `python -m pragma_sdk.worker --socket-descriptor <n>`: runs lifecycle methods

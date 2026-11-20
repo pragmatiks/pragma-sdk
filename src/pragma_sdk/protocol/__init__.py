@@ -73,6 +73,11 @@ from pragma_sdk.protocol.introspection import (
     ResourceTypeSchema,
 )
 from pragma_sdk.protocol.pending import PendingResponses
+from pragma_sdk.protocol.references import (
+    DEPENDENCY_MARKER_KEY,
+    is_dependency_marker,
+    is_field_ref_marker,
+)
 from pragma_sdk.types import EventType, LifecycleState, LogEntry, Vitals, VitalsStatus
 
 
@@ -82,6 +87,7 @@ __all__ = [
     "CALLBACK_REFUSED_CODE",
     "CANCELLED_CODE",
     "CANCEL_METHOD",
+    "DEPENDENCY_MARKER_KEY",
     "DISPATCH_METHOD",
     "HANDSHAKE_METHOD",
     "HEARTBEAT_METHOD",
@@ -142,4 +148,6 @@ __all__ = [
     "UnsupportedProtocolData",
     "Vitals",
     "VitalsStatus",
+    "is_dependency_marker",
+    "is_field_ref_marker",
 ]
