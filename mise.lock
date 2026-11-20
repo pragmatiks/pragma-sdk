@@ -27,11 +27,11 @@ uv = { path = ".mise/locks/pypi-commitizen/4.19.2", digest = "sha256:7f63ce18cfe
 version = "17.7.1"
 backend = "pypi:pragmatiks-cli"
 specifiers = ["17.7.1"]
-uv = { path = ".mise/locks/pypi-pragmatiks-cli/17.7.1~3c0babf5", digest = "sha256:fa76c44748053477142ff84464f6609dc05fb234edb60fd9c992987318484957" }
+uv = { path = ".mise/locks/pypi-pragmatiks-cli/17.7.1~b5d67b15", digest = "sha256:d059669216077a3ab95ef0c5bb95fac739c162298b9bb589b3fc1dca647b6574" }
 
 [tools."pypi:pragmatiks-cli".options]
 expose = '["semgrep==1.185.0"]'
-with = '["pragmatiks-lint[check]==0.11.1"]'
+with = '["pragmatiks-lint[check]==0.12.1"]'
 
 [[tools.python]]
 version = "3.13.7"
