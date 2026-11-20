@@ -81,16 +81,6 @@ class AdmissionFailureCategory(StrEnum):
     ORGANIZATION_DELETED = "organization_deleted"
 
 
-class WheelUploadOutcome(StrEnum):
-    """How storage took a wheel uploaded to its address.
-
-    Either outcome leaves the wheel stored under the address.
-    """
-
-    STORED = "stored"
-    ALREADY_STORED = "already_stored"
-
-
 class TeardownAction(StrEnum):
     """What a teardown does to one resource its cascade reaches.
 

@@ -25,6 +25,8 @@ pragma-sdk/
     ├── wheel_rename.py    # Renaming a wheel to its organization's distribution name
     ├── wheel_upload.py    # Direct wheel upload to the signed storage address
     ├── wheel_publish.py   # Renamed wheel directory and declared-version note of the publish composite
+    ├── storage_upload.py  # Streamed `PUT` of declared bytes to a signed storage address, and storage's answer
+    ├── file_upload.py     # A project file's source, MD5, streamed upload and wait until stored
     └── blocking.py        # Cancel-shielded worker-thread runner for the async client
 ```
 
@@ -35,6 +37,8 @@ pragma-sdk/
 ## Features
 
 **HTTP Clients**: Both sync (`PragmaClient`) and async (`AsyncPragmaClient`) with identical APIs. A project's `resources` handle reads a resource's recent logs with `logs(provider, resource, name, since=, tail=)` and streams them with `follow_logs(...)`, which yields `LogFollowEntry` events, then one `LogFollowEnd` or `LogFollowError`, from the API's server-sent events (`client_log_follow.parse_log_follow_stream`, keep-alive `:` lines ignored), all exported from `pragma_sdk`; `since` is inclusive, and a naive `since` raises `ValueError`. A refused stream raises `httpx.HTTPStatusError` with its body read, and a connection that breaks, goes silent past the keep-alive interval or closes without a terminal event raises `LogFollowInterruptedError`. Callers that stop early close the generator (`contextlib.closing` or `aclosing`).
+
+**File uploads**: A project's `resources` handle uploads a file with `upload_file(name, source, content_type)`, where `source` is `bytes`, a `Path` or a regular file opened for binary reading. It reads the source once in chunks for its MD5 (off the event loop in the async client), declares the upload (`declare_file_upload`), streams exactly that many bytes in one `PUT` straight to storage through the upload transport, and polls `get_file_upload` until the file is stored, returning its `FileMetadata`. Memory holds one chunk whatever the size. A `409 file_upload_in_progress` is waited out for its `Retry-After`, never less than the one-second poll, for up to three minutes, then raises `FileUploadNotStoredError` (`busy`). An upload that ends unstored raises `FileUploadNotStoredError` with its reason (`changed` for content that changes between the two reads, `expired` for an address that expires before the whole file reaches storage, `superseded`, `failed`, `deleted`) and its `operation_id`, and one that shows no progress for three minutes raises `FileUploadPendingError`, after which uploading the same content again keeps waiting without sending the bytes again. The declare and wait loops live in `file_upload.py`, so the handle's file surface is `declare_file_upload`, `get_file_upload` and `upload_file`.
 
 **Provider Authoring**: `Provider`, `Resource[Config, Outputs]`, `Field[T]`, `FieldReference` for building providers.
 

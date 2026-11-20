@@ -1,13 +1,16 @@
 """Exceptions for the Pragmatiks SDK.
 
 The messages of the wheel publishing errors say what failed, not what to do
-next, which is the caller's to tell its user; the one exception is the
-``wheel_too_large`` message, which the SDK words the way the platform does.
+next, which is the caller's to tell its user. The exceptions are the
+``wheel_too_large`` message, which the SDK words the way the platform does,
+and ``FileUploadNotStoredError`` and ``FileUploadPendingError``, whose
+messages say what to do and name the upload operation.
 """
 
 from __future__ import annotations
 
 import zipfile
+from enum import StrEnum
 from typing import Any
 
 
@@ -214,11 +217,11 @@ class RenamedWheelWriteError(Exception):
         return f"Could not write the renamed copy of the wheel: {self.reason}."
 
 
-class WheelUploadError(Exception):
-    """Raised when the storage behind a wheel upload address refuses the upload.
+class UploadError(Exception):
+    """Raised when the storage behind an upload address refuses an upload of a wheel or a file.
 
     Carries what storage answered, never the address: the address is a
-    bearer capability for writing the wheel.
+    bearer capability for writing the declared bytes.
 
     Attributes:
         status_code: HTTP status storage answered.
@@ -251,11 +254,11 @@ class WheelUploadError(Exception):
         """Name the refusal with what storage answered.
 
         Returns:
-            A sentence such as ``Storage refused the wheel upload (HTTP 400
+            A sentence such as ``Storage refused the upload (HTTP 400
             EntityTooLarge, storage request ABC123).``, as
             :meth:`build_storage_answer` describes the answer.
         """
-        return f"Storage refused the wheel upload ({self.build_storage_answer()})."
+        return f"Storage refused the upload ({self.build_storage_answer()})."
 
     def build_storage_answer(self) -> str:
         """Build the description of what storage answered.
@@ -277,8 +280,8 @@ class WheelUploadError(Exception):
         return ", ".join(details)
 
 
-class WheelUploadExpiredError(WheelUploadError):
-    """Raised when a wheel upload address expired before storage received the whole wheel.
+class UploadExpiredError(UploadError):
+    """Raised when an upload address expired before storage received the whole upload.
 
     Storage checks the expiry once the whole body has arrived, so an upload
     that started in time but finished late is refused too.
@@ -288,12 +291,146 @@ class WheelUploadExpiredError(WheelUploadError):
         """Name the expiry with what storage answered.
 
         Returns:
-            A sentence such as ``The wheel upload address expired before
-            storage received the whole wheel (HTTP 400 ExpiredToken, storage
-            request ABC123).``
+            A sentence such as ``The upload address expired before storage
+            received the whole upload (HTTP 400 ExpiredToken, storage request
+            ABC123).``
+        """
+        return f"The upload address expired before storage received the whole upload ({self.build_storage_answer()})."
+
+
+class FileUploadNotStoredReason(StrEnum):
+    """Why an upload of a file ended without storing it.
+
+    Attributes:
+        CHANGED: The file ended before its size while it was hashed or
+            sent, or storage refused its bytes as not matching the declared
+            MD5: its content changed between the two reads.
+        SUPERSEDED: A declaration of other content for the name replaced the upload.
+        FAILED: Storing the upload failed.
+        EXPIRED: The bytes did not reach storage before the upload address expired.
+        DELETED: The upload was stored, then the file was deleted or replaced.
+        BUSY: An upload of other content for the name stayed in storing
+            past the wait, so this upload could not be declared.
+    """
+
+    CHANGED = "changed"
+    SUPERSEDED = "superseded"
+    FAILED = "failed"
+    EXPIRED = "expired"
+    DELETED = "deleted"
+    BUSY = "busy"
+
+
+class FileUploadNotStoredError(Exception):
+    """Raised when an upload of a file ended without the file holding its content.
+
+    Attributes:
+        file_name: Name of the file in its project.
+        reason: Why the upload ended.
+        operation_id: Upload operation that ended, matching the platform's
+            record of it, or ``None`` when the upload ended before it was
+            declared: ``busy``, or ``changed`` while it was hashed.
+        error_message: Pragmatiks' explanation, for ``failed`` and ``expired``
+            when the platform recorded one, else ``None``.
+    """
+
+    def __init__(
+        self,
+        file_name: str,
+        reason: FileUploadNotStoredReason,
+        operation_id: str | None = None,
+        error_message: str | None = None,
+    ) -> None:
+        """Record the file, why its upload ended and which operation ended.
+
+        Args:
+            file_name: Name of the file in its project.
+            reason: Why the upload ended.
+            operation_id: Upload operation that ended, or ``None``.
+            error_message: Pragmatiks' explanation, or ``None``.
+        """
+        self.file_name = file_name
+        self.reason = reason
+        self.operation_id = operation_id
+        self.error_message = error_message
+        super().__init__(file_name, reason, operation_id, error_message)
+
+    def __str__(self) -> str:
+        """Name why the upload ended, what to do and the upload operation.
+
+        Returns:
+            Pragmatiks' explanation when it gave one, otherwise a sentence
+            for the reason, each ending with what to do, then ``Upload
+            operation <id>.`` when the upload was declared.
+        """
+        explanation = self.error_message or self.build_reason_message()
+
+        if self.operation_id is None:
+            return explanation
+
+        return f"{explanation} Upload operation {self.operation_id}."
+
+    def build_reason_message(self) -> str:
+        """Build the sentence naming why the upload ended and what to do.
+
+        Returns:
+            A sentence such as ``Pragmatiks could not store report.pdf.
+            Upload it again.``
+        """
+        match self.reason:
+            case FileUploadNotStoredReason.CHANGED:
+                return f"{self.file_name} changed while it was being uploaded. Upload it again."
+            case FileUploadNotStoredReason.SUPERSEDED:
+                return f"An upload of other content for {self.file_name} replaced this one. Upload it again."
+            case FileUploadNotStoredReason.DELETED:
+                return f"{self.file_name} was deleted or replaced after it was stored. Upload it again."
+            case FileUploadNotStoredReason.EXPIRED:
+                return (
+                    f"The upload of {self.file_name} did not reach storage before its address expired. Upload it again."
+                )
+            case FileUploadNotStoredReason.BUSY:
+                return (
+                    f"An upload of other content for {self.file_name} is still being stored. "
+                    "Upload it again once it is stored."
+                )
+            case FileUploadNotStoredReason.FAILED:
+                return f"Pragmatiks could not store {self.file_name}. Upload it again."
+
+
+class FileUploadPendingError(Exception):
+    """Raised when an upload of a file reached Pragmatiks and made no visible progress within the wait.
+
+    The upload may still complete: uploading the same content again keeps
+    waiting for it, and its bytes are not sent again.
+
+    Attributes:
+        file_name: Name of the file in its project.
+        operation_id: Upload operation still pending.
+    """
+
+    def __init__(self, file_name: str, operation_id: str) -> None:
+        """Record the file and its pending operation.
+
+        Args:
+            file_name: Name of the file in its project.
+            operation_id: Upload operation still pending.
+        """
+        self.file_name = file_name
+        self.operation_id = operation_id
+        super().__init__(file_name, operation_id)
+
+    def __str__(self) -> str:
+        """Name the pending upload, what to do and the upload operation.
+
+        Returns:
+            A sentence saying the upload may still complete, that uploading
+            it again keeps waiting without sending the bytes again, then
+            ``Upload operation <id>.``
         """
         return (
-            f"The wheel upload address expired before storage received the whole wheel ({self.build_storage_answer()})."
+            f"{self.file_name} reached Pragmatiks and is not stored yet; it may still complete. "
+            "Upload it again to keep waiting; the bytes are not sent again. "
+            f"Upload operation {self.operation_id}."
         )
 
 
