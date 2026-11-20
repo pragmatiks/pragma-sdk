@@ -8,7 +8,7 @@ import time
 from collections.abc import AsyncGenerator, Generator
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 from urllib.parse import quote
 
 import httpx
@@ -23,10 +23,26 @@ from pragma_sdk.exceptions import (
     ProjectMismatchError,
     ResourceFailedError,
 )
+from pragma_sdk.file_upload import (
+    declare_file_upload_when_free,
+    declare_file_upload_when_free_async,
+    open_upload_source,
+    open_upload_source_async,
+    read_content_md5,
+    reporting_changed_source,
+    send_file_upload,
+    send_file_upload_async,
+    wait_file_stored,
+    wait_file_stored_async,
+)
 from pragma_sdk.models import (
     ApiKey,
     CreatedApiKey,
+    DeclaredFileUpload,
     DeclaredProviderVersion,
+    FileMetadata,
+    FileUploadDeclaration,
+    FileUploadProgress,
     LifecycleEventFrame,
     MemberRole,
     Organization,
@@ -43,9 +59,9 @@ from pragma_sdk.models import (
     ResourceHistoryEvent,
     ResourceSchema,
     TeardownResponse,
+    UploadAddress,
+    UploadOutcome,
     UserInfo,
-    WheelUploadAddress,
-    WheelUploadOutcome,
 )
 from pragma_sdk.models.identity import _validate_segment
 from pragma_sdk.models.project import (
@@ -224,7 +240,7 @@ class PragmaClient(BaseClient):
             auth_token: Bearer token. Omit for auto-discovery, pass None to disable auth.
             context: Named context for token lookup (e.g., 'production').
             require_auth: Raise if no token can be discovered.
-            upload_transport: Transport that sends wheel uploads to their
+            upload_transport: Transport that sends wheel and file uploads to their
                 signed storage addresses, bypassing the API client so no API
                 credentials reach storage and no address is logged; closes
                 with this client. Defaults to a plain ``httpx.HTTPTransport``,
@@ -595,12 +611,12 @@ class PragmaClient(BaseClient):
                 version, such as when its upload address is not an ``http``
                 or ``https`` URL with a host or carries a header httpx cannot
                 send; the error shows the address as
-                :class:`~pragma_sdk.models.WheelUploadAddress` describes.
+                :class:`~pragma_sdk.models.UploadAddress` describes.
         """  # noqa: DOC502
         response = self._request("POST", "/providers/publish", json_data=declaration.model_dump(mode="json"))
         return DeclaredProviderVersion.model_validate(response)
 
-    def upload_provider_wheel(self, wheel_upload: WheelUploadAddress, wheel_path: Path | str) -> WheelUploadOutcome:
+    def upload_provider_wheel(self, wheel_upload: UploadAddress, wheel_path: Path | str) -> UploadOutcome:
         """Upload the wheel of a declared provider version straight to storage.
 
         Streams the wheel as the body of one ``PUT`` to the signed address,
@@ -624,15 +640,15 @@ class PragmaClient(BaseClient):
 
         Raises:
             OSError: If the wheel cannot be read.
-            WheelUploadExpiredError: If the address expired before storage
+            UploadExpiredError: If the address expired before storage
                 received the whole wheel; publish the wheel again for a fresh
                 address.
-            WheelUploadError: If storage refuses the upload otherwise; it
+            UploadError: If storage refuses the upload otherwise; it
                 carries the HTTP status, storage's error code and request id,
                 never the address.
             httpx.TransportError: If the upload cannot reach storage or a
                 connect, write or read takes longer than
-                :data:`~pragma_sdk.wheel_upload.WHEEL_UPLOAD_TIMEOUT_SECONDS`;
+                :data:`~pragma_sdk.storage_upload.UPLOAD_TIMEOUT_SECONDS`;
                 its request carries the address without its signed query.
         """  # noqa: DOC502
         return upload_wheel(self.upload_transport, wheel_upload, wheel_path)
@@ -668,7 +684,7 @@ class PragmaClient(BaseClient):
 
         Returns:
             The version as declared, without its upload address or the
-            upload's :class:`~pragma_sdk.models.WheelUploadOutcome`; a caller
+            upload's :class:`~pragma_sdk.models.UploadOutcome`; a caller
             needing the outcome runs :meth:`declare_provider_version` and
             :meth:`upload_provider_wheel` itself. Its status is the
             declaration's: an upload does not change it, since the platform
@@ -696,7 +712,7 @@ class PragmaClient(BaseClient):
             httpx.HTTPStatusError: If the API refuses to name the caller's
                 organization or refuses the declaration; the response body's
                 ``detail`` says why and what to change.
-            WheelUploadError: If storage refuses the upload, as
+            UploadError: If storage refuses the upload, as
                 :meth:`upload_provider_wheel` describes.
             httpx.TransportError: If the API or storage cannot be reached.
         """  # noqa: DOC502
@@ -1024,7 +1040,7 @@ class AsyncPragmaClient(BaseClient):
             auth_token: Bearer token. Omit for auto-discovery, pass None to disable auth.
             context: Named context for token lookup (e.g., 'production').
             require_auth: Raise if no token can be discovered.
-            upload_transport: Transport that sends wheel uploads to their
+            upload_transport: Transport that sends wheel and file uploads to their
                 signed storage addresses, bypassing the API client so no API
                 credentials reach storage and no address is logged; closes
                 with this client. Defaults to a plain
@@ -1383,14 +1399,12 @@ class AsyncPragmaClient(BaseClient):
                 version, such as when its upload address is not an ``http``
                 or ``https`` URL with a host or carries a header httpx cannot
                 send; the error shows the address as
-                :class:`~pragma_sdk.models.WheelUploadAddress` describes.
+                :class:`~pragma_sdk.models.UploadAddress` describes.
         """  # noqa: DOC502
         response = await self._request("POST", "/providers/publish", json_data=declaration.model_dump(mode="json"))
         return DeclaredProviderVersion.model_validate(response)
 
-    async def upload_provider_wheel(
-        self, wheel_upload: WheelUploadAddress, wheel_path: Path | str
-    ) -> WheelUploadOutcome:
+    async def upload_provider_wheel(self, wheel_upload: UploadAddress, wheel_path: Path | str) -> UploadOutcome:
         """Async mirror of :meth:`PragmaClient.upload_provider_wheel`.
 
         Args:
@@ -1403,15 +1417,15 @@ class AsyncPragmaClient(BaseClient):
 
         Raises:
             OSError: If the wheel cannot be read.
-            WheelUploadExpiredError: If the address expired before storage
+            UploadExpiredError: If the address expired before storage
                 received the whole wheel; publish the wheel again for a fresh
                 address.
-            WheelUploadError: If storage refuses the upload otherwise; it
+            UploadError: If storage refuses the upload otherwise; it
                 carries the HTTP status, storage's error code and request id,
                 never the address.
             httpx.TransportError: If the upload cannot reach storage or a
                 connect, write or read takes longer than
-                :data:`~pragma_sdk.wheel_upload.WHEEL_UPLOAD_TIMEOUT_SECONDS`;
+                :data:`~pragma_sdk.storage_upload.UPLOAD_TIMEOUT_SECONDS`;
                 its request carries the address without its signed query.
         """  # noqa: DOC502
         return await upload_wheel_async(self.upload_transport, wheel_upload, wheel_path)
@@ -1436,7 +1450,7 @@ class AsyncPragmaClient(BaseClient):
 
         Returns:
             The version as declared, without its upload address or the
-            upload's :class:`~pragma_sdk.models.WheelUploadOutcome`; a caller
+            upload's :class:`~pragma_sdk.models.UploadOutcome`; a caller
             needing the outcome runs :meth:`declare_provider_version` and
             :meth:`upload_provider_wheel` itself. Its status is the
             declaration's: an upload does not change it, since the platform
@@ -1464,7 +1478,7 @@ class AsyncPragmaClient(BaseClient):
             httpx.HTTPStatusError: If the API refuses to name the caller's
                 organization or refuses the declaration; the response body's
                 ``detail`` says why and what to change.
-            WheelUploadError: If storage refuses the upload, as
+            UploadError: If storage refuses the upload, as
                 :meth:`PragmaClient.upload_provider_wheel` describes.
             httpx.TransportError: If the API or storage cannot be reached.
         """  # noqa: DOC502
@@ -1826,6 +1840,19 @@ def build_scoped_path(project_id: str, *suffix: str) -> str:
     return f"/projects/{quote(project_id, safe='')}/resources" + (f"/{tail}" if tail else "")
 
 
+def build_file_upload_path(project_id: str, name: str) -> str:
+    """Build the API path of a project file's upload, with both segments URL-encoded.
+
+    Args:
+        project_id: Project the file belongs to.
+        name: Name of the file in the project.
+
+    Returns:
+        URL path ``/projects/{project_id}/files/{name}/upload``.
+    """
+    return f"/projects/{quote(project_id, safe='')}/files/{quote(name, safe='')}/upload"
+
+
 def build_log_query(provider: str, resource: str, name: str, since: datetime | None, tail: int) -> dict[str, Any]:
     """Build the query parameters of a resource logs request.
 
@@ -1946,28 +1973,116 @@ class ProjectResources:
         """Project identifier this handle is scoped to."""
         return self._project_id
 
-    def upload_file(self, name: str, content: bytes, content_type: str) -> dict[str, Any]:
-        """Upload a file into this project's file storage.
+    def declare_file_upload(self, name: str, declaration: FileUploadDeclaration) -> DeclaredFileUpload:
+        """Declare an upload of a file of this project and get the address its bytes are sent to.
 
-        A ``pragma://files/<name>`` reference resolves to the file of the
-        referencing resource's project.
+        Declaring the same size, content type and MD5 again joins the upload
+        already declared, being stored or stored, with an address only while
+        its bytes have not reached storage. Different content replaces an
+        upload not yet being stored. :meth:`upload_file` declares, sends and
+        waits in one call.
 
         Args:
             name: Name of the file in this project.
-            content: Raw file content as bytes.
-            content_type: MIME type of the file (e.g., "image/png", "application/pdf").
+            declaration: Size, content type and base64 MD5 of the file.
 
         Returns:
-            Dict containing url, public_url, size, content_type, checksum, uploaded_at.
+            The upload operation, with the address while there are bytes to send.
 
         Raises:
-            httpx.HTTPStatusError: If the upload fails.
+            httpx.HTTPStatusError: 409 ``file_upload_in_progress`` while an
+                upload of other content for the name is being stored, with
+                ``Retry-After``; 413 when the size exceeds the maximum file
+                size; 422 for an invalid name or declaration; 503 when the
+                address could not be prepared, with ``Retry-After``; or any
+                other failed request.
+            pydantic.ValidationError: If the answer's upload address is not
+                an ``http`` or ``https`` URL with a host, or carries a header
+                httpx cannot send.
         """  # noqa: DOC502
-        return self._client._request(
+        response = self._client._request(
             "POST",
-            f"/projects/{quote(self._project_id, safe='')}/files/{quote(name, safe='')}/upload",
-            files={"file": (name, content, content_type)},
+            build_file_upload_path(self._project_id, name),
+            json_data=declaration.model_dump(mode="json"),
         )
+        return DeclaredFileUpload.model_validate(response)
+
+    def get_file_upload(self, name: str) -> FileUploadProgress:
+        """Get where the latest upload of a file of this project stands.
+
+        Args:
+            name: Name of the file in this project.
+
+        Returns:
+            The upload's operation and outcome; the file's metadata once ``stored``.
+
+        Raises:
+            httpx.HTTPStatusError: 404 when no upload of the file is
+                recorded, or any other failed request.
+        """  # noqa: DOC502
+        response = self._client._request("GET", build_file_upload_path(self._project_id, name))
+        return FileUploadProgress.model_validate(response)
+
+    def upload_file(self, name: str, source: bytes | Path | BinaryIO, content_type: str) -> FileMetadata:
+        """Upload a file into this project, returning once the file exists.
+
+        Reads the source once in chunks to compute its MD5, declares the
+        upload, then streams exactly that many bytes as one ``PUT`` straight
+        to storage through the upload transport, with no API credentials,
+        and waits until the file is stored. Memory holds one chunk at a
+        time, whatever the size. Uploading the same content again sends no
+        bytes: it joins the upload already declared, being stored or stored.
+        An upload of a name that already holds a file replaces it.
+
+        When the call returns, the file exists and a ``pragma://files/<name>``
+        reference applied next, from a resource of this project, resolves to it.
+
+        Args:
+            name: Name of the file in this project.
+            source: The content: bytes held in memory, the path of a regular
+                file, or a regular file opened for binary reading, read from
+                its start and left open. A file's size is taken when the
+                upload starts; bytes it grows by later are not sent.
+            content_type: Media type the file is stored and served with, such
+                as ``application/pdf``.
+
+        Returns:
+            The stored file's metadata.
+
+        Raises:
+            TypeError: If the file is opened in text mode.
+            ValueError: If the file is not a regular file.
+            OSError: If the file cannot be opened or read.
+            FileUploadNotStoredError: If the upload ended without storing the
+                file: ``changed`` between its hash and its upload, superseded
+                by other content, failed, ``expired`` before the whole file
+                reached storage, or deleted since; or, ``busy``, another
+                upload of the name stayed in storing past the wait. Its
+                ``operation_id`` names the upload operation once declared.
+            FileUploadPendingError: If the upload showed no progress for
+                three minutes; it may still complete, and uploading the same
+                content again keeps waiting without sending the bytes again.
+            UploadError: If storage refuses the upload otherwise.
+            httpx.HTTPStatusError: As :meth:`declare_file_upload` and
+                :meth:`get_file_upload` describe.
+            pydantic.ValidationError: As :meth:`declare_file_upload` describes.
+            httpx.TransportError: If the upload cannot reach storage or a
+                connect, write or read takes longer than
+                :data:`~pragma_sdk.storage_upload.UPLOAD_TIMEOUT_SECONDS`.
+        """  # noqa: DOC502
+        with open_upload_source(source) as upload_source:
+            with reporting_changed_source(name, None):
+                md5 = read_content_md5(upload_source.file, upload_source.size)
+
+            declaration = FileUploadDeclaration(size=upload_source.size, content_type=content_type, md5=md5)
+            declared = declare_file_upload_when_free(lambda: self.declare_file_upload(name, declaration), name)
+
+            if declared.upload is not None:
+                send_file_upload(
+                    self._client.upload_transport, declared.upload, upload_source, name, declared.operation_id
+                )
+
+        return wait_file_stored(lambda: self.get_file_upload(name), name, declared.operation_id)
 
     def list_resources[ResourceT: Resource](
         self,
@@ -2430,28 +2545,91 @@ class AsyncProjectResources:
         """Project identifier this handle is scoped to."""
         return self._project_id
 
-    async def upload_file(self, name: str, content: bytes, content_type: str) -> dict[str, Any]:
-        """Upload a file into this project's file storage.
-
-        A ``pragma://files/<name>`` reference resolves to the file of the
-        referencing resource's project.
+    async def declare_file_upload(self, name: str, declaration: FileUploadDeclaration) -> DeclaredFileUpload:
+        """Async mirror of :meth:`ProjectResources.declare_file_upload`.
 
         Args:
             name: Name of the file in this project.
-            content: Raw file content as bytes.
-            content_type: MIME type of the file (e.g., "image/png", "application/pdf").
+            declaration: Size, content type and base64 MD5 of the file.
 
         Returns:
-            Dict containing url, public_url, size, content_type, checksum, uploaded_at.
+            The upload operation, with the address while there are bytes to send.
 
         Raises:
-            httpx.HTTPStatusError: If the upload fails.
+            httpx.HTTPStatusError: As :meth:`ProjectResources.declare_file_upload` describes.
+            pydantic.ValidationError: If the answer's upload address is not
+                an ``http`` or ``https`` URL with a host, or carries a header
+                httpx cannot send.
         """  # noqa: DOC502
-        return await self._client._request(
+        response = await self._client._request(
             "POST",
-            f"/projects/{quote(self._project_id, safe='')}/files/{quote(name, safe='')}/upload",
-            files={"file": (name, content, content_type)},
+            build_file_upload_path(self._project_id, name),
+            json_data=declaration.model_dump(mode="json"),
         )
+        return DeclaredFileUpload.model_validate(response)
+
+    async def get_file_upload(self, name: str) -> FileUploadProgress:
+        """Async mirror of :meth:`ProjectResources.get_file_upload`.
+
+        Args:
+            name: Name of the file in this project.
+
+        Returns:
+            The upload's operation and outcome; the file's metadata once ``stored``.
+
+        Raises:
+            httpx.HTTPStatusError: 404 when no upload of the file is
+                recorded, or any other failed request.
+        """  # noqa: DOC502
+        response = await self._client._request("GET", build_file_upload_path(self._project_id, name))
+        return FileUploadProgress.model_validate(response)
+
+    async def upload_file(self, name: str, source: bytes | Path | BinaryIO, content_type: str) -> FileMetadata:
+        """Async mirror of :meth:`ProjectResources.upload_file`, the file opened, hashed and read off the event loop.
+
+        When the call returns, the file exists and a ``pragma://files/<name>``
+        reference applied next, from a resource of this project, resolves to it.
+
+        Args:
+            name: Name of the file in this project.
+            source: The content: bytes held in memory, the path of a regular
+                file, or a regular file opened for binary reading, read from
+                its start and left open.
+            content_type: Media type the file is stored and served with, such
+                as ``application/pdf``.
+
+        Returns:
+            The stored file's metadata.
+
+        Raises:
+            TypeError: If the file is opened in text mode.
+            ValueError: If the file is not a regular file.
+            OSError: If the file cannot be opened or read.
+            FileUploadNotStoredError: As :meth:`ProjectResources.upload_file` describes.
+            FileUploadPendingError: As :meth:`ProjectResources.upload_file` describes.
+            UploadError: If storage refuses the upload otherwise.
+            httpx.HTTPStatusError: As :meth:`declare_file_upload` and
+                :meth:`get_file_upload` describe.
+            pydantic.ValidationError: As :meth:`declare_file_upload` describes.
+            httpx.TransportError: If the upload cannot reach storage or a
+                connect, write or read takes longer than
+                :data:`~pragma_sdk.storage_upload.UPLOAD_TIMEOUT_SECONDS`.
+        """  # noqa: DOC502
+        async with open_upload_source_async(source) as upload_source:
+            with reporting_changed_source(name, None):
+                md5 = await run_in_worker_thread(read_content_md5, upload_source.file, upload_source.size)
+
+            declaration = FileUploadDeclaration(size=upload_source.size, content_type=content_type, md5=md5)
+            declared = await declare_file_upload_when_free_async(
+                lambda: self.declare_file_upload(name, declaration), name
+            )
+
+            if declared.upload is not None:
+                await send_file_upload_async(
+                    self._client.upload_transport, declared.upload, upload_source, name, declared.operation_id
+                )
+
+        return await wait_file_stored_async(lambda: self.get_file_upload(name), name, declared.operation_id)
 
     async def list_resources[ResourceT: Resource](
         self,

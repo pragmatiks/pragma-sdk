@@ -30,10 +30,16 @@ from pragma_sdk.models.enums import (
     ResponseStatus,
     TeardownAction,
     VersionStatus,
-    WheelUploadOutcome,
 )
 from pragma_sdk.models.failure import RECOVERY_GUIDANCE
 from pragma_sdk.models.file import FileReference
+from pragma_sdk.models.file_upload import (
+    DeclaredFileUpload,
+    FileMetadata,
+    FileUploadDeclaration,
+    FileUploadOutcome,
+    FileUploadProgress,
+)
 from pragma_sdk.models.identity import InvalidResourceIdentityError, ResourceIdentity
 from pragma_sdk.models.project import (
     CreateProjectRequest,
@@ -50,7 +56,6 @@ from pragma_sdk.models.provider import (
     ProviderInstallationEvent,
     ProviderVersion,
     ProviderVersionDeclaration,
-    WheelUploadAddress,
 )
 from pragma_sdk.models.references import (
     Dependency,
@@ -67,6 +72,7 @@ from pragma_sdk.models.references import (
     SensitiveField,
     SensitiveOutput,
 )
+from pragma_sdk.models.upload import UploadAddress, UploadOutcome
 from pragma_sdk.protocol.references import is_dependency_marker, is_field_ref_marker
 from pragma_sdk.types import EventType
 
@@ -80,6 +86,7 @@ __all__ = [
     "Config",
     "CreateProjectRequest",
     "CreatedApiKey",
+    "DeclaredFileUpload",
     "DeclaredProviderVersion",
     "DeleteProjectRequest",
     "Dependency",
@@ -87,7 +94,11 @@ __all__ = [
     "Field",
     "FieldReference",
     "FileField",
+    "FileMetadata",
     "FileReference",
+    "FileUploadDeclaration",
+    "FileUploadOutcome",
+    "FileUploadProgress",
     "Immutable",
     "ImmutableDependency",
     "ImmutableField",
@@ -129,10 +140,10 @@ __all__ = [
     "TeardownImpact",
     "TeardownResponse",
     "UpdateProjectRequest",
+    "UploadAddress",
+    "UploadOutcome",
     "UserInfo",
     "VersionStatus",
-    "WheelUploadAddress",
-    "WheelUploadOutcome",
     "is_dependency_marker",
     "is_field_ref_marker",
 ]
