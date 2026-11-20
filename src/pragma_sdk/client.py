@@ -831,18 +831,6 @@ class PragmaClient(BaseClient):
         response = self._request("GET", f"/providers/installed/{path}/history")
         return [ProviderInstallationEvent.model_validate(item) for item in response]
 
-    def list_organizations(self) -> list[Organization]:
-        """List all organizations accessible to the current user.
-
-        Returns:
-            List of organizations.
-
-        Raises:
-            httpx.HTTPStatusError: If the request fails.
-        """  # noqa: DOC502
-        response = self._request("GET", "/organizations")
-        return [Organization.model_validate(item) for item in response]
-
     def get_current_organization(self) -> Organization:
         """Get the organization the authenticated caller belongs to.
 
@@ -871,19 +859,6 @@ class PragmaClient(BaseClient):
         """  # noqa: DOC502
         response = self._request("GET", "/organizations/me/status")
         return OrganizationBootstrapStatus.model_validate(response)
-
-    def cleanup_organization(self, organization_id: str) -> None:
-        """Trigger cleanup for an organization.
-
-        Initiates resource teardown and deprovisioning for the organization.
-
-        Args:
-            organization_id: Unique identifier for the organization.
-
-        Raises:
-            httpx.HTTPStatusError: If organization not found or cleanup fails.
-        """  # noqa: DOC502
-        self._request("POST", f"/organizations/{organization_id}/cleanup")
 
     def list_organization_members(self) -> list[OrganizationMember]:
         """List the members of the caller's organization.
@@ -1626,18 +1601,6 @@ class AsyncPragmaClient(BaseClient):
         response = await self._request("GET", f"/providers/installed/{path}/history")
         return [ProviderInstallationEvent.model_validate(item) for item in response]
 
-    async def list_organizations(self) -> list[Organization]:
-        """List all organizations accessible to the current user.
-
-        Returns:
-            List of organizations.
-
-        Raises:
-            httpx.HTTPStatusError: If the request fails.
-        """  # noqa: DOC502
-        response = await self._request("GET", "/organizations")
-        return [Organization.model_validate(item) for item in response]
-
     async def get_current_organization(self) -> Organization:
         """Get the organization the authenticated caller belongs to.
 
@@ -1666,19 +1629,6 @@ class AsyncPragmaClient(BaseClient):
         """  # noqa: DOC502
         response = await self._request("GET", "/organizations/me/status")
         return OrganizationBootstrapStatus.model_validate(response)
-
-    async def cleanup_organization(self, organization_id: str) -> None:
-        """Trigger cleanup for an organization.
-
-        Initiates resource teardown and deprovisioning for the organization.
-
-        Args:
-            organization_id: Unique identifier for the organization.
-
-        Raises:
-            httpx.HTTPStatusError: If organization not found or cleanup fails.
-        """  # noqa: DOC502
-        await self._request("POST", f"/organizations/{organization_id}/cleanup")
 
     async def list_organization_members(self) -> list[OrganizationMember]:
         """List the members of the caller's organization.
