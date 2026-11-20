@@ -1,3 +1,9 @@
+## v30.1.1 (2026-11-20)
+
+### Fix
+
+- **client**: remove methods that call routes the API does not serve
+
 ## v30.1.0 (2026-11-18)
 
 ### Feat
