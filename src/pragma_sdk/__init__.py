@@ -11,6 +11,7 @@ Core exports for provider authoring:
 Core exports for API consumers:
     PragmaClient: Synchronous HTTP client.
     AsyncPragmaClient: Asynchronous HTTP client.
+    LogFollowEvent, LogFollowEntry, LogFollowEnd, LogFollowError: Events a followed log stream yields.
 
 Additional imports available from submodules:
     pragma_sdk.models: Data models (ProviderVersion, ProviderInstallation, etc.)
@@ -25,9 +26,11 @@ from pragma_sdk.client import (
     PragmaClient,
     ProjectResources,
 )
+from pragma_sdk.client_log_follow import LogFollowEnd, LogFollowEntry, LogFollowError, LogFollowEvent
 from pragma_sdk.exceptions import (
     AlreadyExistsError,
     CallbackRefusedError,
+    LogFollowInterruptedError,
     ProjectHasResourcesError,
     ProjectMismatchError,
     RenamedWheelWriteError,
@@ -156,6 +159,11 @@ __all__ = [
     "LifecycleEventFrame",
     "LifecycleState",
     "LogEntry",
+    "LogFollowEnd",
+    "LogFollowEntry",
+    "LogFollowError",
+    "LogFollowEvent",
+    "LogFollowInterruptedError",
     "MemberRole",
     "MissingObserveError",
     "MissingOutputsError",

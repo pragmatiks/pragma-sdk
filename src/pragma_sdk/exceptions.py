@@ -118,6 +118,21 @@ class ProjectHasResourcesError(Exception):
         )
 
 
+class LogFollowInterruptedError(Exception):
+    """Raised when a followed log stream breaks before an ``end`` or ``error`` event.
+
+    The connection to the API was lost or went silent mid-stream, so entries
+    written after the last one received were not delivered. Follow again with
+    ``since`` set to the last entry's timestamp to continue: ``since`` is
+    inclusive, so entries carrying that exact timestamp arrive again, and
+    ``tail`` caps how many entries the new stream sends first.
+    """
+
+    def __init__(self) -> None:
+        """Build the message naming the interruption."""
+        super().__init__("The log stream closed before it ended. Follow again to continue.")
+
+
 class WheelExpansionLimitError(Exception):
     """Raised when a wheel's members decompress past an expansion budget.
 

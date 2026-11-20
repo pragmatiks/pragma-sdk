@@ -8,6 +8,7 @@ Module map, wheel contract, features, dependencies and code patterns of `pragmat
 pragma-sdk/
 └── src/pragma_sdk/
     ├── client.py          # PragmaClient (sync) and AsyncPragmaClient
+    ├── client_log_follow.py  # Followed log stream events and the server-sent event parser behind `follow_logs`
     ├── models/            # Pydantic models (shared with API)
     ├── provider/          # Provider authoring (Provider, Resource, Config, Outputs)
     ├── protocol/          # Host <-> worker protocol: frames, codec, handshake, introspection report, config reference markers
@@ -33,7 +34,7 @@ pragma-sdk/
 
 ## Features
 
-**HTTP Clients**: Both sync (`PragmaClient`) and async (`AsyncPragmaClient`) with identical APIs.
+**HTTP Clients**: Both sync (`PragmaClient`) and async (`AsyncPragmaClient`) with identical APIs. A project's `resources` handle reads a resource's recent logs with `logs(provider, resource, name, since=, tail=)` and streams them with `follow_logs(...)`, which yields `LogFollowEntry` events, then one `LogFollowEnd` or `LogFollowError`, from the API's server-sent events (`client_log_follow.parse_log_follow_stream`, keep-alive `:` lines ignored), all exported from `pragma_sdk`; `since` is inclusive, and a naive `since` raises `ValueError`. A refused stream raises `httpx.HTTPStatusError` with its body read, and a connection that breaks, goes silent past the keep-alive interval or closes without a terminal event raises `LogFollowInterruptedError`. Callers that stop early close the generator (`contextlib.closing` or `aclosing`).
 
 **Provider Authoring**: `Provider`, `Resource[Config, Outputs]`, `Field[T]`, `FieldReference` for building providers.
 

@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from typing import assert_never
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from contextlib import aclosing
+from typing import assert_never, cast
 
 import structlog
 from pydantic import BaseModel
 
 from pragma_sdk.context import RuntimeContext, runtime_context_scope
+from pragma_sdk.declaration.provider import overrides_follow_logs
 from pragma_sdk.models import ChildrenPending, Config, Resource
+from pragma_sdk.protocol.codec import FrameTooLargeError
 from pragma_sdk.protocol.frames import (
     DispatchParams,
     DispatchResult,
@@ -16,6 +20,10 @@ from pragma_sdk.protocol.frames import (
     MigrateResult,
     ObserveParams,
     ObserveResult,
+    ResourceLogsFollowEntry,
+    ResourceLogsFollowEvent,
+    ResourceLogsFollowParams,
+    ResourceLogsFollowStarted,
     ResourcePayload,
     ResourceQueryParams,
 )
@@ -24,7 +32,22 @@ from pragma_sdk.types import EventType, LogEntry, Vitals
 from pragma_sdk.worker.resource_builder import ResourceBuilder
 
 
+type SendResourceLogsFollowEvent = Callable[[ResourceLogsFollowEvent], Awaitable[None]]
+"""Writes one event of a followed log stream to the host."""
+
 logger = structlog.get_logger()
+
+
+class FollowLogsUnsupportedError(Exception):
+    """Raised for a ``resource_logs_follow`` request on a type that does not override ``follow_logs``."""
+
+    def __init__(self, resource: str) -> None:
+        """Name the resource type that cannot follow its logs.
+
+        Args:
+            resource: Registered resource type name.
+        """
+        super().__init__(f"Resource type {resource!r} does not support following logs.")
 
 
 class RequestHandlers:
@@ -228,6 +251,51 @@ class RequestHandlers:
 
         return [entry async for entry in resource.logs(since=params.since, tail=params.tail)]
 
+    async def run_resource_logs_follow(
+        self, params: ResourceLogsFollowParams, send_event: SendResourceLogsFollowEvent
+    ) -> dict[str, object]:
+        """Stream a resource's log entries to the host as ``resource_logs_follow_event`` notifications until it ends.
+
+        Each send waits for the connection to take the frame, so a slow host
+        slows the generator. An entry too large for one frame, or one that
+        cannot be encoded, is dropped with a warning and the stream goes on.
+        ``follow_logs`` overrides are async generators, so the stream closes
+        the generator however it ends, cancellation included.
+
+        Args:
+            params: The follow parameters.
+            send_event: Writes one event to the host as a ``resource_logs_follow_event`` notification.
+
+        Returns:
+            An empty result, once the provider's generator ends.
+
+        Raises:
+            FollowLogsUnsupportedError: If the resource type does not override ``follow_logs``.
+            ValueError: If the provider defines no such resource type, or its
+                class has no Config-typed ``config`` field.
+            ValidationError: If the config does not match the resource's Config class.
+            MissingResolvedFileError: If the config holds a Pragmatiks file
+                reference the query carries no signed URL for.
+                Any exception the resource's ``follow_logs`` raises, or
+                writing an event raises, propagates unchanged.
+        """  # noqa: DOC502
+        resource_class = self.find_resource_class(params.target.resource)
+
+        if not overrides_follow_logs(resource_class):
+            raise FollowLogsUnsupportedError(params.target.resource)
+
+        resource = self.resource_builder.build_resource(resource_class, params.target, params.resolved_files)
+
+        await send_event(ResourceLogsFollowStarted())
+
+        entries = cast("AsyncGenerator[LogEntry]", resource.follow_logs(since=params.since, tail=params.tail))
+
+        async with aclosing(entries):
+            async for entry in entries:
+                await send_resource_logs_follow_entry(send_event, entry)
+
+        return {}
+
     async def run_resource_vitals(self, params: ResourceQueryParams) -> Vitals:
         """Read a resource's vitals.
 
@@ -310,3 +378,19 @@ class RequestHandlers:
             raise ValueError(f"Unknown resource type: {resource}")
 
         return resource_class
+
+
+async def send_resource_logs_follow_entry(send_event: SendResourceLogsFollowEvent, entry: LogEntry) -> None:
+    """Send one followed log entry, dropping it with a warning when it cannot be framed.
+
+    Args:
+        send_event: Writes one event to the host.
+        entry: The log entry.
+
+    Raises:
+        ConnectionError: If the host closed the connection.
+    """  # noqa: DOC502
+    try:
+        await send_event(ResourceLogsFollowEntry(entry=entry))
+    except (FrameTooLargeError, ValueError) as error:
+        logger.warning("resource_logs_follow_entry_dropped", error=str(error), timestamp=entry.timestamp.isoformat())

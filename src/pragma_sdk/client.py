@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import os
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -14,8 +15,10 @@ import httpx
 
 from pragma_sdk.auth import BearerAuth
 from pragma_sdk.blocking import run_in_worker_thread
+from pragma_sdk.client_log_follow import LogFollowEvent, parse_log_follow_stream, parse_log_follow_stream_async
 from pragma_sdk.config import get_token_for_context
 from pragma_sdk.exceptions import (
+    LogFollowInterruptedError,
     ProjectHasResourcesError,
     ProjectMismatchError,
     ResourceFailedError,
@@ -51,7 +54,7 @@ from pragma_sdk.models.project import (
     Project,
     UpdateProjectRequest,
 )
-from pragma_sdk.types import HealthStatus, LifecycleState, Vitals
+from pragma_sdk.types import HealthStatus, LifecycleState, LogEntry, Vitals
 from pragma_sdk.wheel import read_wheel_declaration
 from pragma_sdk.wheel_publish import (
     build_version_without_upload_address,
@@ -61,6 +64,13 @@ from pragma_sdk.wheel_publish import (
 )
 from pragma_sdk.wheel_rename import rename_provider_wheel
 from pragma_sdk.wheel_upload import upload_wheel, upload_wheel_async
+
+
+LIFECYCLE_STREAM_READ_TIMEOUT_SECONDS = 30.0
+"""Seconds the lifecycle event stream may stay silent: two of the API's keepalive intervals."""
+
+LOG_FOLLOW_READ_TIMEOUT_SECONDS = 60.0
+"""Seconds a followed log stream may stay silent; the API writes a keep-alive well within it."""
 
 
 def _validate_provider_name(provider_name: str) -> str:
@@ -1790,7 +1800,7 @@ class AsyncPragmaClient(BaseClient):
         async with self._client.stream(
             "GET",
             "/events/stream",
-            timeout=httpx.Timeout(self.timeout, read=30.0),
+            timeout=httpx.Timeout(self.timeout, read=LIFECYCLE_STREAM_READ_TIMEOUT_SECONDS),
         ) as response:
             response.raise_for_status()
 
@@ -1814,6 +1824,63 @@ def build_scoped_path(project_id: str, *suffix: str) -> str:
     """
     tail = "/".join(suffix)
     return f"/projects/{quote(project_id, safe='')}/resources" + (f"/{tail}" if tail else "")
+
+
+def build_log_query(provider: str, resource: str, name: str, since: datetime | None, tail: int) -> dict[str, Any]:
+    """Build the query parameters of a resource logs request.
+
+    Args:
+        provider: Provider that manages the resource.
+        resource: Resource type name.
+        name: Resource instance name.
+        since: Only include entries at or after this timezone-aware timestamp, or ``None``.
+        tail: Maximum number of recent entries.
+
+    Returns:
+        Query parameters for the logs endpoint, with ``since`` as an ISO 8601 string when given.
+
+    Raises:
+        ValueError: If ``since`` has no timezone.
+    """
+    params: dict[str, Any] = {"provider": provider, "resource": resource, "name": name, "tail": tail}
+
+    if since is None:
+        return params
+
+    if since.utcoffset() is None:
+        raise ValueError("since must be a timezone-aware datetime.")
+
+    params["since"] = since.isoformat()
+
+    return params
+
+
+def build_log_follow_request(
+    project_id: str, provider: str, resource: str, name: str, since: datetime | None, tail: int, timeout: float
+) -> dict[str, Any]:
+    """Build the arguments of a streamed resource logs request that follows the logs.
+
+    Args:
+        project_id: Project the resource belongs to.
+        provider: Provider that manages the resource.
+        resource: Resource type name.
+        name: Resource instance name.
+        since: Only include entries at or after this timezone-aware timestamp, or ``None``.
+        tail: Maximum number of recent entries.
+        timeout: The client's timeout in seconds, kept for every phase but reading.
+
+    Returns:
+        Keyword arguments for ``httpx`` ``stream``: method, URL, params and timeout.
+
+    Raises:
+        ValueError: If ``since`` has no timezone.
+    """  # noqa: DOC502
+    return {
+        "method": "GET",
+        "url": build_scoped_path(project_id, "logs"),
+        "params": build_log_query(provider, resource, name, since, tail) | {"follow": "true"},
+        "timeout": httpx.Timeout(timeout, read=LOG_FOLLOW_READ_TIMEOUT_SECONDS),
+    }
 
 
 def compute_deadline(timeout: float | None, now: float) -> float | None:
@@ -2022,6 +2089,75 @@ class ProjectResources:
         params = {"provider": provider, "resource": resource, "name": name}
         response = self._client._request("GET", build_scoped_path(self._project_id, "vitals"), params=params)
         return Vitals.model_validate(response)
+
+    def logs(
+        self, provider: str, resource: str, name: str, *, since: datetime | None = None, tail: int = 100
+    ) -> list[LogEntry]:
+        """Fetch a resource's recent log entries from its provider.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+            since: Only include entries at or after this timezone-aware timestamp.
+            tail: Maximum number of recent entries.
+
+        Returns:
+            The log entries the provider reported.
+
+        Raises:
+            ValueError: If ``since`` has no timezone.
+            httpx.HTTPStatusError: If the resource is not found or not applied yet,
+                the provider cannot report its logs, or the request fails.
+        """  # noqa: DOC502
+        params = build_log_query(provider, resource, name, since, tail)
+        response = self._client._request("GET", build_scoped_path(self._project_id, "logs"), params=params)
+        return [LogEntry.model_validate(item) for item in response]
+
+    def follow_logs(
+        self, provider: str, resource: str, name: str, *, since: datetime | None = None, tail: int = 100
+    ) -> Generator[LogFollowEvent]:
+        """Stream a resource's log entries as its provider writes them.
+
+        The ``tail`` most recent entries come first, then each new one.
+        Delivery is at most once, with no replay. The stream ends with one
+        ``end`` or ``error`` event. To stop early, close the generator
+        (``close()``, or ``contextlib.closing``); breaking out of a loop
+        alone leaves the connection open until the generator is collected.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+            since: Only include entries at or after this timezone-aware timestamp.
+            tail: Maximum number of recent entries.
+
+        Yields:
+            ``entry`` events, then one ``end`` or ``error`` event.
+
+        Raises:
+            ValueError: If ``since`` has no timezone.
+            httpx.HTTPStatusError: If the API refuses the stream, such as 501
+                for a resource type that cannot follow its logs; its response
+                body is read, so it carries the API's message.
+            httpx.TransportError: If the connection cannot be opened.
+            ValidationError: If an event's data is not JSON matching its shape.
+            LogFollowInterruptedError: If the connection breaks, goes silent
+                past the API's keep-alive interval, or closes without a terminal event.
+        """  # noqa: DOC502
+        request = build_log_follow_request(
+            self._project_id, provider, resource, name, since, tail, self._client.timeout
+        )
+
+        with self._client._client.stream(**request) as response:
+            if response.is_error:
+                response.read()
+                response.raise_for_status()
+
+            try:
+                yield from parse_log_follow_stream(response.iter_lines())
+            except httpx.TransportError as error:
+                raise LogFollowInterruptedError from error
 
     def apply_resource[ResourceT: Resource](
         self,
@@ -2437,6 +2573,76 @@ class AsyncProjectResources:
         params = {"provider": provider, "resource": resource, "name": name}
         response = await self._client._request("GET", build_scoped_path(self._project_id, "vitals"), params=params)
         return Vitals.model_validate(response)
+
+    async def logs(
+        self, provider: str, resource: str, name: str, *, since: datetime | None = None, tail: int = 100
+    ) -> list[LogEntry]:
+        """Fetch a resource's recent log entries from its provider.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+            since: Only include entries at or after this timezone-aware timestamp.
+            tail: Maximum number of recent entries.
+
+        Returns:
+            The log entries the provider reported.
+
+        Raises:
+            ValueError: If ``since`` has no timezone.
+            httpx.HTTPStatusError: If the resource is not found or not applied yet,
+                the provider cannot report its logs, or the request fails.
+        """  # noqa: DOC502
+        params = build_log_query(provider, resource, name, since, tail)
+        response = await self._client._request("GET", build_scoped_path(self._project_id, "logs"), params=params)
+        return [LogEntry.model_validate(item) for item in response]
+
+    async def follow_logs(
+        self, provider: str, resource: str, name: str, *, since: datetime | None = None, tail: int = 100
+    ) -> AsyncGenerator[LogFollowEvent]:
+        """Stream a resource's log entries as its provider writes them.
+
+        The ``tail`` most recent entries come first, then each new one.
+        Delivery is at most once, with no replay. The stream ends with one
+        ``end`` or ``error`` event. To stop early, iterate inside
+        ``contextlib.aclosing``; breaking out of ``async for`` alone leaves
+        the connection open until the event loop finalizes the generator.
+
+        Args:
+            provider: Provider that manages the resource.
+            resource: Resource type name.
+            name: Resource instance name.
+            since: Only include entries at or after this timezone-aware timestamp.
+            tail: Maximum number of recent entries.
+
+        Yields:
+            ``entry`` events, then one ``end`` or ``error`` event.
+
+        Raises:
+            ValueError: If ``since`` has no timezone.
+            httpx.HTTPStatusError: If the API refuses the stream, such as 501
+                for a resource type that cannot follow its logs; its response
+                body is read, so it carries the API's message.
+            httpx.TransportError: If the connection cannot be opened.
+            ValidationError: If an event's data is not JSON matching its shape.
+            LogFollowInterruptedError: If the connection breaks, goes silent
+                past the API's keep-alive interval, or closes without a terminal event.
+        """  # noqa: DOC502
+        request = build_log_follow_request(
+            self._project_id, provider, resource, name, since, tail, self._client.timeout
+        )
+
+        async with self._client._client.stream(**request) as response:
+            if response.is_error:
+                await response.aread()
+                response.raise_for_status()
+
+            try:
+                async for event in parse_log_follow_stream_async(response.aiter_lines()):
+                    yield event
+            except httpx.TransportError as error:
+                raise LogFollowInterruptedError from error
 
     async def apply_resource[ResourceT: Resource](
         self,

@@ -5,9 +5,10 @@ socket. Each frame is a 4-byte big-endian length prefix followed by one UTF-8
 JSON body of at most :data:`MAXIMUM_FRAME_BYTES`.
 
 The worker opens with the ``handshake`` request. The host sends the other
-requests (``dispatch``, ``observe``, ``migrate``, the resource queries and
-``shutdown``) and the ``cancel`` notification; the worker sends the
-``heartbeat`` notification and, from a dispatch, the
+requests (``dispatch``, ``observe``, ``migrate``, the resource queries, the
+``resource_logs_follow`` stream and ``shutdown``) and the ``cancel``
+notification; the worker sends the ``heartbeat`` notification, the
+``resource_logs_follow_event`` notifications of a log stream and, from a dispatch, the
 :data:`APPLY_RESOURCE_METHOD` and :data:`READ_RESOURCE_METHOD` callbacks.
 Beside the JSON-RPC codes, a handshake offering no supported
 protocol version fails with :data:`UNSUPPORTED_PROTOCOL_CODE`, a create
@@ -15,13 +16,15 @@ dispatch refused because its external object already exists, and an
 observe that finds an object the resource did not create, with
 :data:`ALREADY_EXISTS_CODE`, a request the host cancelled at its deadline with :data:`CANCELLED_CODE`, and
 the host answers a callback the platform refused with
-:data:`CALLBACK_REFUSED_CODE`, its message the platform's reason.
+:data:`CALLBACK_REFUSED_CODE`, its message the platform's reason, and a
+``resource_logs_follow`` for a type that does not override ``follow_logs``
+is answered with :data:`FOLLOW_LOGS_UNSUPPORTED_CODE`.
 """
 
 from __future__ import annotations
 
 
-PROTOCOL_VERSION = 7
+PROTOCOL_VERSION = 8
 OFFERED_PROTOCOL_VERSIONS = [PROTOCOL_VERSION]
 
 JSONRPC_VERSION = "2.0"
@@ -35,8 +38,10 @@ READ_RESOURCE_METHOD = "read_resource"
 MIGRATE_METHOD = "migrate"
 RESOURCE_LOGS_METHOD = "resource_logs"
 RESOURCE_VITALS_METHOD = "resource_vitals"
+RESOURCE_LOGS_FOLLOW_METHOD = "resource_logs_follow"
 CANCEL_METHOD = "cancel"
 HEARTBEAT_METHOD = "heartbeat"
+RESOURCE_LOGS_FOLLOW_EVENT_METHOD = "resource_logs_follow_event"
 
 METHOD_NOT_FOUND_CODE = -32601
 INVALID_PARAMS_CODE = -32602
@@ -45,6 +50,7 @@ UNSUPPORTED_PROTOCOL_CODE = -32001
 ALREADY_EXISTS_CODE = -32002
 CANCELLED_CODE = -32003
 CALLBACK_REFUSED_CODE = -32004
+FOLLOW_LOGS_UNSUPPORTED_CODE = -32005
 
 LENGTH_PREFIX_FORMAT = ">I"
 LENGTH_PREFIX_BYTES = 4

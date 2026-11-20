@@ -1,6 +1,6 @@
 # Host protocol
 
-The contract between the Pragmatiks host and the worker and introspection entry points in `src/pragma_sdk/protocol/`, `worker/` and `introspection/`, at protocol 7.
+The contract between the Pragmatiks host and the worker and introspection entry points in `src/pragma_sdk/protocol/`, `worker/` and `introspection/`, at protocol 8.
 
 ## Contract
 
@@ -19,12 +19,14 @@ The host and the worker exchange JSON-RPC 2.0 messages, each frame a 4-byte big-
 | `observe` | host | request | Runs `on_observe` |
 | `migrate` | host | request | Runs a resource class's `upgrade` or `downgrade` on one resource's state |
 | `resource_logs`, `resource_vitals` | host | request | Query one resource's logs or vitals |
+| `resource_logs_follow` | host | request | Streams one resource's logs until the provider's stream ends or the host cancels |
 | `shutdown` | host | request | Ends the session |
 | `cancel` | host | notification | Cancels one request |
 | `heartbeat` | worker | notification | Shows the worker is alive |
+| `resource_logs_follow_event` | worker | notification | Carries one event of a `resource_logs_follow` stream |
 | `apply_resource`, `read_resource` | worker | callback request | Apply or read a child the dispatched resource owns |
 
-Protocol 7 is the only version the worker offers; a handshake offering no version the host supports fails with `UNSUPPORTED_PROTOCOL_CODE`. A request for a method the worker does not serve is answered with `METHOD_NOT_FOUND_CODE` (logged `request_method_unknown`).
+Protocol 8 is the only version the worker offers; a handshake offering no version the host supports fails with `UNSUPPORTED_PROTOCOL_CODE`. A request for a method the worker does not serve is answered with `METHOD_NOT_FOUND_CODE` (logged `request_method_unknown`).
 
 ## Handshake and provider identity
 
@@ -75,6 +77,8 @@ The protocol carries no callback that waits for a resource's state and no owner 
 `resource_logs` (`RESOURCE_LOGS_METHOD`) and `resource_vitals` (`RESOURCE_VITALS_METHOD`) take `ResourceQueryParams`: a `target` whose config is the resolved config the host last applied, and `resolved_files` (`ResourceQueryParams.resolved_files`: signed download URLs keyed by Pragmatiks file reference, the shape `ObserveParams` carries). `RequestHandlers.build_queried_resource` builds the resource from both, so a config holding a required field or a `pragma://files` reference builds as it does for a dispatch.
 
 Vitals are the provider-reported live check: `resource_vitals` runs `Resource.vitals()`, which answers `Vitals(status: VitalsStatus, message, details)` with `VitalsStatus` one of `nominal`, `impaired`, `down` (default `nominal`), and `ResourceTypeCapabilities.vitals` reports whether a type overrides it.
+
+Following logs is a stream: `resource_logs_follow` (`RESOURCE_LOGS_FOLLOW_METHOD`) takes `ResourceLogsFollowParams`, which is `ResourceQueryParams` (`target`, `resolved_files`, `since`, `tail`), and runs `Resource.follow_logs(since, tail)`, which yields the `tail` most recent entries at or after `since`, then each new entry. `ResourceTypeCapabilities.follow_logs` reports whether a type overrides it; a request for a type that does not is answered with `FOLLOW_LOGS_UNSUPPORTED_CODE` (-32005) before anything is sent. Otherwise the worker sends `resource_logs_follow_event` notifications (`RESOURCE_LOGS_FOLLOW_EVENT_METHOD`, `ResourceLogsFollowEventParams(correlation_id, event)`, the request's correlation id in the params since a notification has no `id`): first `ResourceLogsFollowStarted` (`kind: started`), before the provider's generator is iterated, then one `ResourceLogsFollowEntry` (`kind: entry`, `entry: LogEntry`) per entry; each write waits for the connection to take the frame, so a slow host slows the generator. An entry too large for one frame, or one that cannot be encoded, is dropped with a `resource_logs_follow_entry_dropped` warning and the stream goes on. The request answers `{}` when the generator ends, `CANCELLED_CODE` when the host cancels it (the generator is closed), and `INTERNAL_ERROR_CODE` when the provider raises. Delivery is at most once, with no replay, in order per source. A cancel ends the generator only when it waits on cancellation-safe async sources: blocking work in an executor is waited for before the cancel is answered, so `follow_logs` must not follow from one.
 
 ## Config and outputs
 
