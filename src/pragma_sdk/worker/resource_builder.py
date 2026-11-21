@@ -163,7 +163,7 @@ class ResourceBuilder:
             the field is a list of dependencies, and dependency_type is the
             single Dependency type, list of Dependency types for unions, or None.
         """
-        field_type = self.unwrap_annotated(field_type)
+        field_type = self.unwrap_field_type(field_type)
 
         if isinstance(field_type, type) and issubclass(field_type, Dependency):
             return False, field_type
@@ -179,8 +179,8 @@ class ResourceBuilder:
         return False, self.extract_union_dependency_types(field_type)
 
     @staticmethod
-    def unwrap_annotated(field_type: Any) -> Any:
-        """Strip type aliases and an ``Annotated[...]`` wrapper down to the underlying type.
+    def unwrap_field_type(field_type: Any) -> Any:
+        """Strip type aliases and ``Annotated[...]`` wrappers, at any depth, down to the underlying type.
 
         ``ImmutableDependency[T]`` is a type alias for
         ``Annotated[Dependency[T], Immutable()]``, so it unwraps to ``Dependency[T]``.
@@ -192,12 +192,13 @@ class ResourceBuilder:
             The underlying type, or ``field_type`` unchanged when it is
             neither a type alias nor ``Annotated[...]``.
         """
-        field_type = expand_type_alias(field_type)
+        while True:
+            field_type = expand_type_alias(field_type)
 
-        if get_origin(field_type) is Annotated:
-            return get_args(field_type)[0]
+            if get_origin(field_type) is not Annotated:
+                return field_type
 
-        return field_type
+            field_type = get_args(field_type)[0]
 
     def extract_list_dependency_type(
         self, field_type: Any
@@ -232,7 +233,7 @@ class ResourceBuilder:
         Returns:
             The Dependency types found in the union, or None if there are none.
         """
-        members = [self.unwrap_annotated(argument) for argument in get_args(field_type)]
+        members = [self.unwrap_field_type(argument) for argument in get_args(field_type)]
         dependency_types = [
             member for member in members if member is not type(None) and self.is_dependency_union_member(member)
         ]
