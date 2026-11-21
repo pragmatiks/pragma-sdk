@@ -54,6 +54,70 @@ def is_union_origin(origin: Any) -> bool:
     return origin is Union or origin is types.UnionType
 
 
+def expand_type_alias(annotation: Any) -> Any:
+    """Replace a PEP 695 type alias with the type it stands for.
+
+    A subscripted alias such as ``ImmutableDependency[GKE]`` expands to its
+    value with the alias's arguments substituted, here
+    ``Annotated[Dependency[GKE], Immutable()]``. Aliases of aliases expand
+    until a non-alias type remains.
+
+    Args:
+        annotation: Type annotation to expand.
+
+    Returns:
+        The aliased type, or ``annotation`` unchanged when it is not a type alias.
+    """
+    while True:
+        if isinstance(annotation, typing.TypeAliasType):
+            annotation = annotation.__value__
+            continue
+
+        alias = typing.get_origin(annotation)
+
+        if not isinstance(alias, typing.TypeAliasType):
+            return annotation
+
+        arguments = dict(zip(alias.__type_params__, typing.get_args(annotation), strict=True))
+        annotation = _substitute_type_parameters(alias.__value__, arguments)
+
+
+def _substitute_type_parameters(annotation: Any, arguments: dict[Any, Any]) -> Any:
+    """Replace type parameters in an annotation with the given arguments.
+
+    Covers the shapes a type alias's value takes in the SDK: a bare type
+    parameter, ``Annotated[...]``, a Pydantic generic model such as
+    ``Dependency[ResourceT]`` (which hides its parameters from ``typing``),
+    and ``typing`` generics and unions.
+
+    Args:
+        annotation: Type annotation containing type parameters.
+        arguments: Argument for each type parameter.
+
+    Returns:
+        The annotation with every listed type parameter replaced.
+    """
+    if isinstance(annotation, typing.TypeVar):
+        return arguments.get(annotation, annotation)
+
+    if typing.get_origin(annotation) is Annotated:
+        inner, *metadata = typing.get_args(annotation)
+        return Annotated[_substitute_type_parameters(inner, arguments), *metadata]
+
+    generic_metadata = getattr(annotation, "__pydantic_generic_metadata__", None)
+
+    if generic_metadata and generic_metadata["parameters"]:
+        substituted = tuple(_substitute_type_parameters(argument, arguments) for argument in generic_metadata["args"])
+        return generic_metadata["origin"][substituted]
+
+    parameters = getattr(annotation, "__parameters__", ())
+
+    if parameters:
+        return annotation[tuple(arguments.get(parameter, parameter) for parameter in parameters)]
+
+    return annotation
+
+
 def _has_immutable_marker(alias: typing.TypeAliasType) -> bool:
     """Check if a TypeAliasType's underlying value carries the Immutable marker.
 

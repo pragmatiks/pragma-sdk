@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from pragma_sdk.diagnostics.validation_errors import build_validation_error_details
 from pragma_sdk.models import Config, Dependency, Resource
-from pragma_sdk.models.base import drop_undeclared_config_keys, is_union_origin
+from pragma_sdk.models.base import drop_undeclared_config_keys, expand_type_alias, is_union_origin
 from pragma_sdk.protocol.frames import ResourcePayload
 from pragma_sdk.protocol.references import is_dependency_marker, is_field_ref_marker
 from pragma_sdk.provider.loading import derive_config_class
@@ -150,7 +150,8 @@ class ResourceBuilder:
     def extract_dependency_type(self, field_type: Any) -> tuple[bool, type[Dependency] | list[type[Dependency]] | None]:
         """Extract Dependency type(s) from a field type annotation.
 
-        Handles direct Dependency[T], Annotated[Dependency[T], ...] (ImmutableDependency),
+        Handles direct Dependency[T], ImmutableDependency[T] and other type aliases,
+        Annotated[Dependency[T], ...],
         union types like Dependency[A] | Dependency[B],
         and list types like list[Dependency[T]] or list[Dependency[A] | Dependency[B]].
 
@@ -179,15 +180,20 @@ class ResourceBuilder:
 
     @staticmethod
     def unwrap_annotated(field_type: Any) -> Any:
-        """Strip an ``Annotated[...]`` wrapper down to its underlying type.
+        """Strip type aliases and an ``Annotated[...]`` wrapper down to the underlying type.
+
+        ``ImmutableDependency[T]`` is a type alias for
+        ``Annotated[Dependency[T], Immutable()]``, so it unwraps to ``Dependency[T]``.
 
         Args:
             field_type: Type annotation to examine.
 
         Returns:
-            The wrapped type if ``field_type`` is ``Annotated[...]``, otherwise
-            ``field_type`` unchanged.
+            The underlying type, or ``field_type`` unchanged when it is
+            neither a type alias nor ``Annotated[...]``.
         """
+        field_type = expand_type_alias(field_type)
+
         if get_origin(field_type) is Annotated:
             return get_args(field_type)[0]
 
@@ -226,10 +232,9 @@ class ResourceBuilder:
         Returns:
             The Dependency types found in the union, or None if there are none.
         """
+        members = [self.unwrap_annotated(argument) for argument in get_args(field_type)]
         dependency_types = [
-            argument
-            for argument in get_args(field_type)
-            if argument is not type(None) and self.is_dependency_union_member(argument)
+            member for member in members if member is not type(None) and self.is_dependency_union_member(member)
         ]
 
         return dependency_types or None
