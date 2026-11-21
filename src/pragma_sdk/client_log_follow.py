@@ -38,8 +38,9 @@ class LogFollowEnd(BaseModel):
         kind: Always ``end``.
         reason: Why it finished, an open-ended string such as ``completed``
             when the provider had nothing left to follow, or
-            ``provider_restarted`` when the provider restarted and following
-            again with ``since`` continues.
+            ``provider_restarted`` when the provider restarted, or
+            ``host_draining`` when the provider's host restarted; after
+            either, following again with ``since`` continues.
     """
 
     kind: Literal["end"] = "end"
