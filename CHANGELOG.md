@@ -1,3 +1,9 @@
+## v32.1.0 (2026-11-21)
+
+### Feat
+
+- **worker**: name each resolved file by the reference it was signed for (PRA-1020)
+
 ## v32.0.1 (2026-11-21)
 
 ### Fix
