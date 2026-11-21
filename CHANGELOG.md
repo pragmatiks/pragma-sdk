@@ -1,3 +1,9 @@
+## v32.2.0 (2026-11-21)
+
+### Feat
+
+- **models**: carry the protocol_newer_than_host and memory_exceeded admission failure categories (PRA-1015)
+
 ## v32.1.0 (2026-11-21)
 
 ### Feat
