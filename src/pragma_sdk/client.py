@@ -2102,7 +2102,7 @@ class ProjectResources:
             tags: Filter by tags (must match all).
             health: Filter by projected health.
             model: Resource subclass for typed response; returns raw dicts if None.
-            reveal: Include sensitive field values in the response.
+            reveal: Include secret values in the response.
 
         Returns:
             List of resources as typed instances or raw dicts.
@@ -2143,7 +2143,7 @@ class ProjectResources:
             resource: Resource type name.
             name: Resource instance name.
             model: Resource subclass for typed response; returns raw dict if None.
-            reveal: Include sensitive field values in the response.
+            reveal: Include secret values in the response.
 
         Returns:
             Resource as typed instance or raw dict.
@@ -2289,7 +2289,7 @@ class ProjectResources:
         Args:
             resource: Typed :class:`Resource` to apply.
             model: Resource subclass for typed response; returns raw dict if None.
-            reveal: Include sensitive field values in the response.
+            reveal: Include secret values in the response.
 
         Returns:
             Applied resource as typed instance or raw dict.
@@ -2649,7 +2649,7 @@ class AsyncProjectResources:
             tags: Filter by tags (must match all).
             health: Filter by projected health.
             model: Resource subclass for typed response; returns raw dicts if None.
-            reveal: Include sensitive field values in the response.
+            reveal: Include secret values in the response.
 
         Returns:
             List of resources as typed instances or raw dicts.
@@ -2690,7 +2690,7 @@ class AsyncProjectResources:
             resource: Resource type name.
             name: Resource instance name.
             model: Resource subclass for typed response; returns raw dict if None.
-            reveal: Include sensitive field values in the response.
+            reveal: Include secret values in the response.
 
         Returns:
             Resource as typed instance or raw dict.
@@ -2834,7 +2834,7 @@ class AsyncProjectResources:
         Args:
             resource: Typed :class:`Resource` to apply.
             model: Resource subclass for typed response; returns raw dict if None.
-            reveal: Include sensitive field values in the response.
+            reveal: Include secret values in the response.
 
         Returns:
             Applied resource as typed instance or raw dict.

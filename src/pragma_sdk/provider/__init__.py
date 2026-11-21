@@ -54,6 +54,7 @@ from pragma_sdk.provider.provider import (
     OperationDeadlineOutOfRangeError,
     Provider,
 )
+from pragma_sdk.provider.revealed_json import build_revealed_json
 
 
 __all__ = [
@@ -67,6 +68,7 @@ __all__ = [
     "OperationDeadlineOutOfRangeError",
     "Provider",
     "ProviderHarness",
+    "build_revealed_json",
     "discover_resources",
     "is_registered_resource",
     "load_provider_schemas",

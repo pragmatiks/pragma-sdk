@@ -65,12 +65,7 @@ from pragma_sdk.models.references import (
     Immutable,
     ImmutableDependency,
     ImmutableField,
-    ImmutableSensitiveField,
     ResourceReference,
-    Sensitive,
-    SensitiveDependency,
-    SensitiveField,
-    SensitiveOutput,
 )
 from pragma_sdk.models.upload import UploadAddress, UploadOutcome
 from pragma_sdk.protocol.references import is_dependency_marker, is_field_ref_marker
@@ -102,7 +97,6 @@ __all__ = [
     "Immutable",
     "ImmutableDependency",
     "ImmutableField",
-    "ImmutableSensitiveField",
     "InstallationLifecycleState",
     "InstallationOperationType",
     "InvalidResourceIdentityError",
@@ -132,10 +126,6 @@ __all__ = [
     "ResourceReference",
     "ResourceSchema",
     "ResponseStatus",
-    "Sensitive",
-    "SensitiveDependency",
-    "SensitiveField",
-    "SensitiveOutput",
     "TeardownAction",
     "TeardownImpact",
     "TeardownResponse",

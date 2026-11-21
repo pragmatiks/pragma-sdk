@@ -436,7 +436,7 @@ class ReadResourceParams(BaseModel):
 class ChildResourceStatePayload(BaseModel):
     """A child resource the dispatched resource owns, as the platform records it.
 
-    The host serves it unmasked, sensitive values included, since only the
+    The host serves it unmasked, secret values included, since only the
     owner's lifecycle method reads it.
 
     Attributes:

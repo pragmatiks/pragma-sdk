@@ -42,6 +42,8 @@ pragma-sdk/
 
 **Provider Authoring**: `Provider`, `Resource[Config, Outputs]`, `Field[T]`, `FieldReference` for building providers.
 
+**Secrets**: A provider declares a secret as `SecretStr` or `SecretBytes`: `Field[SecretStr]` in config, `SecretStr` in outputs. Its published schema node carries `"format": "password"`, which is what the platform masks on every client surface and what makes a literal in that field a refusal, so config takes a reference to a secret resource. The SDK has no other secret marker. The worker path reveals every secret it sends (`protocol.codec.build_json_payload`), and a provider reads one with `.get_secret_value()`: `str()` and a JSON-mode `model_dump` give asterisks. A provider that writes a model into a plain-text carrier, such as an environment variable, encodes it with `pragma_sdk.provider.build_revealed_json`, which delegates to the codec, so the carrier holds the same revealed form the worker sends.
+
 **Testing Harness**: `ProviderHarness` for local lifecycle testing without deployment.
 
 **Worker and Introspection**: The Pragmatiks host runs a provider in its own venv through `python -m pragma_sdk.worker`, on a socket descriptor it inherits, and reads its schemas through `python -m pragma_sdk.introspection`; both find the provider from `PRAGMA_PROVIDER_DISTRIBUTION` and the distribution's `pragma.provider` entry point.
