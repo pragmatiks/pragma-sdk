@@ -79,10 +79,10 @@ def expand_type_alias(annotation: Any) -> Any:
             return annotation
 
         arguments = dict(zip(alias.__type_params__, typing.get_args(annotation), strict=True))
-        annotation = _substitute_type_parameters(alias.__value__, arguments)
+        annotation = substitute_type_parameters(alias.__value__, arguments)
 
 
-def _substitute_type_parameters(annotation: Any, arguments: dict[Any, Any]) -> Any:
+def substitute_type_parameters(annotation: Any, arguments: dict[Any, Any]) -> Any:
     """Replace type parameters in an annotation with the given arguments.
 
     Covers the shapes a type alias's value takes in the SDK: a bare type
@@ -102,12 +102,12 @@ def _substitute_type_parameters(annotation: Any, arguments: dict[Any, Any]) -> A
 
     if typing.get_origin(annotation) is Annotated:
         inner, *metadata = typing.get_args(annotation)
-        return Annotated[_substitute_type_parameters(inner, arguments), *metadata]
+        return Annotated[substitute_type_parameters(inner, arguments), *metadata]
 
     generic_metadata = getattr(annotation, "__pydantic_generic_metadata__", None)
 
     if generic_metadata and generic_metadata["parameters"]:
-        substituted = tuple(_substitute_type_parameters(argument, arguments) for argument in generic_metadata["args"])
+        substituted = tuple(substitute_type_parameters(argument, arguments) for argument in generic_metadata["args"])
         return generic_metadata["origin"][substituted]
 
     parameters = getattr(annotation, "__parameters__", ())
