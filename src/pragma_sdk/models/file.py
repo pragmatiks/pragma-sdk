@@ -1,6 +1,6 @@
 """Typed file reference for provider Config fields.
 
-The pragma-os runtime resolves ``pragma://files/<name>`` config values to
+Pragmatiks resolves ``pragma://files/<name>`` config values to
 short-lived signed download URLs before invoking provider lifecycle
 methods. ``FileReference`` wraps such a URL and exposes async helpers to
 download the bytes, stream chunks, or save to disk.
@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from pydantic import BaseModel, GetJsonSchemaHandler, field_validator, model_validator
+from pydantic import BaseModel, GetJsonSchemaHandler, ValidationInfo, field_validator, model_validator
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import CoreSchema
 
@@ -25,6 +25,22 @@ from pydantic_core import CoreSchema
 _PRAGMA_FILE_SCHEME = "pragma://files/"
 _DEFAULT_TIMEOUT_SECONDS = 30.0
 _PRAGMA_FILE_PATTERN = "^pragma://files/.+$"
+
+_FILE_REFERENCES_CONTEXT_KEY = "file_references"
+"""Validation context key holding the original references keyed by the signed URL each resolved to."""
+
+
+def build_file_reference_context(resolved_files: dict[str, str]) -> dict[str, dict[str, str]]:
+    """Build the validation context that lets a ``FileReference`` carry its original reference.
+
+    Args:
+        resolved_files: Signed URLs keyed by original Pragmatiks file reference.
+
+    Returns:
+        A context for ``model_validate`` holding each original reference
+        keyed by the signed URL it resolved to.
+    """
+    return {_FILE_REFERENCES_CONTEXT_KEY: {signed: reference for reference, signed in resolved_files.items()}}
 
 
 class FileReference(BaseModel):
@@ -42,8 +58,8 @@ class FileReference(BaseModel):
 
     Attributes:
         url: Signed HTTPS URL produced by the runtime's file resolver.
-        name: Original ``pragma://files/<name>`` reference, when known.
-            Populated by callers for logging; not required at validation.
+        name: The ``pragma://files/<name>`` reference the address was
+            signed for; ``None`` for a config the worker did not build.
     """
 
     url: str
@@ -68,23 +84,36 @@ class FileReference(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _accept_url_string(cls, value: Any) -> Any:
-        """Coerce a bare URL string into a ``FileReference`` payload.
+    def _accept_url_string(cls, value: Any, info: ValidationInfo) -> Any:
+        """Coerce the input into a ``FileReference`` payload.
 
         Pydantic invokes this before model construction so a Config field
         annotated with :data:`FileField` accepts both the dict form
-        (``{"url": ..., "name": ...}``) and the plain string that the
-        runtime substitutes into string slots.
+        (``{"url": ...}``) and the plain string that the runtime substitutes
+        into string slots. With a validation context from
+        :func:`build_file_reference_context`, ``name`` always comes from the
+        context by URL, so a caller-supplied ``name`` is never trusted.
 
         Args:
             value: Raw input value passed to model validation.
+            info: Validation info whose context, when set, maps signed URLs
+                to their original references.
 
         Returns:
-            A dict with the ``url`` key when ``value`` is a string,
-            otherwise the value unchanged.
+            For a string, or a dict validated with a file-references context,
+            a dict with ``url`` set to the URL and ``name`` set to the
+            original reference from the context, or ``None`` when the context
+            has none; any other value unchanged.
         """
+        references = (info.context or {}).get(_FILE_REFERENCES_CONTEXT_KEY)
+
         if isinstance(value, str):
-            return {"url": value}
+            return {"url": value, "name": (references or {}).get(value)}
+
+        if references is not None and isinstance(value, dict):
+            url = value.get("url")
+            return {"url": url, "name": references.get(url) if isinstance(url, str) else None}
+
         return value
 
     @field_validator("url", mode="before")
@@ -93,10 +122,10 @@ class FileReference(BaseModel):
         """Reject an unsubstituted ``pragma://files/<name>`` reference.
 
         If the URL still carries the ``pragma://files/`` scheme, the runtime
-        did not resolve it — almost always because the runtime image is too
-        old to support inline file resolution (see pragma-os merge
-        ``49fd7648d8``). Failing here surfaces the upgrade requirement
-        instead of letting the provider try to ``GET`` a non-HTTP URL.
+        did not resolve it, almost always because the runtime image is too
+        old to support inline file resolution. Failing here surfaces the
+        upgrade requirement instead of letting the provider try to ``GET`` a
+        non-HTTP URL.
 
         Args:
             value: Candidate URL string.
@@ -110,10 +139,9 @@ class FileReference(BaseModel):
         if isinstance(value, str) and value.startswith(_PRAGMA_FILE_SCHEME):
             raise ValueError(
                 f"FileReference received unresolved file reference {value!r}. "
-                "The pragma-os runtime did not substitute this reference — "
+                "Pragmatiks did not substitute this reference — "
                 "your runtime image is likely outdated. Upgrade to a runtime "
-                "that resolves pragma:// file references inline "
-                "(see pragma-os merge 49fd7648d8)."
+                "that resolves pragma:// file references inline."
             )
         return value
 

@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from pragma_sdk.diagnostics.validation_errors import build_validation_error_details
 from pragma_sdk.models import Config, Dependency, Resource
 from pragma_sdk.models.base import drop_undeclared_config_keys, expand_type_alias, is_union_origin
+from pragma_sdk.models.file import build_file_reference_context
 from pragma_sdk.protocol.frames import ResourcePayload
 from pragma_sdk.protocol.references import is_dependency_marker, is_field_ref_marker
 from pragma_sdk.provider.loading import derive_config_class
@@ -71,7 +72,9 @@ class ResourceBuilder:
             resolved_files: Signed URLs keyed by original Pragmatiks file references.
 
         Returns:
-            Validated Config instance with Dependency fields pre-resolved.
+            Validated Config instance with Dependency fields pre-resolved;
+            each ``FileReference`` in it, a dependency's included, names the
+            reference its URL was signed for.
 
         Raises:
             ValueError: If the resource class has no Config-typed ``config`` field.
@@ -81,7 +84,9 @@ class ResourceBuilder:
         """  # noqa: DOC502
         config_class = derive_config_class(resource_class)
         resolved_instances = self.build_dependency_resources(config_class, config_data, resolved_files)
-        config = config_class.model_validate(self.flatten_config(config_data, resolved_files))
+        flattened_config = self.flatten_config(config_data, resolved_files)
+        file_reference_context = build_file_reference_context(resolved_files)
+        config = config_class.model_validate(flattened_config, context=file_reference_context)
         self.inject_resolved_instances(config, resolved_instances)
 
         return config
@@ -468,8 +473,10 @@ class ResourceBuilder:
                 ignored_keys=ignored_keys,
             )
 
+        file_reference_context = build_file_reference_context(resolved_files)
+
         try:
-            return resource_type.model_validate(flattened_reference)
+            return resource_type.model_validate(flattened_reference, context=file_reference_context)
         except ValidationError as error:
             logger.error(
                 "dependency_reference_validation_failed",
