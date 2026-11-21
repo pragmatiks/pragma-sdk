@@ -66,13 +66,13 @@ def build_resource_type_schema(resource_class: type[Resource]) -> ResourceTypeSc
     output_descriptions: dict[str, str] = {}
 
     if outputs_type is not None:
-        outputs_schema = outputs_type.model_json_schema()
+        outputs_schema = outputs_type.model_json_schema(mode="serialization")
         output_descriptions = parse_attributes_section(outputs_type.__doc__)
 
     return ResourceTypeSchema(
         resource=resource_class.resource,
         description=extract_short_description(resource_class.__doc__),
-        config_schema=config_type.model_json_schema(),
+        config_schema=config_type.model_json_schema(mode="serialization"),
         field_descriptions=parse_attributes_section(config_type.__doc__),
         outputs_schema=outputs_schema,
         output_descriptions=output_descriptions,
