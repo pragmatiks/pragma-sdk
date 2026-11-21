@@ -1,3 +1,13 @@
+## v32.0.1 (2026-11-21)
+
+### Fix
+
+- **worker**: resolve dependencies declared through type aliases (PRA-1027)
+
+### Refactor
+
+- **worker**: unwrap nested aliases and Annotated in dependency fields (PRA-1027)
+
 ## v32.0.0 (2026-11-21)
 
 ### BREAKING CHANGE
