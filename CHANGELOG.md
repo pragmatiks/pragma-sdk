@@ -1,3 +1,16 @@
+## v32.0.0 (2026-11-21)
+
+### BREAKING CHANGE
+
+- upload_file takes a source and returns FileMetadata over
+the JSON declaration route; WheelUploadAddress, WheelUploadOutcome,
+WheelUploadError and WheelUploadExpiredError are renamed UploadAddress,
+UploadOutcome, UploadError and UploadExpiredError.
+
+### Feat
+
+- upload project files straight to storage (PRA-1021)
+
 ## v31.0.0 (2026-11-20)
 
 ### BREAKING CHANGE
