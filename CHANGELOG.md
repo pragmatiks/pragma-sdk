@@ -1,3 +1,17 @@
+## v33.0.0 (2026-11-21)
+
+### BREAKING CHANGE
+
+- Sensitive, SensitiveField, SensitiveDependency,
+ImmutableSensitiveField and SensitiveOutput are removed; declare secrets as
+Field[SecretStr] (config) or SecretStr (outputs) and read them with
+.get_secret_value(). Schemas no longer carry "sensitive": true.
+PROTOCOL_VERSION is 9, so hosts speaking protocol 8 refuse this SDK's workers.
+
+### Feat
+
+- mark secrets with format password and publish serialization-mode schemas (PRA-505B)
+
 ## v32.2.0 (2026-11-21)
 
 ### Feat
