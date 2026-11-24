@@ -1,3 +1,9 @@
+## v33.0.1 (2026-11-24)
+
+### Fix
+
+- **files**: wait out file_delete_in_progress in upload_file
+
 ## v33.0.0 (2026-11-21)
 
 ### BREAKING CHANGE
