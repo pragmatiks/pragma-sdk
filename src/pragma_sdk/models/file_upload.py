@@ -73,7 +73,8 @@ class FileUploadOutcome(StrEnum):
     Attributes:
         PENDING: The bytes are expected, or are being stored.
         STORED: The file holds the upload's content.
-        DELETED: The upload was stored, and the file was deleted or replaced since.
+        DELETED: The upload was stored, and since then the file was replaced,
+            or deleted, as deleting its pragma/file resource does.
         FAILED: Storing the upload failed; upload it again.
         EXPIRED: The bytes did not reach storage before the address expired; upload it again.
     """

@@ -66,13 +66,19 @@ FILE_UPLOAD_POLL_SECONDS = 1.0
 """Seconds between two reads of an upload's progress."""
 
 FILE_UPLOAD_BUSY_SECONDS = 180.0
-"""Longest a declaration waits out an upload of other content being stored under the name, in seconds."""
+"""Longest a declaration waits out another upload being stored under the name, or the file's delete, in seconds."""
 
 FILE_UPLOAD_BUSY_RETRY_SECONDS = 5.0
 """Seconds to wait before declaring again when a busy answer carries no usable ``Retry-After``."""
 
 FILE_UPLOAD_IN_PROGRESS_ERROR = "file_upload_in_progress"
 """Error code of the 409 answering a declaration while an upload of other content is being stored."""
+
+FILE_DELETE_IN_PROGRESS_ERROR = "file_delete_in_progress"
+"""Error code of the 409 answering a declaration while the file is being deleted, its pragma/file resource deleted."""
+
+FILE_BUSY_ERRORS = frozenset({FILE_UPLOAD_IN_PROGRESS_ERROR, FILE_DELETE_IN_PROGRESS_ERROR})
+"""Error codes of the 409s a declaration waits out and sends again."""
 
 BAD_DIGEST_ERROR_CODE = "BadDigest"
 """Error code storage answers with, in a 400, to bytes whose MD5 differs from the declared one."""
@@ -356,10 +362,11 @@ def parse_busy_retry_delay(error: httpx.HTTPStatusError) -> float | None:
         error: The refused declaration.
 
     Returns:
-        The ``Retry-After`` seconds of a ``409 file_upload_in_progress``, at
-        least :data:`FILE_UPLOAD_POLL_SECONDS`, or
-        :data:`FILE_UPLOAD_BUSY_RETRY_SECONDS` when it carries no usable
-        one; ``None`` for any other refusal.
+        The ``Retry-After`` seconds of a ``409 file_upload_in_progress`` or
+        ``409 file_delete_in_progress``, at least
+        :data:`FILE_UPLOAD_POLL_SECONDS`, or
+        :data:`FILE_UPLOAD_BUSY_RETRY_SECONDS` when it carries no usable one;
+        ``None`` for any other refusal.
     """
     response = error.response
 
@@ -371,7 +378,7 @@ def parse_busy_retry_delay(error: httpx.HTTPStatusError) -> float | None:
     except ValueError:
         return None
 
-    if not isinstance(detail, dict) or detail.get("error") != FILE_UPLOAD_IN_PROGRESS_ERROR:
+    if not isinstance(detail, dict) or detail.get("error") not in FILE_BUSY_ERRORS:
         return None
 
     retry_after = response.headers.get("Retry-After", "")
@@ -421,10 +428,13 @@ def decide_file_upload_progress(
 
 
 def declare_file_upload_when_free(declare: Callable[[], DeclaredFileUpload], file_name: str) -> DeclaredFileUpload:
-    """Declare an upload, declaring again while an upload of other content for the name is being stored.
+    """Declare an upload, declaring again while the name is busy with another upload or the file's delete.
 
-    A ``409 file_upload_in_progress`` is waited out for its ``Retry-After``
-    and declared again, for up to :data:`FILE_UPLOAD_BUSY_SECONDS`.
+    A ``409 file_upload_in_progress``, while an upload of other content for
+    the name is being stored, or ``409 file_delete_in_progress``, while the
+    file of a deleted pragma/file resource is being deleted, is waited out
+    for its ``Retry-After`` and declared again, for up to
+    :data:`FILE_UPLOAD_BUSY_SECONDS`.
 
     Args:
         declare: Sends the declaration once and returns the answer.
@@ -435,7 +445,7 @@ def declare_file_upload_when_free(declare: Callable[[], DeclaredFileUpload], fil
 
     Raises:
         FileUploadNotStoredError: ``busy``, if the other upload is still
-            being stored when the wait ends.
+            being stored, or the file still being deleted, when the wait ends.
         httpx.HTTPStatusError: Every other refusal of the declaration.
     """  # noqa: DOC502
     deadline = time.monotonic() + FILE_UPLOAD_BUSY_SECONDS
@@ -469,7 +479,7 @@ async def declare_file_upload_when_free_async(
 
     Raises:
         FileUploadNotStoredError: ``busy``, if the other upload is still
-            being stored when the wait ends.
+            being stored, or the file still being deleted, when the wait ends.
         httpx.HTTPStatusError: Every other refusal of the declaration.
     """  # noqa: DOC502
     loop = asyncio.get_running_loop()
