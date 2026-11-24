@@ -1991,11 +1991,12 @@ class ProjectResources:
 
         Raises:
             httpx.HTTPStatusError: 409 ``file_upload_in_progress`` while an
-                upload of other content for the name is being stored, with
-                ``Retry-After``; 413 when the size exceeds the maximum file
-                size; 422 for an invalid name or declaration; 503 when the
-                address could not be prepared, with ``Retry-After``; or any
-                other failed request.
+                upload of other content for the name is being stored, or 409
+                ``file_delete_in_progress`` while the file is being deleted,
+                its pragma/file resource deleted, each with ``Retry-After``;
+                413 when the size exceeds the maximum file size; 422 for an
+                invalid name or declaration; 503 when the address could not
+                be prepared, with ``Retry-After``; or any other failed request.
             pydantic.ValidationError: If the answer's upload address is not
                 an ``http`` or ``https`` URL with a host, or carries a header
                 httpx cannot send.
@@ -2057,7 +2058,8 @@ class ProjectResources:
                 file: ``changed`` between its hash and its upload, superseded
                 by other content, failed, ``expired`` before the whole file
                 reached storage, or deleted since; or, ``busy``, another
-                upload of the name stayed in storing past the wait. Its
+                upload of the name stayed in storing, or the file's delete
+                stayed under way, past the wait. Its
                 ``operation_id`` names the upload operation once declared.
             FileUploadPendingError: If the upload showed no progress for
                 three minutes; it may still complete, and uploading the same

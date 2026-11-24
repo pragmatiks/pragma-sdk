@@ -309,8 +309,9 @@ class FileUploadNotStoredReason(StrEnum):
         FAILED: Storing the upload failed.
         EXPIRED: The bytes did not reach storage before the upload address expired.
         DELETED: The upload was stored, then the file was deleted or replaced.
-        BUSY: An upload of other content for the name stayed in storing
-            past the wait, so this upload could not be declared.
+        BUSY: An upload of other content for the name stayed in storing,
+            or the file's delete stayed under way, past the wait, so this
+            upload could not be declared.
     """
 
     CHANGED = "changed"
@@ -390,8 +391,8 @@ class FileUploadNotStoredError(Exception):
                 )
             case FileUploadNotStoredReason.BUSY:
                 return (
-                    f"An upload of other content for {self.file_name} is still being stored. "
-                    "Upload it again once it is stored."
+                    f"{self.file_name} is still busy: an upload of other content is being stored, "
+                    "or the file is being deleted. Upload it again once that ends."
                 )
             case FileUploadNotStoredReason.FAILED:
                 return f"Pragmatiks could not store {self.file_name}. Upload it again."
