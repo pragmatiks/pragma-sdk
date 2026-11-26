@@ -135,7 +135,7 @@ class TeardownImpact(BaseModel):
 
 
 class TeardownResponse(BaseModel):
-    """A deactivated or removed resource, with everything the teardown reaches.
+    """A deactivated or deleted resource, with everything the teardown reaches.
 
     Mirrors the API response: the target resource's own fields sit alongside
     the impact list. Resource fields other than ``lifecycle_state`` are kept as
@@ -144,10 +144,10 @@ class TeardownResponse(BaseModel):
     Attributes:
         lifecycle_state: State the target resource is in after the call, or its
             untouched state for a dry run.
-        impact: Resources the teardown reaches, the requested one first. This
-            is what the pre-flight walk predicted, not a record of what
-            happened: a write landing in between can still divert an individual
-            resource on a real call.
+        impact: Resources the teardown reaches, the requested one first. On a
+            real call the walk and its write are one transaction, so this is
+            what the request recorded; a dry run computes the same walk and
+            writes nothing.
         dry_run: Whether the call only previewed the teardown.
     """
 

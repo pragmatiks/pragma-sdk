@@ -21,6 +21,7 @@ from pragma_sdk.exceptions import (
     LogFollowInterruptedError,
     ProjectHasResourcesError,
     ProjectMismatchError,
+    ResourceDeletedError,
     ResourceFailedError,
 )
 from pragma_sdk.file_upload import (
@@ -1941,6 +1942,20 @@ def raise_if_resource_failed(resource_id: str, payload: dict[str, Any]) -> None:
         )
 
 
+def raise_if_resource_deleted(resource_id: str, payload: dict[str, Any]) -> None:
+    """Turn a DELETED resource payload into an exception.
+
+    Args:
+        resource_id: Fully-qualified identity of the polled resource.
+        payload: Resource record returned by the last poll.
+
+    Raises:
+        ResourceDeletedError: If the payload reports the DELETED state.
+    """
+    if payload.get("lifecycle_state") == LifecycleState.DELETED.value:
+        raise ResourceDeletedError(resource_id=resource_id, resource_data=payload)
+
+
 class ProjectResources:
     """Project-scoped resource operations for :class:`PragmaClient`.
 
@@ -2326,7 +2341,7 @@ class ProjectResources:
         *,
         dry_run: bool = False,
     ) -> TeardownResponse:
-        """Deactivate a resource in this project, triggering provider teardown.
+        """Deactivate a resource in this project and everything it owns, triggering provider teardown.
 
         Args:
             provider: Provider that manages the resource.
@@ -2336,8 +2351,8 @@ class ProjectResources:
                 anything.
 
         Returns:
-            The resource as the deactivation left it, with the impact list the
-            pre-flight walk predicted.
+            The resource as the deactivation left it, or its untouched state on
+            a dry run, with the resources the deactivation reaches.
 
         Raises:
             httpx.HTTPStatusError: If resource not found or deactivation fails.
@@ -2354,18 +2369,18 @@ class ProjectResources:
         *,
         dry_run: bool = False,
     ) -> TeardownResponse:
-        """Hard-delete a resource in this project.
+        """Delete a resource in this project and everything it owns, tearing down what is provisioned.
 
         Args:
             provider: Provider that manages the resource.
             resource: Resource type name.
             name: Resource instance name.
-            dry_run: Preview the removal and its impact without changing
+            dry_run: Preview the deletion and its impact without changing
                 anything.
 
         Returns:
-            The resource as the removal left it, or its untouched state on a
-            dry run, with the impact list the pre-flight walk predicted.
+            The resource as the deletion left it, or its untouched state on a
+            dry run, with the resources the deletion reaches.
 
         Raises:
             httpx.HTTPStatusError: If resource not found or deletion fails.
@@ -2428,6 +2443,9 @@ class ProjectResources:
     ) -> dict[str, Any]:
         """Poll a project-scoped resource until it reaches DRAFT or FAILED.
 
+        A resource that reaches DELETED, or stops resolving after a
+        successful poll, raises :class:`ResourceDeletedError`.
+
         Args:
             provider: Provider that manages the resource.
             resource: Resource type name.
@@ -2441,22 +2459,34 @@ class ProjectResources:
 
         Raises:
             ResourceFailedError: If the resource transitions to FAILED.
+            ResourceDeletedError: If the resource is deleted before it reaches
+                DRAFT.
             TimeoutError: If the resource does not reach DRAFT within ``timeout``.
+            httpx.HTTPStatusError: If the first poll reports the resource as
+                unknown, or if any poll fails for another reason.
         """  # noqa: DOC502
         deadline = compute_deadline(timeout, time.monotonic())
+        resource_id = f"{self._project_id}::{provider}::{resource}::{name}"
+        observed = False
 
         while True:
-            payload = self.get_resource(provider, resource, name)
+            try:
+                payload = self.get_resource(provider, resource, name)
+            except httpx.HTTPStatusError as error:
+                if observed and error.response.status_code == httpx.codes.NOT_FOUND:
+                    raise ResourceDeletedError(resource_id=resource_id) from error
+                raise
+
+            observed = True
 
             if payload.get("lifecycle_state") == LifecycleState.DRAFT.value:
                 return payload
 
-            raise_if_resource_failed(f"{self._project_id}::{provider}::{resource}::{name}", payload)
+            raise_if_resource_deleted(resource_id, payload)
+            raise_if_resource_failed(resource_id, payload)
 
             if deadline is not None and time.monotonic() >= deadline:
-                raise TimeoutError(
-                    f"Resource {self._project_id}::{provider}::{resource}::{name} did not reach DRAFT within {timeout}s"
-                )
+                raise TimeoutError(f"Resource {resource_id} did not reach DRAFT within {timeout}s")
 
             time.sleep(poll_interval)
 
@@ -2871,7 +2901,7 @@ class AsyncProjectResources:
         *,
         dry_run: bool = False,
     ) -> TeardownResponse:
-        """Deactivate a resource in this project, triggering provider teardown.
+        """Deactivate a resource in this project and everything it owns, triggering provider teardown.
 
         Args:
             provider: Provider that manages the resource.
@@ -2881,8 +2911,8 @@ class AsyncProjectResources:
                 anything.
 
         Returns:
-            The resource as the deactivation left it, with the impact list the
-            pre-flight walk predicted.
+            The resource as the deactivation left it, or its untouched state on
+            a dry run, with the resources the deactivation reaches.
 
         Raises:
             httpx.HTTPStatusError: If resource not found or deactivation fails.
@@ -2899,18 +2929,18 @@ class AsyncProjectResources:
         *,
         dry_run: bool = False,
     ) -> TeardownResponse:
-        """Hard-delete a resource in this project.
+        """Delete a resource in this project and everything it owns, tearing down what is provisioned.
 
         Args:
             provider: Provider that manages the resource.
             resource: Resource type name.
             name: Resource instance name.
-            dry_run: Preview the removal and its impact without changing
+            dry_run: Preview the deletion and its impact without changing
                 anything.
 
         Returns:
-            The resource as the removal left it, or its untouched state on a
-            dry run, with the impact list the pre-flight walk predicted.
+            The resource as the deletion left it, or its untouched state on a
+            dry run, with the resources the deletion reaches.
 
         Raises:
             httpx.HTTPStatusError: If resource not found or deletion fails.
@@ -2974,6 +3004,9 @@ class AsyncProjectResources:
     ) -> dict[str, Any]:
         """Poll a project-scoped resource until it reaches DRAFT or FAILED.
 
+        A resource that reaches DELETED, or stops resolving after a
+        successful poll, raises :class:`ResourceDeletedError`.
+
         Args:
             provider: Provider that manages the resource.
             resource: Resource type name.
@@ -2987,23 +3020,35 @@ class AsyncProjectResources:
 
         Raises:
             ResourceFailedError: If the resource transitions to FAILED.
+            ResourceDeletedError: If the resource is deleted before it reaches
+                DRAFT.
             TimeoutError: If the resource does not reach DRAFT within ``timeout``.
+            httpx.HTTPStatusError: If the first poll reports the resource as
+                unknown, or if any poll fails for another reason.
         """  # noqa: DOC502
         loop = asyncio.get_running_loop()
         deadline = compute_deadline(timeout, loop.time())
+        resource_id = f"{self._project_id}::{provider}::{resource}::{name}"
+        observed = False
 
         while True:
-            payload = await self.get_resource(provider, resource, name)
+            try:
+                payload = await self.get_resource(provider, resource, name)
+            except httpx.HTTPStatusError as error:
+                if observed and error.response.status_code == httpx.codes.NOT_FOUND:
+                    raise ResourceDeletedError(resource_id=resource_id) from error
+                raise
+
+            observed = True
 
             if payload.get("lifecycle_state") == LifecycleState.DRAFT.value:
                 return payload
 
-            raise_if_resource_failed(f"{self._project_id}::{provider}::{resource}::{name}", payload)
+            raise_if_resource_deleted(resource_id, payload)
+            raise_if_resource_failed(resource_id, payload)
 
             if deadline is not None and loop.time() >= deadline:
-                raise TimeoutError(
-                    f"Resource {self._project_id}::{provider}::{resource}::{name} did not reach DRAFT within {timeout}s"
-                )
+                raise TimeoutError(f"Resource {resource_id} did not reach DRAFT within {timeout}s")
 
             await asyncio.sleep(poll_interval)
 
