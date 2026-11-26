@@ -1,3 +1,15 @@
+## v34.0.0 (2026-11-26)
+
+### BREAKING CHANGE
+
+- PROTOCOL_VERSION is 10. A host speaking protocol 9
+refuses a provider built on this SDK, and a host on protocol 10 needs
+every provider rebuilt on it.
+
+### Feat
+
+- add the deactivating lifecycle state (PRA-502)
+
 ## v33.0.1 (2026-11-24)
 
 ### Fix
