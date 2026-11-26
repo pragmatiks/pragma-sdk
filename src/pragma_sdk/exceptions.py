@@ -59,6 +59,31 @@ class ResourceFailedError(Exception):
         super().__init__(message)
 
 
+class ResourceDeletedError(Exception):
+    """Raised when a resource is deleted while a wait follows its deactivation.
+
+    A delete accepted while a resource is deactivating takes the resource
+    over, so it ends DELETED instead of DRAFT.
+
+    Attributes:
+        resource_id: The ID of the resource that was deleted.
+        resource_data: Resource record of the poll that reported DELETED, or
+            None when the resource no longer resolved.
+    """
+
+    def __init__(self, resource_id: str, resource_data: dict[str, Any] | None = None) -> None:
+        """Initialize ResourceDeletedError with resource details.
+
+        Args:
+            resource_id: The ID of the resource that was deleted.
+            resource_data: Resource record of the poll that reported DELETED,
+                or None when the resource no longer resolved.
+        """
+        self.resource_id = resource_id
+        self.resource_data = resource_data
+        super().__init__(f"Resource {resource_id} was deleted while it was being deactivated.")
+
+
 class AlreadyExistsError(Exception):
     """Raised when the object at a resource's identity is not one this resource created.
 

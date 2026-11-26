@@ -23,6 +23,7 @@ class LifecycleState(StrEnum):
     PROCESSING = "processing"
     READY = "ready"
     FAILED = "failed"
+    DEACTIVATING = "deactivating"
     DELETING = "deleting"
     DELETED = "deleted"
 
